@@ -1,3 +1,9 @@
+# We merge in 2 steps: first merging GLASS-GLC data with GAEZ, second merging phtfloss data with GAEZ
+# We don't merge everything in a single data frame because it is memory intensive. 
+# Also because we mask gaez with masks based on outcome variables being "always zero" and thus the 
+# masks are different for GLASS and for phtfloss. 
+
+
 ##### 0. PACKAGES, WD, OBJECTS #####
 
 
@@ -41,120 +47,234 @@ lapply(neededPackages, library, character.only = TRUE)
 
 
 ### NEW FOLDERS USED IN THIS SCRIPT 
-dir.create(here("temp_data", "processed_phtfloss", "annual_maps"), recursive = TRUE) 
+dir.create(here("temp_data", "merged_datasets", "tropical_aoi"), recursive = TRUE)
 
 ### Raster global options
 rasterOptions(timer = TRUE, 
               progress = "text")
 
 
-
-#### PREPARE PHTF LOSS #### 
-  
-# import raster brick of phtf loss, annual binary layers
-rasterlist <- list.files(path = here("input_data", "phtfLossSumGlass_maxP_crsT_intermediate"), 
-                         pattern = "phtfLossSumGlass_maxP_crsT_intermediate_", 
-                         full.names = TRUE) %>% as.list()
-phtfloss <- brick(rasterlist)
+### This script's target dir
+targetdir <- here("temp_data", "merged_datasets", "tropical_aoi")
 
 
-test <- raster(here("input_data", "phtfLossSumGlass_maxP_2002.tif"))
-test
-plot(test)
-summary(values(test))
+# About layers renaming
+# The index given to each layer in the bricks we read here, is representative of the increasing alphabetical order of the names of 
+# the individual layers originally read in in the prepare_ scripts (this is ensured by the use of list.files() to get these names.)
+# Thus we can rename with name vectors that reproduce this order.  
 
+### READ IN AND RENAME GAEZ DATA ### 
 
-### Aggregate it to the GAEZ resolution ### 
+## GAEZ
+gaez_dir <- here("temp_data", "GAEZ", "AES_index_value", "Rain-fed")
+gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
-# Currently, the data are hectares of phtf loss in 5x5km grid cells annually. 
-# We aggregate this to 10km grid cells by adding up the hectares of phtf loss
+# Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
+gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+names(gaez) <- gaez_crops
 
-# Read in a GAEZ grid, because we want to align to it. 
-gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Alfalfa.tif"))
-
-annual_aggregate_andAllign <- function(year){
-  # Read in annual layer input
-  input_name <- paste0(here("input_data", "phtfLossSumGlass_maxP", "phtfLossSumGlass_maxP_"), 
-                        year,".tif")
-  
-  phtfloss_annual <- raster(input_name)
-  
-  
-  # define output file name
-  aggr_output_name <- paste0(here("temp_data", "processed_phtfloss", "annual_maps", "phtfLossSumGaez_Raggr_"),
-                            year,".tif")
-  
-  # aggregate it from the ~5km cells to ~10km
-  raster::aggregate(phtfloss_annual, fact = c(res(gaez)[1]/res(phtfloss_annual)[1], res(gaez)[2]/res(phtfloss_annual)[2]),
-                    expand = FALSE,
-                    fun = sum,
-                    na.rm = TRUE, # NA values are only in the sea. Where there is no phtf loss, like in a city in Brazil, the value is 0 (see with plot())
-                    filename = aggr_output_name,
-                    # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares. 
-                    overwrite = TRUE)
-  
-  
-  # Align it to GAEZ exactly
-  prepared <- raster(aggr_output_name)
-  
-  # define output file name
-  aligned_output_name <- paste0(here("temp_data", "processed_phtfloss", "annual_maps", "phtfLossSumGaez_Ralign_"),
-                                    year,".tif")
-  
-  resample(x = prepared, 
-           y = gaez, 
-           method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
-           # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
-           filename = aligned_output_name, 
-           overwrite = TRUE)
-
-  # aligned <- raster(aligned_output_name)
-  # 
-  # prepared_values <- values(prepared)
-  # aligned_values <- values(aligned)
-  # 
-  # summary(prepared_values[prepared_values != 0 & !is.na(prepared_values)])
-  # summary(aligned_values[aligned_values != 0 & !is.na(aligned_values)])
-  
-}
+#######################################################################
 
 
 
-# Execute the function 
-years <- seq(from = 2002, to = 2020, by = 1)
+#### MERGE GLASS-GLC AND GAEZ #### 
 
-for(t in years){
-  annual_aggregate_andAllign(year = t)
-}
-  
+## Read in GLASS-GLC data 
+first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"))
+sbqt_direct_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_direct_lu.tif"))
+sbqt_mode_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_mode_lu.tif"))
+# Rename layers 
+glc_sbqt_years <- seq(1983, 2015, 1)
+names(first_loss) <- paste0("first_loss.",glc_sbqt_years)
+names(sbqt_direct_lu) <- paste0("sbqt_direct_lu.",glc_sbqt_years)
+names(sbqt_mode_lu) <- paste0("sbqt_mode_lu.",glc_sbqt_years)
 
-# Brick together the annual layers and with GAEZ crop cross sections 
-rasterlist_phtfloss <- list.files(path = here("temp_data", "processed_phtfloss", "annual_maps"), 
-                                   pattern = "phtfLossSumGaez_Ralign_", 
-                                   full.names = TRUE) %>% as.list()
+glass <- stack(first_loss, sbqt_direct_lu, sbqt_mode_lu)  
+# # save names as they will be lost when writing the masked data 
+# glass_names <- names(glass)
 
-rasterlist_gaez <- list.files(path = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input"), 
-                              pattern = "", 
-                              full.names = TRUE) %>% as.list()
+# banana1 <- gaez_all[[2]] 
+# banana2 <- gaez[[2]] 
+# 
+# all.equal(values(banana1), values(banana2))
 
-rasterlist <- append(rasterlist_phtfloss, rasterlist_gaez)
-
-parcels_brick <- brick(rasterlist)
-
-
-
-
-
-
-# writeRaster(parcels_brick,
-#             filename = file.path(paste0("temp_data/processed_lu/parcel_lucpfip_",island,"_",parcel_size/1000,"km_",pf_type,".tif")),
-#             datatype = "INT4U",
-#             overwrite = TRUE)
+# 
+# banana <- gaez_all[[2]]
+# pl <- phtfloss[[1]]
+# 
+# plot(banana)
+# vbanana <- values(banana)
+# 
+# sum(is.na(vbanana))
+# 
+# sum(is.na(values(pl)))
+# plot(pl)
 
 
+### MASK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+
+mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_zero_mask.tif"))
+
+mask(x = gaez, 
+     mask = mask, 
+     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"), 
+     overwrite = TRUE)
+
+gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"))
+# Rename layers (important, as writing the masked gaez lost the layer names)
+names(gaez_m) <- gaez_crops
+
+# (note that masking changes the summary values of gaez)
+
+
+### GLASS - GAEZ MERGE ###
+
+# # Mask all the layers with ocean mask from GAEZ (more masked pixels than phtfloss that has only some rectangles between continents masked. plot both to see this)
+# # take one layer from gaez
+# gaez_mask <- gaez[[1]]
+# mask(x = glass, mask = gaez_mask, 
+#      filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "glass_masked.tif"),
+#      overwrite = TRUE)
+# 
+# glass <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "glass_masked.tif"))
+# names(glass) <- glass_names
+
+# Stack together the annual layers of GLASS-GLC data and GAEZ crop cross sections 
+glass_gaez <- stack(glass, gaez_m)
+names(glass_gaez)
+
+# na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
+# We also set long to false because we reshape with a proper function for more control
+wide_df <- raster::as.data.frame(glass_gaez, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ///!!!\\\ ~700s (rather 2-3 hours last time) 
+
+# Rename coordinate variables
+names(wide_df)
+head(wide_df[,c("x", "y")])
+wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+# Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
+# So we can simply create an ID that's a sequence. 
+wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
+
+# the dot is, by construction of all variable names, only in the names of time varying variables. 
+# fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
+varying_vars <- names(glass_gaez)[grep(".", names(glass_gaez), fixed = TRUE)]
+
+# reshape to long.
+long_df <- stats::reshape(wide_df,
+                       varying = varying_vars,
+                       v.names = c("first_loss", "sbqt_direct_lu", "sbqt_mode_lu"),
+                       sep = ".",
+                       timevar = "year",
+                       idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
+                       ids = "grid_id", # lonlat is our cross-sectional identifier.
+                       direction = "long",
+                       new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
+rm(wide_df)
+names(long_df)
+# replace the indices from the raster::as.data.frame with actual years.
+
+long_df <- mutate(long_df, year = glc_sbqt_years[year])
+
+long_df <- dplyr::arrange(long_df, grid_id, year)
+
+
+saveRDS(long_df, here(targetdir, "glass_gaez_long.Rdata"))
+
+rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first_loss, sbqt_direct_lu, sbqt_mode_lu)
 
 
 
+#### MERGE PHTF LOSS AND GAEZ #### 
+
+## Read in PHTF LOSS 
+phtfloss <- brick(here("temp_data", "processed_phtfloss", "tropical_aoi", "resampled_phtf_loss.tif")) 
+# Rename layers 
+names(phtfloss) <- paste0("phtf_loss.",seq(2002, 2020, 1))
+
+
+### MASK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+
+mask <- raster(here("temp_data", "processed_phtfloss", "tropical_aoi", "always_zero_mask_phtfloss.tif"))
+
+mask(x = gaez, 
+     mask = mask, 
+     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "phtfloss_masked_high_input_all.tif"), 
+     overwrite = TRUE)
+
+gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "phtfloss_masked_high_input_all.tif"))
+# Rename layers (important, as writing the masked gaez lost the layer names)
+names(gaez_m) <- gaez_crops
+
+# (note that masking changes the summary values of gaez)
+
+
+### PHTF LOSS - GAEZ MERGE ###
+
+# Stack together the annual layers of phtfloss-GLC data and GAEZ crop cross sections 
+phtfloss_gaez <- stack(phtfloss, gaez_m)
+names(phtfloss_gaez)
+
+# na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
+# We also set long to false because we reshape with a proper function for more control
+wide_df <- raster::as.data.frame(phtfloss_gaez, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ~700s. 
+
+# Rename coordinate variables
+names(wide_df)
+head(wide_df[,c("x", "y")])
+wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+# Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
+# So we can simply create an ID that's a sequence. 
+wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
+
+# the dot is, by construction of all variable names, only in the names of time varying variables. 
+# fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
+varying_vars <- names(phtfloss_gaez)[grep(".", names(phtfloss_gaez), fixed = TRUE)]
+
+# reshape to long.
+long_df <- stats::reshape(wide_df,
+                          varying = varying_vars,
+                          v.names = "phtf_loss",
+                          sep = ".",
+                          timevar = "year",
+                          idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
+                          ids = "grid_id", # lonlat is our cross-sectional identifier.
+                          direction = "long",
+                          new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
+rm(wide_df)
+names(long_df)
+# replace the indices from the raster::as.data.frame with actual years.
+
+years <- seq(2002, 2020, 1)
+long_df <- mutate(long_df, year = years[year])
+
+long_df <- dplyr::arrange(long_df, grid_id, year)
+
+
+saveRDS(long_df, here(targetdir, "phtfloss_gaez_long.Rdata"))
+
+rm(long_df, varying_vars, phtfloss_gaez, gaez_m, mask, phtfloss)
+
+
+# Note: much more cells have no some deforestation in the phtfloss data than in the first_loss. This is due to the starting resolution of each original data set. 
+
+
+
+
+
+
+
+
+# We rename layers in a specific way: 
+# First we get names in the order from which they are read (but brick() seems to preserve the increasing alphabetical order of file names)
+# Then we use a regex replacement method in case that layer_names was not saved in the order we think (increasing alphabetical)
+# layer_names <- names(phtfloss)
+# layer_names2 <- gsub(pattern = ".+?(resampled_phtf_loss.)", replacement = "phtf_loss_", layer_names)
+# names(phtfloss) <- layer_names2
 
 
 

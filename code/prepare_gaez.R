@@ -79,7 +79,13 @@ for (j in 1:length(files)) {
 }
 
 
+## Create a brick for convenience. 
+rasterlist_gaez <- list.files(path = targetdir, 
+                              pattern = "", 
+                              full.names = TRUE) %>% as.list()
+gaez_all <- brick(rasterlist_gaez)
 
-
+writeRaster(gaez_all, here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "high_input_all.tif"), 
+            overwrite = TRUE)
 
 

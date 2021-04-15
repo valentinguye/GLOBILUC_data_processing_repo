@@ -52,21 +52,22 @@ rasterOptions(timer = TRUE,
 # GLASS GLC codebook 
 # 0 = No data, 10 = cropland, 20 = forest, 30 = Grassland, 40 = Shrubland, 70 = Tundra, 90 = Barren land, 100 = Snow/ice
 
+#### PREPARE GLASS DATA ####
 
+# Read data in
 rasterlist <- list.files(path = "input_data/GLASS-GLC", 
                          pattern = paste0("GLASS-GLC_7classes_"), 
                          full.names = TRUE) %>% as.list()
-
 parcels_brick <- brick(rasterlist)
 
-
 # crop to ***TROPICAL*** AOI 
-
 ext <- extent(c(-180, 179.9167, -30, 30))
-
 tropical_aoi <- crop(parcels_brick, ext)
 
-writeRaster(tropical_aoi, here("temp_data", "processed_glass-glc", "tropical_aoi", "brick_tropical_aoi.tif"))
+# Write
+writeRaster(tropical_aoi, here("temp_data", "processed_glass-glc", "tropical_aoi", "brick_tropical_aoi.tif"), 
+            overwrite = TRUE)
+
 
 ##################
 tropical_aoi <- brick( here("temp_data", "processed_glass-glc", "tropical_aoi", "brick_tropical_aoi.tif"))
@@ -185,7 +186,7 @@ values(sbqt_mode_lu)[17,]
 
 
 #### AGGREGATION AND REPROJECTION TO GAEZ EXTENT #### 
-# So, here we want to aggregate three variables: 
+# So, here we want to aggregate in turn three variables: 
 # 1. The forest loss itself (0;1)
 # 2. The subsequent direct LU (0, 10, 20... 100)
 # 3. The subsequent mode LU (0. 10, 20... 100)
@@ -326,11 +327,59 @@ resample(x = aggr_sbqt_mode_lu, y = gaez,
 endCluster()
 
 
+#### MASK ALWAYS 0 PIXELS #### 
 
-
+### Create the mask layer
+# Create a layer that has values either : NA if first_loss always 0 across all years, 1 otherwise
 res_first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_first_loss.tif"))
+# not using if_else here to allow NA as an output... 
+always_zero <- function(y){
+  if(sum(y) == 0){d <- NA}else{d <- 1}
+  return(d)}
+
+mask_path <- here("temp_data", "processed_glass-glc", "tropical_aoi", "always_zero_mask.tif")
+
+overlay(x = res_first_loss, 
+         fun = always_zero, 
+         filename = mask_path,
+         na.rm = TRUE, # but there is no NA anyway
+         datatype = "INT2U", # INT2U to allow have NAs
+         overwrite = TRUE)  
+
+mask <- raster(mask_path)
+# plot(mask)
+
+# then use it to mask the 3 brick variables
+
+### 1. FIRST LOSS 
+
+mask(x = res_first_loss, 
+     mask = mask, 
+     filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"), 
+     datatype = "INT2U")
+
+# masked <- brick( here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"))
+# plot(masked[[1]])
+
+### 2. SUBSEQUENT DIRECT LU
 res_sbqt_direct_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_sbqt_direct_lu.tif"))
+
+mask(x = res_sbqt_direct_lu, 
+     mask = mask, 
+     filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_direct_lu.tif"), 
+     datatype = "INT2U")
+
+### 3. SUBSEQUENT MODE LU
 res_sbqt_mode_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_sbqt_mode_lu.tif"))
+
+mask(x = res_sbqt_mode_lu, 
+     mask = mask, 
+     filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_mode_lu.tif"), 
+     datatype = "INT2U")
+
+
+
+
 
 plot(sbqt_mode_lu[[20]])
 plot(aggr_sbqt_mode_lu[[20]])
@@ -359,6 +408,37 @@ plot(res_sbqt_mode_lu[[20]])
 # 
 # plot(sbqt_mode_lu[[20]])
 # plot(sbqt_mode_lu_aggr[[20]])
+
+
+
+
+
+
+#### MASK ALWAYS 0 PIXELS IN GLASS RESOLUTION (FOR GEE) ####
+
+# Input first loss in Glass resolution 
+rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
+                         pattern = "first_loss_", 
+                         full.names = TRUE) %>% as.list()
+first_loss <- brick(rasterlist)
+
+always_zero2 <- function(y){
+  if(sum(y) == 0){d <- 0}else{d <- 1} # note that value for true is not NA but 0, for further convenience in GEE
+  return(d)}
+
+mask_path <- here("temp_data", "processed_glass-glc", "tropical_aoi", "always_zero_mask_glassres.tif")
+
+overlay(x = first_loss, 
+        fun = always_zero2, 
+        filename = mask_path,
+        na.rm = TRUE, # but there is no NA anyway
+        datatype = "INT2U", # INT2U to allow have NAs
+        overwrite = TRUE)  
+
+mask <- raster(mask_path)
+plot(mask)
+
+
 
 
 
