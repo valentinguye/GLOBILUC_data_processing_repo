@@ -1,7 +1,10 @@
-# We merge in 2 steps: first merging GLASS-GLC data with GAEZ, second merging phtfloss data with GAEZ
-# We don't merge everything in a single data frame because it is memory intensive. 
+# In this script, we merge in 3 steps: 
+# 1. First, we merge GLASS-GLC data with GAEZ, 
+# 2. Second, we merge the first loss variable computed for 1983 to 2020 with GAEZ 
+# 3. Third, we merge phtfl loss data with GAEZ
+# We don't merge everything in a single data frame because it is memory intensive.  
 # Also because we mask gaez with masks based on outcome variables being "always zero" and thus the 
-# masks are different for GLASS and for phtfloss. 
+# masks are different for first loss 1983-2015 (three variables of GLASS-GLC), first loss 1983-2020, and for phtfloss. 
 
 
 ##### 0. PACKAGES, WD, OBJECTS #####
@@ -80,7 +83,7 @@ names(gaez) <- gaez_crops
 
 
 
-#### MERGE GLASS-GLC AND GAEZ #### 
+#### 1. MERGE GLASS-GLC AND GAEZ #### 
 
 ## Read in GLASS-GLC data 
 first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"))
@@ -114,7 +117,7 @@ glass <- stack(first_loss, sbqt_direct_lu, sbqt_mode_lu)
 # plot(pl)
 
 
-### MASK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
 
 mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_zero_mask.tif"))
 
@@ -130,7 +133,7 @@ names(gaez_m) <- gaez_crops
 # (note that masking changes the summary values of gaez)
 
 
-### GLASS - GAEZ MERGE ###
+### STACK RASTERS TO MERGE ###
 
 # # Mask all the layers with ocean mask from GAEZ (more masked pixels than phtfloss that has only some rectangles between continents masked. plot both to see this)
 # # take one layer from gaez
@@ -146,6 +149,9 @@ names(gaez_m) <- gaez_crops
 glass_gaez <- stack(glass, gaez_m)
 names(glass_gaez)
 
+
+### RASTER TO DATAFRAME ### 
+
 # na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
 # We also set long to false because we reshape with a proper function for more control
 wide_df <- raster::as.data.frame(glass_gaez, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ///!!!\\\ ~700s (rather 2-3 hours last time) 
@@ -154,6 +160,9 @@ wide_df <- raster::as.data.frame(glass_gaez, na.rm = TRUE, xy = TRUE, centroids 
 names(wide_df)
 head(wide_df[,c("x", "y")])
 wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+
+### WIDE TO LONG ###
 
 # Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
 # So we can simply create an ID that's a sequence. 
@@ -187,8 +196,89 @@ saveRDS(long_df, here(targetdir, "glass_gaez_long.Rdata"))
 rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first_loss, sbqt_direct_lu, sbqt_mode_lu)
 
 
+# glass <- readRDS(here(targetdir, "glass_gaez_long.Rdata"))
 
-#### MERGE PHTF LOSS AND GAEZ #### 
+
+#### 2. MERGE 1983-2020 FIRST LOSS AND GAEZ #### 
+
+## Read in FIRST LOSS 1983 2020 
+firstloss8320 <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_firstloss8320.tif")) 
+# Rename layers 
+names(firstloss8320) <- paste0("firstloss_glassgfc.",seq(1983, 2020, 1))
+
+
+### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+
+mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_zero_mask8320.tif"))
+
+mask(x = gaez, 
+     mask = mask, 
+     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "firstloss8320_masked_high_input_all.tif"), 
+     overwrite = TRUE)
+
+gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "firstloss8320_masked_high_input_all.tif"))
+# Rename layers (important, as writing the masked gaez lost the layer names)
+names(gaez_m) <- gaez_crops
+
+# (note that masking changes the summary values of gaez)
+
+
+### STACK RASTERS TO MERGE ###
+
+# Stack together the annual layers of firstloss8320-GLC data and GAEZ crop cross sections 
+firstloss_gaez <- stack(firstloss8320, gaez_m)
+names(firstloss_gaez)
+
+
+### RASTER TO DATAFRAME ### 
+
+# na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
+# We also set long to false because we reshape with a proper function for more control
+wide_df <- raster::as.data.frame(firstloss_gaez, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # 
+
+# Rename coordinate variables
+names(wide_df)
+head(wide_df[,c("x", "y")])
+wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+
+### WIDE TO LONG ### 
+
+# Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
+# So we can simply create an ID that's a sequence. 
+wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
+
+# the dot is, by construction of all variable names, only in the names of time varying variables. 
+# fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
+varying_vars <- names(firstloss_gaez)[grep(".", names(firstloss_gaez), fixed = TRUE)]
+
+# reshape to long.
+long_df <- stats::reshape(wide_df,
+                          varying = varying_vars,
+                          v.names = "firstloss_glassgfc",
+                          sep = ".",
+                          timevar = "year",
+                          idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
+                          ids = "grid_id", # lonlat is our cross-sectional identifier.
+                          direction = "long",
+                          new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
+rm(wide_df)
+names(long_df)
+# replace the indices from the raster::as.data.frame with actual years.
+
+years <- seq(1983, 2020, 1)
+long_df <- mutate(long_df, year = years[year])
+
+long_df <- dplyr::arrange(long_df, grid_id, year)
+
+
+saveRDS(long_df, here(targetdir, "firstloss8320_gaez_long.Rdata"))
+
+rm(years, long_df, varying_vars, firstloss_gaez, gaez_m, mask, firstloss8320)
+
+
+
+#### 3. MERGE PHTF LOSS AND GAEZ #### 
 
 ## Read in PHTF LOSS 
 phtfloss <- brick(here("temp_data", "processed_phtfloss", "tropical_aoi", "resampled_phtf_loss.tif")) 
@@ -196,7 +286,7 @@ phtfloss <- brick(here("temp_data", "processed_phtfloss", "tropical_aoi", "resam
 names(phtfloss) <- paste0("phtf_loss.",seq(2002, 2020, 1))
 
 
-### MASK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
 
 mask <- raster(here("temp_data", "processed_phtfloss", "tropical_aoi", "always_zero_mask_phtfloss.tif"))
 
@@ -212,11 +302,14 @@ names(gaez_m) <- gaez_crops
 # (note that masking changes the summary values of gaez)
 
 
-### PHTF LOSS - GAEZ MERGE ###
+### STACK RASTERS TO MERGE ###
 
 # Stack together the annual layers of phtfloss-GLC data and GAEZ crop cross sections 
 phtfloss_gaez <- stack(phtfloss, gaez_m)
 names(phtfloss_gaez)
+
+
+### RASTER TO DATAFRAME ### 
 
 # na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
 # We also set long to false because we reshape with a proper function for more control
@@ -226,6 +319,9 @@ wide_df <- raster::as.data.frame(phtfloss_gaez, na.rm = TRUE, xy = TRUE, centroi
 names(wide_df)
 head(wide_df[,c("x", "y")])
 wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+
+### WIDE TO LONG ### 
 
 # Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
 # So we can simply create an ID that's a sequence. 

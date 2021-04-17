@@ -52,7 +52,7 @@ rasterOptions(timer = TRUE,
 # GLASS GLC codebook 
 # 0 = No data, 10 = cropland, 20 = forest, 30 = Grassland, 40 = Shrubland, 70 = Tundra, 90 = Barren land, 100 = Snow/ice
 
-#### PREPARE GLASS DATA ####
+#### DEFINE AOI: TROPICAL ####
 
 # Read data in
 rasterlist <- list.files(path = "input_data/GLASS-GLC", 
@@ -69,10 +69,9 @@ writeRaster(tropical_aoi, here("temp_data", "processed_glass-glc", "tropical_aoi
             overwrite = TRUE)
 
 
-##################
 tropical_aoi <- brick( here("temp_data", "processed_glass-glc", "tropical_aoi", "brick_tropical_aoi.tif"))
 
-#### FIRST FOREST LOSS ####
+#### 83-15 TRACK: FIRST FOREST LOSS ####
 # Create annual layers of forest loss defined as: class is not 20 in a given year while it was 20 in *all the previous year*.
 # This restricts annual loss to that occurring for the first time
 
@@ -109,7 +108,7 @@ rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropic
                          full.names = TRUE) %>% as.list()
 first_loss <- brick(rasterlist)
 
-#### SUBSEQUENT LAND USE #### 
+#### 83-15 TRACK: SUBSEQUENT LAND USE #### 
 # Create annual layers indicating the sbqt LU class to forest
 # i.e. the class in the year loss is detected. 
 
@@ -185,7 +184,7 @@ values(sbqt_mode_lu)[17,]
 
 
 
-#### AGGREGATION AND REPROJECTION TO GAEZ EXTENT #### 
+#### 83-15 TRACK: AGGREGATION AND REPROJECTION TO GAEZ EXTENT #### 
 # So, here we want to aggregate in turn three variables: 
 # 1. The forest loss itself (0;1)
 # 2. The subsequent direct LU (0, 10, 20... 100)
@@ -327,7 +326,7 @@ resample(x = aggr_sbqt_mode_lu, y = gaez,
 endCluster()
 
 
-#### MASK ALWAYS 0 PIXELS #### 
+#### 83-15 TRACK: MASK ALWAYS 0 PIXELS #### 
 
 ### Create the mask layer
 # Create a layer that has values either : NA if first_loss always 0 across all years, 1 otherwise
@@ -414,7 +413,11 @@ plot(res_sbqt_mode_lu[[20]])
 
 
 
-#### MASK ALWAYS 0 PIXELS IN GLASS RESOLUTION (FOR GEE) ####
+
+
+
+
+#### 83-20 TRACK: MASK ALWAYS 0 PIXELS IN GLASS RESOLUTION (FOR GEE) ####
 
 # Input first loss in Glass resolution 
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
@@ -435,11 +438,120 @@ overlay(x = first_loss,
         datatype = "INT2U", # INT2U to allow have NAs
         overwrite = TRUE)  
 
+# mask <- raster(mask_path)
+# plot(mask)
+
+rm(first_loss, always_zero2, mask_path)
+
+
+
+
+
+#### 83-20 TRACK: AGGREGATE, REPROJECT AND INTEGRATE GEE OUTPUTS ####
+
+### PREPARE 2016-2020 GFC DATA PREPARED IN GEE ###
+
+rasterlist <- list.files(path = here("input_data", "meanFirstLossGlass_maxP"), 
+                         pattern = "meanFirstLossGlass_maxP_", 
+                         full.names = TRUE) %>% as.list()
+firstloss1620 <- brick(rasterlist)
+
+# Input GAEZ template
+gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Banana.tif"))
+
+# Function that converts average 5km (Glass res.) pixel cover of GFC first loss 30m pixels ([0, 1]) into 0:4 
+# - i.e. into the same format as the first_loss variable computed for 1983-2015 from GLASS
+
+convert_GFC_to_GLASS <- function(geeo, na.rm = FALSE){
+  avg_10km <- mean(geeo, na.rm = na.rm)
+  if(avg_10km == 0){glass_format <- 0}
+  if(avg_10km > 0 & avg_10km <= 0.25){glass_format <- 1}
+  if(avg_10km > 0.25 & avg_10km <= 0.5){glass_format <- 2}
+  if(avg_10km > 0.5 & avg_10km <= 0.75){glass_format <- 3}
+  if(avg_10km > 0.75 & avg_10km <= 1){glass_format <- 4}
+  return(glass_format)
+}
+ 
+# alt_convert_GFC_to_GLASS <- function(geeo, na.rm = FALSE){
+#   avg_10km <- mean(geeo, na.rm = na.rm)
+#   if(avg_10km >= 0 & avg_10km < 0.125){glass_format <- 0}
+#   if(avg_10km >= 0.125 & avg_10km < 0.375){glass_format <- 1}
+#   if(avg_10km >= 0.375 & avg_10km < 0.625){glass_format <- 2}
+#   if(avg_10km >= 0.625 & avg_10km < 0.875){glass_format <- 3}
+#   if(avg_10km >= 0.875 & avg_10km <= 1){glass_format <- 4}
+#   return(glass_format)
+# }
+
+# convert_GFC_to_GLASS(geeo = c(0.5987, 0.5986, 0.59, 0.598))
+
+## Aggregate and align precisely on GAEZ 
+aggregate(firstloss1620, 
+          fact = 2, 
+          fun = convert_GFC_to_GLASS, 
+          expand = FALSE, 
+          na.rm = FALSE, 
+          filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_firstloss1620.tif"),
+          datatype = "INT1U",
+          overwrite = TRUE)
+
+aggr_firstloss1620 <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_firstloss1620.tif"))
+# plot(aggr_firstloss1620[[1]])
+# summary(values(aggr_firstloss1620[[1]]))
+# and now align precisely to GAEZ 
+
+beginCluster() # this uses by default detectCores() - 1
+
+resample(x = aggr_firstloss1620, y = gaez,
+         method = "ngb",
+         filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_firstloss1620.tif"),
+         datatype = "INT1U",
+         overwrite = TRUE )
+
+endCluster()
+
+
+### BRICK WITH 1983-2015 FIRST LOSS ### 
+
+# Bricking like this will preserve the order, and thus the index used in renaming is representative of time order
+firstloss8315_path <- here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_first_loss.tif")
+firstloss1620_path <- here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_firstloss1620.tif")
+firstloss8320 <- brick(list(firstloss8315_path, firstloss1620_path))
+
+writeRaster(firstloss8320, 
+            here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_firstloss8320.tif"), 
+            overwrite = TRUE)
+
+
+
+#### 83-20 TRACK: MASK ALWAYS 0 PIXELS ####
+
+### Create the mask layer
+# Create a layer that has values either : NA if first_loss always 0 across all years, 1 otherwise
+res_firstloss8320 <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_firstloss8320.tif"))
+# not using if_else here to allow NA as an output... 
+always_zero <- function(y){
+  if(sum(y) == 0){d <- NA}else{d <- 1}
+  return(d)}
+
+mask_path <- here("temp_data", "processed_glass-glc", "tropical_aoi", "always_zero_mask8320.tif")
+
+overlay(x = res_firstloss8320, 
+        fun = always_zero, 
+        filename = mask_path,
+        na.rm = TRUE, # but there is no NA anyway
+        datatype = "INT2U", # INT2U to allow have NAs
+        overwrite = TRUE)  
+
 mask <- raster(mask_path)
-plot(mask)
+# plot(mask)
 
+# then use it to mask 
 
-
+mask(x = res_firstloss8320, 
+     mask = mask, 
+     filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_firstloss8320.tif"), 
+     datatype = "INT2U", # INT2U to allow have NAs
+     overwrite = TRUE)
 
 
 
