@@ -47,6 +47,8 @@ dir.create(here("temp_data", "processed_phtfloss", "tropical_aoi"), recursive = 
 rasterOptions(timer = TRUE, 
               progress = "text")
 
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+
 
 
 #### PREPARE PHTF LOSS #### 

@@ -79,7 +79,7 @@ gaez_crops <- list.files(path = here(gaez_dir, "High-input"),
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 names(gaez) <- gaez_crops
 
-#######################################################################
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
 

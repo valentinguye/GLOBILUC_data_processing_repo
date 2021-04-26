@@ -55,6 +55,9 @@ if (dir.exists(targetdir)) {
                          pattern = ".tif", full.names = TRUE))
 } else dir.create(targetdir, recursive = TRUE)
 
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+
+
 
 files <- list.files(path = datadir, pattern = ".zip")
 crops <- unlist(strsplit(files, split = ".zip"))
@@ -68,8 +71,11 @@ for (j in 1:length(files)) {
   unzip(zipfile = here(datadir, files[j]), exdir = tmpdir)
   dt <- raster(paste0(tmpdir, "/data.asc"))
   
+  # crop to tropical AOI
   dt_trop <- crop(dt, ext)
-  dt_trop[dt_trop<0] <- NA # A few points are -0.09 with no apparent reason. 
+  
+  # A few points are -0.09 with no apparent reason. 
+  dt_trop[dt_trop<0] <- NA 
   
   names(dt_trop) <- crops[j]
   writeRaster(dt_trop,
@@ -78,6 +84,16 @@ for (j in 1:length(files)) {
   
 }
 
+
+### CHECK GRASS ### 
+# dt <- raster(here("input_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input", "Grass", "data.asc"))
+# # crop to tropical AOI
+# dt_trop <- crop(dt, ext)
+# # A few points are -0.09 with no apparent reason. 
+# dt_trop[dt_trop<0] <- NA 
+# names(dt_trop) <- "Grass"
+# 
+# summary(values(dt_trop))
 
 ## Create a brick for convenience. 
 rasterlist_gaez <- list.files(path = targetdir, 

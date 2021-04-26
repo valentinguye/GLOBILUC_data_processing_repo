@@ -49,6 +49,9 @@ dir.create(here("temp_data", "processed_glass-glc", "tropical_aoi"), recursive =
 rasterOptions(timer = TRUE, 
               progress = "text")
 
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+
+
 # GLASS GLC codebook 
 # 0 = No data, 10 = cropland, 20 = forest, 30 = Grassland, 40 = Shrubland, 70 = Tundra, 90 = Barren land, 100 = Snow/ice
 
