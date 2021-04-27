@@ -56,7 +56,6 @@ dataset_names <- c("glass_gaez_long",
 countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
 length(unique(countries$COUNTRY_NA)) == nrow(countries)
 
-# # path = dataset_paths[1]
 # name = dataset_names[1]
 # 
 # c1 <- countries[1,]
@@ -71,6 +70,9 @@ length(unique(countries$COUNTRY_NA)) == nrow(countries)
 # 
 # st_join(x = c1, y = point, join = st_contains, prepared = TRUE, left = FALSE)
 
+# dataset_names <- c("glass_gaez_long_country_nf",
+#                    "firstloss8320_gaez_long_country_nf",
+#                    "phtfloss_gaez_long_country_nf")
 
 # ~6h for the first one, the two second over night
 for(name in dataset_names){
@@ -79,10 +81,13 @@ for(name in dataset_names){
   df <- readRDS(path)
   
   # Remove gaez variables
-  df <- dplyr::select(df,-gaez_crops)
+  df <- dplyr::select(df,-all_of(gaez_crops))
   
   # Use cross section only
   df_cs <- df[!duplicated(df$grid_id),]
+  
+  rm(df)
+  
   # Spatial
   df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
 
@@ -101,19 +106,21 @@ for(name in dataset_names){
                    join = st_nearest_feature,
                    left = TRUE)
 
-  names(df_cs)[names(df_cs) == "OBJECTID"] <- "country_id"
+  # names(df_cs)[names(df_cs) == "OBJECTID"] <- "country_id"
   names(df_cs)[names(df_cs) == "COUNTRY_NA"] <- "country_name"
 
   df_cs <- st_drop_geometry(df_cs)
-
-  df <- left_join(df, df_cs[,c("grid_id", "country_id", "country_name")], by = "grid_id")
-
-  # Create country trends variable
-  df$country_year <- paste0(df$country_name, "_", df$year)
   
+  # Keep only new variable and id
+  df_cs <- df_cs[,c("grid_id", "country_name")]
+  
+  # # We save the cross section, not the panel, as it is not necessary 
+  # # df <- left_join(df, df_cs[,c("grid_id", "country_id", "country_name")], by = "grid_id")
 
-  saveRDS(df, paste0(here(origindir, name), "_country_nf.Rdata"))  
-  rm(df, df_cs)
+  
+  # saveRDS(df_cs, path)
+  saveRDS(df_cs, paste0(here(origindir, name), "_country_nf.Rdata"))
+  rm(df_cs)
 }
 
 
@@ -139,23 +146,96 @@ for(name in dataset_names){
   # Use cross section only
   df_cs <- df[!duplicated(df$grid_id),]
   
-  # To understand this line, see https://www.tidyverse.org/blog/2020/04/dplyr-1-0-0-colwise/ 
+  rm(df)
+  
+  # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
   df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = Alfalfa:Yam)))
   
   # df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum))
   # that adds the 47 new variables, with new names.
   df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
+  
+  # Aggregate suitability indexes of similar crops
+  df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckweat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
+                                           oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
+                                           sugar_crops = max(c(Sugarbeet, Sugarcane)),
+                                           fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
+                                           fibre_crops = max(c(Cotton, Flax)),
+                                           stimulant_crops = max(c(Coffee, Tea, Tobacco)),
+                                           fodder_crops = max(c(Alfalfa)), 
+                                           bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass))
+                                           ) %>% as.data.frame()
+  
   # Select only newly constructed variables, and id
-  df_cs <- df_cs[,(names(df_cs)=="grid_id" | grepl(pattern = "_std", x = names(df_cs)))]
+  std_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs))]
+  crop_names <- names(df_cs)[grepl(pattern = "_crops", x = names(df_cs))]
+  df_cs <- df_cs[,c("grid_id", std_names, crop_names)]
   
-  # merge back to panel
-  df <- left_join(df, df_cs, by = "grid_id")
+  # # merge back to panel - NOPE, not anymore
+  # df <- left_join(df, df_cs, by = "grid_id")
   
-  # Remove gaez variables (not useful to save them)
-  df <- dplyr::select(df,-gaez_crops)
+  # Keep only new variables and id
+  # df_cs <- df_cs[,(names(df_cs)=="grid_id" | grepl(pattern = "_std", x = names(df_cs)))]
   
-  
-  saveRDS(df, paste0(here(origindir, name), "_stdsi.Rdata"))  
-  rm(df, df_cs)
+  saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))  
+  rm(df_cs, path)
 }
+
+
+
+#### AGGREGATE SOME GAEZ SUITABILITY INDEXES (WITH MAX) ####
+for(name in dataset_names){
+  path <- paste0(here(origindir, name), ".Rdata")
+  df <- readRDS(path)
+  
+  df_cs <- df[!duplicated(df$grid_id),]
+  
+  rm(df)
+  
+  
+  
+  
+}
+
+#### MERGE DATASETS WITH ADDED VARIABLES #### 
+for(name in dataset_names){
+  
+  base_path <- paste0(here(origindir, name), ".Rdata")
+  df_base <- readRDS(base_path)
+  
+  country_path <- paste0(here(origindir, name), "_country_nf.Rdata")
+  df_country <- readRDS(country_path)
+  
+  stdsi_path <- paste0(here(origindir, name), "_stdsi.Rdata")
+  df_stdsi <- readRDS(stdsi_path)
+  
+  # names(df_base)
+  # names(df_country)
+  # names(df_stdsi)
+  
+  final <- left_join(df_base, df_country, by = "grid_id")
+  rm(df_base, df_country)
+  
+  final <- left_join(final, df_stdsi, by = "grid_id")
+  rm(df_stdsi)
+
+  # Create country trends variable
+  final <- mutate(final, country_year = paste0(country_name, "_", year))
+
+  saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
+  
+  rm(final)
+}
+
+
+
+
+
+
+
+
+
+
+
+
   

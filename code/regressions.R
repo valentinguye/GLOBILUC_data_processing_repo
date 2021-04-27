@@ -65,37 +65,106 @@ getFixest_nthreads()
 
 
 
-### READ ALL POSSIBLE DATASETS HERE
-glass <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_country_nf.Rdata"))
+### READ ALL POSSIBLE DATASETS HERE 
+# but not all together because of memory issues. 
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
 
-fl8320 <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_gaez_long_country_nf.Rdata"))
-
-phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_country_nf.Rdata"))
+# d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_gaez_long_final.Rdata"))
+# 
+# d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
 
 prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
+
+dataset = "glass"
+start_year = 1983
+end_year = 2015
+crop_j = "Oilpalm"
+price_k = "Soybean_oil"
+standardized_si = TRUE
+price_lag = 1
 
 make_base_reg <- function(dataset, 
                           start_year = 2002, 
                           end_year = 2015, 
-                          commo_j = "Oilpalm", # in GAEZ spelling
-                          commo_k = c("ln_Soybean_oil", "ln_Olive_oil", "ln_Rapeseed_oil", "ln_Sunflower_oil", "ln_Coconut_oil", "ln_Sugar", "ln_Crude_oil"),
+                          crop_j = "Oilpalm", # in GAEZ spelling
+                          price_k = "Soybean_oil", # in prices spelling 
+                          standardized_si = TRUE,
                           price_lag = 1, 
                           fe = "grid_id + country_year"){
   
   
   
   if(dataset=="glass"){
-    d <- glass
+    # d <- glass
     outcome_variable <- "first_loss"}
   if(dataset=="fl8320"){
-    d <- fl8320
+    # d <- fl8320
     outcome_variable <- "firstloss_glassgfc"}
   if(dataset=="phtfl"){
-    d <- phtfl
+    # d <- phtfl
     outcome_variable <- "phtf_loss"}
   
   
   ### SPECIFICATIONS  
+  # We need to create the variables we will need, based on:
+  # crop_j, price_k, whether the price is lagged, whether the suitability is standardized, and the controls we want 
+  
+  ## Identify the price of j based on crop_j (GAEZ spelling)
+  if(crop_j == "Pasture"){price_j <- "Beef"} 
+  if(crop_j == "Oilpalm"){price_j <- "Palm_oil"} 
+  if(crop_j == "Soybean"){price_j <- "Soybean_oil"} 
+  if(crop_j == "Cocoa"){price_j <- "Cocoa"} 
+  if(crop_j == "Coffee"){price_j <- "Coffee"} 
+  
+  # and lag it
+  if(price_lag != 0){price_j <- paste0(price_j,"_lag",price_lag)}
+  
+  # We need to do the revert from price of k to the crop suitability in GAEZ
+  if("Beef" %in% price_k){crop_k <- "Pasture"} 
+  if("Palm" %in% price_k){crop_k <- "Oilpalm"} 
+  if("Soy" %in% price_k){crop_k <- "Soybean"} 
+  if("Cocoa" %in% price_k){crop_k <- "Cocoa"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Barley" %in% price_k){crop_k <- "Barley"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
+  
+  
+  
+  # Construct the price of k
+  if(price_lag != 0){price_k <- paste0(price_j,"_lag",price_lag)}
+  
+  
+  # don't condition that, as we won't use non logged prices a priori. 
+  price_j <- paste0("ln_", price_j)
+  price_k <- paste0("ln_", price_k)
+  
+  # Identify the suitability index needed
+  if(standardized_si){
+    suitability_j <- paste0(crop_j, "_std") 
+    suitability_k <- paste0(price_j, "_std") 
+  }else{
+    suitability_j <- crop_j
+    suitability_k <- price_j
+  }
+  
+  # Merge only the prices needed, not the whole price dataframe
+  d <- left_join(d, prices[,c("year", price_j, price_k)], by = "year")
+  
+  # Create the variables
+  d <- mutate(d, 
+              SjPk = !!as.symbol(suitability_j)*!!as.symbol(price_k), 
+              SkPk = !!as.symbol(suitability_k)*!!as.symbol(price_k), 
+              SjPj = !!as.symbol(suitability_j)*!!as.symbol(price_j))
+  
+  
   
   
   ### KEEP OBSERVATIONS THAT: 
@@ -121,8 +190,10 @@ make_base_reg <- function(dataset,
 }
 
 
-
-
+K_commodities <- c("ln_Soybean_oil", "ln_Olive_oil", "ln_Rapeseed_oil", "ln_Sunflower_oil", "ln_Coconut_oil", "ln_Sugar", "ln_Crude_oil")
+for(commodity in K_commodities){
+  
+}
 
 
 
