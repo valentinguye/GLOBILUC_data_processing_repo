@@ -119,24 +119,28 @@ make_base_reg <- function(dataset,
   # and lag it
   if(price_lag != 0){price_j <- paste0(price_j,"_lag",price_lag)}
   
-  # We need to do the revert from price of k to the crop suitability in GAEZ
-  if("Beef" %in% price_k){crop_k <- "Pasture"} 
-  if("Palm" %in% price_k){crop_k <- "Oilpalm"} 
-  if("Soy" %in% price_k){crop_k <- "Soybean"} 
-  if("Cocoa" %in% price_k){crop_k <- "Cocoa"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Barley" %in% price_k){crop_k <- "Barley"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  if("Coffee" %in% price_k){crop_k <- "Coffee"} 
-  
-  
+  ## Do the revert from price of k to the crop suitability in GAEZ
+  if(grepl(pattern = "Banana", x = price_k, ignore.case = TRUE)){crop_k <- "Banana"} 
+  if(grepl(pattern = "Barley", x = price_k, ignore.case = TRUE)){crop_k <- "Barley"} 
+  if(grepl(pattern = "Beef", x = price_k, ignore.case = TRUE)){crop_k <- "Pasture"} 
+  if(grepl(pattern = "Orange", x = price_k, ignore.case = TRUE)){crop_k <- "Citrus"} 
+  if(grepl(pattern = "Cocoa", x = price_k, ignore.case = TRUE)){crop_k <- "Cocoa"} 
+  if(grepl(pattern = "Coconut", x = price_k, ignore.case = TRUE)){crop_k <- "Coconut"} 
+  if(grepl(pattern = "Coffee", x = price_k, ignore.case = TRUE)){crop_k <- "Coffee"} 
+  if(grepl(pattern = "Groundnuts", x = price_k, ignore.case = TRUE)){crop_k <- "Groundnut"} 
+  if(grepl(pattern = "Maize", x = price_k, ignore.case = TRUE)){crop_k <- "Maize"} 
+  if(grepl(pattern = "Oat", x = price_k, ignore.case = TRUE)){crop_k <- "Oat"} 
+  if(grepl(pattern = "Olive", x = price_k, ignore.case = TRUE)){crop_k <- "Olive"} 
+  if(grepl(pattern = "Palm", x = price_k, ignore.case = TRUE)){crop_k <- "Oilpalm"} 
+  if(grepl(pattern = "Rapeseed", x = price_k, ignore.case = TRUE)){crop_k <- "Rapeseed"} 
+  if(grepl(pattern = "Rice", x = price_k, ignore.case = TRUE)){crop_k <- "Rice"} 
+  if(grepl(pattern = "Sorghum", x = price_k, ignore.case = TRUE)){crop_k <- "Sorghum"} 
+  if(grepl(pattern = "Soy", x = price_k, ignore.case = TRUE)){crop_k <- "Soybean"} 
+  if(grepl(pattern = "Sugar", x = price_k, ignore.case = TRUE)){crop_k <- "sugar_crops"} 
+  if(grepl(pattern = "Sunflower", x = price_k, ignore.case = TRUE)){crop_k <- "Sunflower"} 
+  if(grepl(pattern = "Tea", x = price_k, ignore.case = TRUE)){crop_k <- "Tea"} 
+  if(grepl(pattern = "Tobacco", x = price_k, ignore.case = TRUE)){crop_k <- "Tobacco"} 
+  if(grepl(pattern = "Wheat", x = price_k, ignore.case = TRUE)){crop_k <- "Wheat"} 
   
   # Construct the price of k
   if(price_lag != 0){price_k <- paste0(price_j,"_lag",price_lag)}

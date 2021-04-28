@@ -135,7 +135,7 @@ for(name in dataset_names){
 # summary(df$soy)
 
 
-#### STANDARDIZE SUITABILITY INDICES ####  
+#### STANDARDIZE AND AGGREGATE SUITABILITY INDICES ####  
  
 # name = dataset_names[1]
 
@@ -148,6 +148,7 @@ for(name in dataset_names){
   
   rm(df)
   
+  ### Standardize suitability indexes
   # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
   df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = Alfalfa:Yam)))
   
@@ -155,21 +156,26 @@ for(name in dataset_names){
   # that adds the 47 new variables, with new names.
   df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
   
-  # Aggregate suitability indexes of similar crops
+  ### Aggregate suitability indexes of similar crops
+  # The grouping here corresponds to the categories by GAEZ-IIASA 
+  # sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
+  # Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
   df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckweat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
-                                           oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
-                                           sugar_crops = max(c(Sugarbeet, Sugarcane)),
+                                          oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
+                                          sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
                                            fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
                                            fibre_crops = max(c(Cotton, Flax)),
                                            stimulant_crops = max(c(Coffee, Tea, Tobacco)),
-                                           fodder_crops = max(c(Alfalfa)), 
+                                           fodder_crops = max(c(Alfalfa)), # To adjust once we have Grass as a GAEZ crop  
                                            bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass))
-                                           ) %>% as.data.frame()
+  ) %>% as.data.frame()
   
+  # standardize crop groups
+  df_cs <- dplyr::mutate(df_cs, across(.cols = contains("_crops"), .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
+
   # Select only newly constructed variables, and id
-  std_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs))]
-  crop_names <- names(df_cs)[grepl(pattern = "_crops", x = names(df_cs))]
-  df_cs <- df_cs[,c("grid_id", std_names, crop_names)]
+  var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs)) | grepl(pattern = "_crops", x = names(df_cs))]
+  df_cs <- df_cs[,c("grid_id", var_names)]
   
   # # merge back to panel - NOPE, not anymore
   # df <- left_join(df, df_cs, by = "grid_id")
@@ -183,38 +189,28 @@ for(name in dataset_names){
 
 
 
-#### AGGREGATE SOME GAEZ SUITABILITY INDEXES (WITH MAX) ####
-for(name in dataset_names){
-  path <- paste0(here(origindir, name), ".Rdata")
-  df <- readRDS(path)
-  
-  df_cs <- df[!duplicated(df$grid_id),]
-  
-  rm(df)
-  
-  
-  
-  
-}
 
 #### MERGE DATASETS WITH ADDED VARIABLES #### 
 for(name in dataset_names){
   
+  # Base dataset (including outcome variable(s))
   base_path <- paste0(here(origindir, name), ".Rdata")
   df_base <- readRDS(base_path)
   
+  # Remove non-standardized suitability indexes
+  df_base <- dplyr::select(df_base,-all_of(gaez_crops))
+  
+  # Country variable
   country_path <- paste0(here(origindir, name), "_country_nf.Rdata")
   df_country <- readRDS(country_path)
   
-  stdsi_path <- paste0(here(origindir, name), "_stdsi.Rdata")
-  df_stdsi <- readRDS(stdsi_path)
-  
-  # names(df_base)
-  # names(df_country)
-  # names(df_stdsi)
-  
+  # Merge them and remove to save memory 
   final <- left_join(df_base, df_country, by = "grid_id")
   rm(df_base, df_country)
+
+  # Standardized and aggregated suitability indexes
+  stdsi_path <- paste0(here(origindir, name), "_stdsi.Rdata")
+  df_stdsi <- readRDS(stdsi_path)  
   
   final <- left_join(final, df_stdsi, by = "grid_id")
   rm(df_stdsi)
@@ -229,6 +225,8 @@ for(name in dataset_names){
 
 
 
+### Repeat it for the heavier phtf loss data set, with a slight difference: we do not 
+# append to the non standardized suitability indexes (which are only useful for robustness checks)
 
 
 
