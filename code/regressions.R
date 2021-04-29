@@ -79,24 +79,40 @@ dataset = "glass"
 start_year = 1983
 end_year = 2015
 crop_j = "Oilpalm"
+j_soy = "Soybean_oil"
 price_k = "Soybean_oil"
 standardized_si = TRUE
 price_lag = 1
+SjPj = TRUE
+SkPk = TRUE
+fe = "grid_id + country_year"
+distribution = "quasipoisson"
+output_full = FALSE
 
 make_base_reg <- function(dataset, 
                           start_year = 2002, 
                           end_year = 2015, 
                           crop_j = "Oilpalm", # in GAEZ spelling
-                          price_k = "Soybean_oil", # in prices spelling 
+                          j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
+                          price_k = "Soybean_oil", # in prices spelling
                           standardized_si = TRUE,
                           price_lag = 1, 
-                          fe = "grid_id + country_year"){
+                          SjPj = TRUE,
+                          SkPk = TRUE,
+                          fe = "grid_id + country_year", 
+                          distribution = "quasipoisson", 
+                          output_full = FALSE){
+
+   
+
   
   
+  ### SPECIFICATIONS  
   
+  ## Outcome variable
   if(dataset=="glass"){
     # d <- glass
-    outcome_variable <- "first_loss"}
+    outcome_variable <- "first_loss"} #   "sbqt_direct_lu"      "sbqt_mode_lu" 
   if(dataset=="fl8320"){
     # d <- fl8320
     outcome_variable <- "firstloss_glassgfc"}
@@ -104,61 +120,64 @@ make_base_reg <- function(dataset,
     # d <- phtfl
     outcome_variable <- "phtf_loss"}
   
-  
-  ### SPECIFICATIONS  
   # We need to create the variables we will need, based on:
   # crop_j, price_k, whether the price is lagged, whether the suitability is standardized, and the controls we want 
   
   ## Identify the price of j based on crop_j (GAEZ spelling)
   if(crop_j == "Pasture"){price_j <- "Beef"} 
   if(crop_j == "Oilpalm"){price_j <- "Palm_oil"} 
-  if(crop_j == "Soybean"){price_j <- "Soybean_oil"} 
+  if(crop_j == "Soybean"){price_j <- j_soy} 
   if(crop_j == "Cocoa"){price_j <- "Cocoa"} 
   if(crop_j == "Coffee"){price_j <- "Coffee"} 
   
   # and lag it
   if(price_lag != 0){price_j <- paste0(price_j,"_lag",price_lag)}
   
-  ## Do the revert from price of k to the crop suitability in GAEZ
+  ## Do the revert for k: from price of k to the GAEZ crop 
   if(grepl(pattern = "Banana", x = price_k, ignore.case = TRUE)){crop_k <- "Banana"} 
   if(grepl(pattern = "Barley", x = price_k, ignore.case = TRUE)){crop_k <- "Barley"} 
-  if(grepl(pattern = "Beef", x = price_k, ignore.case = TRUE)){crop_k <- "Pasture"} 
+  if(grepl(pattern = "Beef", x = price_k, ignore.case = TRUE)){crop_k <- "Pasture"} # currently does not exist
   if(grepl(pattern = "Orange", x = price_k, ignore.case = TRUE)){crop_k <- "Citrus"} 
   if(grepl(pattern = "Cocoa", x = price_k, ignore.case = TRUE)){crop_k <- "Cocoa"} 
   if(grepl(pattern = "Coconut", x = price_k, ignore.case = TRUE)){crop_k <- "Coconut"} 
   if(grepl(pattern = "Coffee", x = price_k, ignore.case = TRUE)){crop_k <- "Coffee"} 
   if(grepl(pattern = "Groundnuts", x = price_k, ignore.case = TRUE)){crop_k <- "Groundnut"} 
   if(grepl(pattern = "Maize", x = price_k, ignore.case = TRUE)){crop_k <- "Maize"} 
-  if(grepl(pattern = "Oat", x = price_k, ignore.case = TRUE)){crop_k <- "Oat"} 
+  if(grepl(pattern = "Oat", x = price_k, ignore.case = TRUE)){crop_k <- "Oat"} # aggregate different crops there ? like rye... 
   if(grepl(pattern = "Olive", x = price_k, ignore.case = TRUE)){crop_k <- "Olive"} 
   if(grepl(pattern = "Palm", x = price_k, ignore.case = TRUE)){crop_k <- "Oilpalm"} 
   if(grepl(pattern = "Rapeseed", x = price_k, ignore.case = TRUE)){crop_k <- "Rapeseed"} 
-  if(grepl(pattern = "Rice", x = price_k, ignore.case = TRUE)){crop_k <- "Rice"} 
+  if(grepl(pattern = "Rice", x = price_k, ignore.case = TRUE)){crop_k <- "Rice"} # currently does not exist
   if(grepl(pattern = "Sorghum", x = price_k, ignore.case = TRUE)){crop_k <- "Sorghum"} 
   if(grepl(pattern = "Soy", x = price_k, ignore.case = TRUE)){crop_k <- "Soybean"} 
   if(grepl(pattern = "Sugar", x = price_k, ignore.case = TRUE)){crop_k <- "sugar_crops"} 
   if(grepl(pattern = "Sunflower", x = price_k, ignore.case = TRUE)){crop_k <- "Sunflower"} 
   if(grepl(pattern = "Tea", x = price_k, ignore.case = TRUE)){crop_k <- "Tea"} 
   if(grepl(pattern = "Tobacco", x = price_k, ignore.case = TRUE)){crop_k <- "Tobacco"} 
-  if(grepl(pattern = "Wheat", x = price_k, ignore.case = TRUE)){crop_k <- "Wheat"} 
+  if(grepl(pattern = "Wheat", x = price_k, ignore.case = TRUE)){crop_k <- "Wheat"} # aggregate different wheat crops there ? 
   
   # Construct the price of k
-  if(price_lag != 0){price_k <- paste0(price_j,"_lag",price_lag)}
+  if(price_lag != 0){price_k <- paste0(price_k,"_lag",price_lag)}
   
   
   # don't condition that, as we won't use non logged prices a priori. 
   price_j <- paste0("ln_", price_j)
   price_k <- paste0("ln_", price_k)
   
-  # Identify the suitability index needed
-  if(standardized_si){
+  # Identify the suitability index needed - don't condition that either for now, as the non stded indexes are not in the main dataset now (for memory issues) we'll see later how to conduct the rob check
+  # if(standardized_si){
     suitability_j <- paste0(crop_j, "_std") 
-    suitability_k <- paste0(price_j, "_std") 
-  }else{
-    suitability_j <- crop_j
-    suitability_k <- price_j
-  }
+    suitability_k <- paste0(crop_k, "_std") 
+  # }else{
+    # suitability_j <- crop_j
+    # suitability_k <- price_j
+  # }
   
+  # Keep only in data the useful variables 
+  d <- dplyr::select(d, all_of(c("grid_id", "year", "country_name", "country_year",
+                               outcome_variable, suitability_j, suitability_k))) 
+    
+    
   # Merge only the prices needed, not the whole price dataframe
   d <- left_join(d, prices[,c("year", price_j, price_k)], by = "year")
   
@@ -169,19 +188,16 @@ make_base_reg <- function(dataset,
               SjPj = !!as.symbol(suitability_j)*!!as.symbol(price_j))
   
   
-  
-  
   ### KEEP OBSERVATIONS THAT: 
   
   # - are in study period 
   d <- dplyr::filter(d, year >= start_year)
   d <- dplyr::filter(d, year <= end_year)
   
-  used_vars <- c(outcome_variable, regressors,
-                 "grid_id",  "year", "lat", "lon", 
-                 "country", "country_year")
+  used_vars <- names(d)
   
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
+  # for instance, there are some NAs in the suitability index (places in water that we kept while processing other variables...) 
   usable <- lapply(used_vars, FUN = function(var){is.finite(d[,var]) | is.character(d[,var])})
   # used_vars[!(used_vars%in%names(d))]
   names(usable) <- used_vars            
@@ -191,6 +207,56 @@ make_base_reg <- function(dataset,
   d_nona <- d[filter_vec, c(used_vars)]
   if(anyNA(d_nona)){stop()}
   rm(filter_vec, usable)
+  
+  # is.na(d$Oilpalm_std) %>% sum()
+  
+  
+  # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
+  d_clean <- d_nona[-obs2remove(fml = as.formula(paste0(outcome_variable, " ~ ", fe)),
+                                d_nona, 
+                                family = "poisson"),]
+  
+  
+  ### REGRESSIONS
+  controls <- c()
+  if(SkPk){controls <- c(controls, "SkPk")}
+  if(SjPj){controls <- c(controls, "SjPj")}
+  
+  
+  # Model specification
+  if(length(controls) > 0){
+    fe_model <- as.formula(paste0(outcome_variable,
+                                  " ~ SjPk",
+                                  " + ",
+                                  paste0(controls, collapse = "+"),
+                                  " | ",
+                                  fe))
+  }else{
+    fe_model <- as.formula(paste0(outcome_variable,
+                                  " ~ SjPk",
+                                  " | ",
+                                  fe))
+  }
+
+  
+  if(distribution != "negbin"){ # i.e. if it's poisson or quasipoisson or gaussian
+    reg_res <- fixest::feglm(fe_model,
+                             data = d_clean, 
+                             family = distribution, 
+                             #glm.iter = 100,
+                             #fixef.iter = 100000,
+                             notes = TRUE)
+  }
+  
+  if(output_full){
+    toreturn <- list(reg_res, d_clean, d)
+  }else{
+    toreturn <- list(reg_res, d_clean)
+  }
+  
+  rm(d, d_nona, d_clean, reg_res)
+  return(toreturn)
+  
 }
 
 
