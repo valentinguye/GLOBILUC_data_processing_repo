@@ -170,7 +170,12 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 
 # the dot is, by construction of all variable names, only in the names of time varying variables. 
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
-varying_vars <- names(glass_gaez)[grep(".", names(glass_gaez), fixed = TRUE)]
+# Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
+# Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
+varying_vars <- list(names(glass_gaez)[grep("first_loss.", names(glass_gaez), fixed = TRUE)],
+                     names(glass_gaez)[grep("sbqt_direct_lu.", names(glass_gaez), fixed = TRUE)],
+                     names(glass_gaez)[grep("sbqt_mode_lu.", names(glass_gaez), fixed = TRUE)])
+                    
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,

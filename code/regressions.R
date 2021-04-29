@@ -67,7 +67,7 @@ getFixest_nthreads()
 
 ### READ ALL POSSIBLE DATASETS HERE 
 # but not all together because of memory issues. 
-d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
 
 # d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_gaez_long_final.Rdata"))
 # 
@@ -88,8 +88,12 @@ SkPk = TRUE
 fe = "grid_id + country_year"
 distribution = "quasipoisson"
 output_full = FALSE
+se = "cluster"
+cluster ="grid_id"
 
-make_base_reg <- function(dataset, 
+rm(dataset, start_year, end_year, crop_j, j_soy, price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output_full, se, cluster)
+
+make_base_reg <- function(dataset, # one of "glass", "fl8320", "phtfl"
                           start_year = 2002, 
                           end_year = 2015, 
                           crop_j = "Oilpalm", # in GAEZ spelling
@@ -101,6 +105,8 @@ make_base_reg <- function(dataset,
                           SkPk = TRUE,
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson", 
+                          se = "cluster", 
+                          cluster ="grid_id",
                           output_full = FALSE){
 
    
@@ -111,13 +117,13 @@ make_base_reg <- function(dataset,
   
   ## Outcome variable
   if(dataset=="glass"){
-    # d <- glass
+    d <- main_data
     outcome_variable <- "first_loss"} #   "sbqt_direct_lu"      "sbqt_mode_lu" 
   if(dataset=="fl8320"){
-    # d <- fl8320
+    d <- main_data
     outcome_variable <- "firstloss_glassgfc"}
   if(dataset=="phtfl"){
-    # d <- phtfl
+    d <- main_data
     outcome_variable <- "phtf_loss"}
   
   # We need to create the variables we will need, based on:
@@ -149,7 +155,7 @@ make_base_reg <- function(dataset,
   if(grepl(pattern = "Rapeseed", x = price_k, ignore.case = TRUE)){crop_k <- "Rapeseed"} 
   if(grepl(pattern = "Rice", x = price_k, ignore.case = TRUE)){crop_k <- "Rice"} # currently does not exist
   if(grepl(pattern = "Sorghum", x = price_k, ignore.case = TRUE)){crop_k <- "Sorghum"} 
-  if(grepl(pattern = "Soy", x = price_k, ignore.case = TRUE)){crop_k <- "Soybean"} 
+  if(grepl(pattern = "Soy", x = price_k, ignore.case = TRUE)){crop_k <- "Soybean"} # note that "Soy" will grab either of the 3 soy based commodities
   if(grepl(pattern = "Sugar", x = price_k, ignore.case = TRUE)){crop_k <- "sugar_crops"} 
   if(grepl(pattern = "Sunflower", x = price_k, ignore.case = TRUE)){crop_k <- "Sunflower"} 
   if(grepl(pattern = "Tea", x = price_k, ignore.case = TRUE)){crop_k <- "Tea"} 
@@ -245,26 +251,63 @@ make_base_reg <- function(dataset,
                              family = distribution, 
                              #glm.iter = 100,
                              #fixef.iter = 100000,
-                             notes = TRUE)
+                             notes = TRUE)  %>%  summary(se = se, cluster = cluster)
+   
   }
   
+
   if(output_full){
     toreturn <- list(reg_res, d_clean, d)
   }else{
-    toreturn <- list(reg_res, d_clean)
+    toreturn <- reg_res
   }
   
   rm(d, d_nona, d_clean, reg_res)
   return(toreturn)
-  
+  rm(toreturn)
 }
 
 
-K_commodities <- c("ln_Soybean_oil", "ln_Olive_oil", "ln_Rapeseed_oil", "ln_Sunflower_oil", "ln_Coconut_oil", "ln_Sugar", "ln_Crude_oil")
+
+### PALM OIL 
+K_commodities <- c("Soybean_oil", "Soybeans", "Soybean_meal", "Olive_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
+oilpalm_res_list <-list()
+elm <- 1
 for(commodity in K_commodities){
+  oilpalm_res_list[[elm]] <- make_base_reg(dataset = "glass", 
+                                            start_year = 1983, end_year = 2015, 
+                                            crop_j = "Oilpalm", 
+                                            price_k = commodity)
   
+  names(oilpalm_res_list)[elm] <- paste0("Oilpalm_",commodity)
+  elm <- elm + 1
 }
 
+setFixest_dict(c(grid_id = "grid cell",
+                 country_name = "country",
+                 country_year = "country*year", 
+                 first_loss = "First forest loss",
+                 Soybean_meal = "Soybean meal",
+                 Soybean_oil = "Soybean oil",
+                 Olive_oil = "Olive oil",
+                 Rapeseed_oil = "Rapeseed oil",
+                 Sunflower_oil = "Sunflower oil",
+                 Coconut_oil = "Coconut oil"))
+
+table_title <- paste0("Indirect effects of commodity k prices on deforestation for oil palm plantations") 
+etable(oilpalm_res_list, 
+       digits = 1, 
+       tex = TRUE, 
+       title = table_title,
+       depvar = TRUE,
+       subtitles = paste0("k = ", K_commodities),
+       #drop = c("SkPk", "SjPj"),
+       #coefstat = "confint",
+       sdBelow = TRUE,
+       yesNo = "X",
+       fitstat = c("sq.cor"),
+       dict = TRUE, 
+       powerBelow = -7) %>% print()
 
 
 
