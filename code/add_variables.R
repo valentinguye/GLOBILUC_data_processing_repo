@@ -167,7 +167,8 @@ for(name in dataset_names){
                                            fibre_crops = max(c(Cotton, Flax)),
                                            stimulant_crops = max(c(Coffee, Tea, Tobacco)),
                                            fodder_crops = max(c(Alfalfa)), # To adjust once we have Grass as a GAEZ crop  
-                                           bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass))
+                                           bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass)), 
+                                          rice_crops = max(c(Dryland_rice, Wetland_rice)) # (this one is not a GAEZ group)
   ) %>% as.data.frame()
   
   # standardize crop groups

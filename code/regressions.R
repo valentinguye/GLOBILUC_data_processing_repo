@@ -16,8 +16,8 @@ neededPackages = c("plyr", "dplyr", "here", #"tibble", "data.table",
                    # "raster", "rgdal",  "sp", "sf", # "spdep",
                    "DataCombine",
                    "knitr", "kableExtra",
-                   "fixest" #,"msm", "car",  "sandwich", "lmtest", "boot", "multcomp",
-                   #"ggplot2", "leaflet", "htmltools"
+                   "fixest", #,"msm", "car",  "sandwich", "lmtest", "boot", "multcomp",
+                   "ggplot2", "dotwhisker"# "leaflet", "htmltools"
                    )
 # "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
 
@@ -63,21 +63,31 @@ getFixest_nthreads()
 
 
 
+setFixest_dict(c(grid_id = "grid cell",
+                 country_name = "country",
+                 country_year = "country*year", 
+                 first_loss = "First forest loss",
+                 Soybean_meal = "Soybean meal",
+                 Soybean_oil = "Soybean oil",
+                 Olive_oil = "Olive oil",
+                 Rapeseed_oil = "Rapeseed oil",
+                 Sunflower_oil = "Sunflower oil",
+                 Coconut_oil = "Coconut oil"))
 
 
 ### READ ALL POSSIBLE DATASETS HERE 
 # but not all together because of memory issues. 
 main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
 
-# d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_gaez_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_gaez_long_final.Rdata"))
 # 
-# d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
 
 prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
 
 dataset = "glass"
 start_year = 1983
-end_year = 2015
+end_year = 2020
 crop_j = "Oilpalm"
 j_soy = "Soybean_oil"
 price_k = "Soybean_oil"
@@ -87,9 +97,10 @@ SjPj = TRUE
 SkPk = TRUE
 fe = "grid_id + country_year"
 distribution = "quasipoisson"
-output_full = FALSE
 se = "cluster"
 cluster ="grid_id"
+coefstat = "confint"
+output = "coef_table"
 
 rm(dataset, start_year, end_year, crop_j, j_soy, price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output_full, se, cluster)
 
@@ -103,11 +114,14 @@ make_base_reg <- function(dataset, # one of "glass", "fl8320", "phtfl"
                           price_lag = 1, 
                           SjPj = TRUE,
                           SkPk = TRUE,
+                          #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson", 
                           se = "cluster", 
                           cluster ="grid_id",
-                          output_full = FALSE){
+                          coefstat = "confint", # one of "se", "tstat", "confint"
+                          output = "coef_table" # one of "data", "est_obj", "coef_table" 
+                          ){
 
    
 
@@ -140,6 +154,10 @@ make_base_reg <- function(dataset, # one of "glass", "fl8320", "phtfl"
   if(price_lag != 0){price_j <- paste0(price_j,"_lag",price_lag)}
   
   ## Do the revert for k: from price of k to the GAEZ crop 
+  
+  # first, save price_k for later purpose 
+  original_price_k <- price_k 
+  
   if(grepl(pattern = "Banana", x = price_k, ignore.case = TRUE)){crop_k <- "Banana"} 
   if(grepl(pattern = "Barley", x = price_k, ignore.case = TRUE)){crop_k <- "Barley"} 
   if(grepl(pattern = "Beef", x = price_k, ignore.case = TRUE)){crop_k <- "Pasture"} # currently does not exist
@@ -251,26 +269,46 @@ make_base_reg <- function(dataset, # one of "glass", "fl8320", "phtfl"
                              family = distribution, 
                              #glm.iter = 100,
                              #fixef.iter = 100000,
-                             notes = TRUE)  %>%  summary(se = se, cluster = cluster)
+                             notes = TRUE)  
+
    
   }
   
-
-  if(output_full){
-    toreturn <- list(reg_res, d_clean, d)
-  }else{
+  # this is necessary to compute SE as we want to.  
+  reg_res <- summary(reg_res, se = se,
+                    cluster = cluster)
+  
+  # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
+  df_res <- reg_res$coeftable
+  
+  # Keep only variable of interest, and rename it
+  df_res <- df_res[row.names(df_res) == "SjPk",]
+  row.names(df_res) <- paste0(crop_j, "_", original_price_k)
+  
+  
+  if(output == "data"){
+    toreturn <- list(reg_res, d_clean)
+  }
+  if(output == "est_obj"){
     toreturn <- reg_res
   }
+  if(output == "coef_table"){
+    toreturn <- df_res
+  }
+
   
-  rm(d, d_nona, d_clean, reg_res)
+  rm(d, d_nona, d_clean, reg_res, df_res)
   return(toreturn)
   rm(toreturn)
 }
 
 
+#### First loss (1983-2015) ####
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
 
 ### PALM OIL 
 K_commodities <- c("Soybean_oil", "Soybeans", "Soybean_meal", "Olive_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
+
 oilpalm_res_list <-list()
 elm <- 1
 for(commodity in K_commodities){
@@ -283,18 +321,40 @@ for(commodity in K_commodities){
   elm <- elm + 1
 }
 
-setFixest_dict(c(grid_id = "grid cell",
-                 country_name = "country",
-                 country_year = "country*year", 
-                 first_loss = "First forest loss",
-                 Soybean_meal = "Soybean meal",
-                 Soybean_oil = "Soybean oil",
-                 Olive_oil = "Olive oil",
-                 Rapeseed_oil = "Rapeseed oil",
-                 Sunflower_oil = "Sunflower oil",
-                 Coconut_oil = "Coconut oil"))
 
-table_title <- paste0("Indirect effects of commodity k prices on deforestation for oil palm plantations") 
+### SOY 
+K_commodities <- c("Palm_oil", "Olive_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
+
+soy_res_list <-list()
+elm <- 1
+for(commodity in K_commodities){
+  soy_res_list[[elm]] <- make_base_reg(dataset = "glass", 
+                                           start_year = 1983, end_year = 2015, 
+                                           crop_j = "Soybean", 
+                                           price_k = commodity)
+  
+  names(soy_res_list)[elm] <- paste0("Soybean_",commodity)
+  elm <- elm + 1
+}
+
+
+### PLOT COEFFICIENTS ### 
+# prepare regression outputs in a tidy data frame readable by dwplot
+df <- bind_rows(c(oilpalm_res_list, soy_res_list))
+df$model <- gsub(pattern = "_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+
+dwplot(df)
+
+
+
+# Save point estimates, and CI95% 
+
+
+table_title <- paste0("Indirect effects of commodity k prices on tropical deforestation for oil palm plantations, 1983-2015") 
 etable(oilpalm_res_list, 
        digits = 1, 
        tex = TRUE, 
@@ -307,7 +367,21 @@ etable(oilpalm_res_list,
        yesNo = "X",
        fitstat = c("sq.cor"),
        dict = TRUE, 
-       powerBelow = -7) %>% print()
+       powerBelow = -7)
 
 
 
+## Primary forest loss (2002-2020)
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
+
+oilpalm_res_list <-list()
+elm <- 1
+for(commodity in K_commodities){
+  oilpalm_res_list[[elm]] <- make_base_reg(dataset = "phtfl", 
+                                           start_year = 2002, end_year = 2020, 
+                                           crop_j = "Oilpalm", 
+                                           price_k = commodity)
+  
+  names(oilpalm_res_list)[elm] <- paste0("Oilpalm_",commodity)
+  elm <- elm + 1
+}
