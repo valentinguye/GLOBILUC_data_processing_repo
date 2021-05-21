@@ -52,6 +52,11 @@ names(ps)[1] <- "year"
 
 ps <- as.data.frame(ps)
 
+
+# Convert $/kg in $/mt (the warnigns are for columns that have some NAs)
+ps[-1,] <- ps[-1,] %>% mutate(across(.cols = colnames(ps[,ps[1,]=="($/kg)" & !is.na(ps[1,])]),
+                           .fns = function(c){as.numeric(c)*1000}))
+                                               
 # drop first row (price unit) for manipulation convenience. 
 ps <- ps[-1,]
 
@@ -136,6 +141,12 @@ imf <- as.data.frame(imf)
 # Rename
 names(imf) <- c("year", "Oat", "Olive_oil", "Rapeseed_oil", "Sunflower_oil", "Pork")
 
+# Convert in $/mt 
+# Oat is in USD/bushel (ratio from https://www.sagis.org.za/conversion_table.html)
+imf[,"Oat"] <- as.numeric(imf[,"Oat"]) / 0.014515 
+# Pork is in USD cents / pound (ratio from https://www.rapidtables.com/convert/weight/pound-to-kg.html?x=1&x2=&x3=)
+imf[,"Pork"] <- as.numeric(imf[,"Pork"])*0.01/0.000453592 
+
 # Convert in 2010 real value (instead of 2016), using MUV index from Pink Sheet
 muv_index_2016 <- ps[ps$year == 2016, "MUV Index"] %>% as.numeric()/100
 
@@ -169,6 +180,11 @@ head(prices)
 
 #### PREPARE ADDITIONAL PRICE VARIABLES #### 
 
+### Group prices
+prices <- prices %>% rowwise() %>% mutate(cereal_crops = mean(c(Barley, Maize, Sorghum, Wheat, Oat), na.rm = T), # excluding rice as not comparable enough
+                                        oil_crops = mean(c(Palm_oil, Rapeseed_oil, Soybean_oil, Sunflower_oil), na.rm = T), # using only "unflavored" oils
+) %>% as.data.frame() # other commodities are not comparable enough to be grouped.
+
 ### Make logarithms
 logs <- mutate(prices[,names(prices)[names(prices) != "year"]], 
                across(.fns = log))
@@ -201,7 +217,7 @@ saveRDS(prices, here("temp_data", "prepared_prices.Rdata"))
 
 
 
-rm(annual_imf, imf, logs, prices, ps, ps2, muv_index_2016, ps_commo, needed_imf_col, years_oi)
+rm(annual_imf, imf, logs, prices, ps, ps2, muv_index_2016, ps_commo, needed_imf_col, years_oi, lag, variables, voi)
 
 
 
