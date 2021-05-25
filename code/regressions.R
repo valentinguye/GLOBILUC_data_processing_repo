@@ -135,7 +135,7 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
                           SkPk = TRUE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
-                          distribution = "quasipoisson", 
+                          distribution = "gaussian",#  "quasipoisson", 
                           se = "cluster", 
                           cluster ="grid_id",
                           coefstat = "confint", # one of "se", "tstat", "confint"
@@ -369,26 +369,16 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
 
 
 #### First loss (1983-2015) ####
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
 
-res_list <- list()
-elm <- 1
-for(ds in c("glass", "phtfl")){
-  if(ds == "glass"){
-    main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
-  }
-  if(ds == "phtfl"){
-    main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
-  }
-# ### PALM OIL 
-# K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", 
-#                    "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
-# 
-# oilpalm_res <- make_base_reg(dataset = ds, 
-#                               start_year = 1983, end_year = 2015, 
-#                               crop_j = "Oilpalm", 
-#                               price_k = K_palmoil, 
-#                               extra_price_k = "Crude_oil")
+### PALM OIL
+K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
+                   "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+
+oilpalm_res <- make_base_reg(#start_year = 1983, end_year = 2015,
+                              crop_j = "Oilpalm",
+                              price_k = K_palmoil,
+                              extra_price_k = "Crude_oil")
 
 
 ### SOY 
@@ -396,8 +386,7 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
             "Sugar", "Maize") # in prices spelling "Olive_oil",
 
 
-soy_res <- make_base_reg(dataset = ds, 
-                         start_year = 1983, end_year = 2015, 
+soy_res <- make_base_reg(#start_year = 1983, end_year = 2015, 
                          crop_j = "Soybean", 
                          price_k = K_soy, 
                          extra_price_k = "Crude_oil")
@@ -407,8 +396,7 @@ soy_res <- make_base_reg(dataset = ds,
 K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
 
 
-cocoa_res <- make_base_reg(dataset = ds, 
-                           start_year = 1983, end_year = 2015, 
+cocoa_res <- make_base_reg(#start_year = 1983, end_year = 2015, 
                            crop_j = "Cocoa", 
                            price_k = K_cocoa)
 
@@ -417,33 +405,26 @@ cocoa_res <- make_base_reg(dataset = ds,
 K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 
 
-coffee_res <- make_base_reg(dataset = ds, 
-                             start_year = 1983, end_year = 2015, 
+coffee_res <- make_base_reg( #start_year = 1983, end_year = 2015, 
                              crop_j = "Coffee", 
                              price_k = K_coffee)
 
-df <- rbind(soy_res, cocoa_res, coffee_res)#oilpalm_res, 
-row.names(df) <- paste0(row.names(df), "-", ds)
-
-res_list[[elm]] <- df
-elm <- elm + 1
-}
 
 ### PLOT COEFFICIENTS ### 
 # prepare regression outputs in a tidy data frame readable by dwplot
-# df <- bind_rows(c(oilpalm_res_list, soy_res_list, cocoa_res_list, coffee_res_list))
-df <- bind_rows(res_list)
+df <- rbind(oilpalm_res, soy_res, cocoa_res, coffee_res)#
 df$model <- gsub(pattern = "_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
 df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
-df$data <- sub(pattern = ".+?(-)", x = row.names(df), replacement = "") # replace everyting before the first tiret with nothing
 
 names(df)[names(df)=="Estimate"] <- "estimate"
 names(df)[names(df)=="Std. Error"] <- "std.error"
 
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
 # brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
 #                  c("Biofuel feedstock", "Sugar", "Maize"))
 {dwplot(df,
-  dot_args = list(size = 2, aes(shape = data)),
+  dot_args = list(size = 2),
   whisker_args = list(size = 1),
 vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
   relabel_predictors(c(Sugar = "Sugar", 
@@ -464,36 +445,32 @@ vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot 
                        )) +
   theme_bw() + xlab("Coefficient Estimate") + ylab("") +
   geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
-  ggtitle("Indirect effects of commodity prices on the main agricultural drivers of tropical primary deforestation") +
+  ggtitle("Indirect effects of commodity prices on the main agricultural drivers of deforestation") +
   theme(plot.title = element_text(face="bold", size=c(10)),
         legend.position = c(0.007, 0.001),
         legend.justification = c(0, 0), 
         legend.background = element_rect(colour="grey80"),
         legend.title = element_blank())}   #element_text("Direct drivers of tropical deforestation")
 
-# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
-# %>%  add_brackets(brackets)
+
+# table_title <- paste0("Indirect effects of commodity k prices on tropical deforestation for oil palm plantations, 1983-2015") 
+# etable(oilpalm_res_list, 
+#        digits = 1, 
+#        tex = TRUE, 
+#        title = table_title,
+#        depvar = TRUE,
+#        subtitles = paste0("k = ", K_commodities),
+#        #drop = c("SkPk", "SjPj"),
+#        #coefstat = "confint",
+#        sdBelow = TRUE,
+#        yesNo = "X",
+#        fitstat = c("sq.cor"),
+#        dict = TRUE, 
+#        powerBelow = -7)
 
 
 
-table_title <- paste0("Indirect effects of commodity k prices on tropical deforestation for oil palm plantations, 1983-2015") 
-etable(oilpalm_res_list, 
-       digits = 1, 
-       tex = TRUE, 
-       title = table_title,
-       depvar = TRUE,
-       subtitles = paste0("k = ", K_commodities),
-       #drop = c("SkPk", "SjPj"),
-       #coefstat = "confint",
-       sdBelow = TRUE,
-       yesNo = "X",
-       fitstat = c("sq.cor"),
-       dict = TRUE, 
-       powerBelow = -7)
-
-
-
-## Primary forest loss (2002-2020)
+#### Primary forest loss (2002-2020) ####
 main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
 
 oilpalm_res_list <-list()
@@ -510,229 +487,6 @@ for(commodity in K_commodities){
 
 
 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-#### OLD FUNCTION TO MAKE SIMPLE REGRESSIONS ON INTERACTIONS of S and P #### 
-# old_make_base_reg <- function(dataset = "phtfl", # one of "glass", "fl8320", "phtfl"
-#                           start_year = 2002, 
-#                           end_year = 2015, 
-#                           crop_j = "Oilpalm", # in GAEZ spelling
-#                           j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
-#                           price_k = "Soybean_oil", # in prices spelling
-#                           standardized_si = TRUE,
-#                           price_lag = 1, 
-#                           SjPj = TRUE,
-#                           SkPk = TRUE,
-#                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
-#                           fe = "grid_id + country_year", 
-#                           distribution = "quasipoisson", 
-#                           se = "cluster", 
-#                           cluster ="grid_id",
-#                           coefstat = "confint", # one of "se", "tstat", "confint"
-#                           output = "coef_table" # one of "data", "est_obj", "coef_table" 
-# ){
-#   
-#   
-#   
-#   
-#   
-#   ### SPECIFICATIONS  
-#   
-#   ## Outcome variable
-#   if(dataset=="glass"){
-#     d <- main_data
-#     outcome_variable <- "first_loss"} #   "sbqt_direct_lu"      "sbqt_mode_lu" 
-#   if(dataset=="fl8320"){
-#     d <- main_data
-#     outcome_variable <- "firstloss_glassgfc"}
-#   if(dataset=="phtfl"){
-#     d <- main_data
-#     outcome_variable <- "phtf_loss"}
-#   
-#   # We need to create the variables we will need, based on:
-#   # crop_j, price_k, whether the price is lagged, whether the suitability is standardized, and the controls we want 
-#   
-#   ## Identify the price of j based on crop_j (GAEZ spelling)
-#   if(crop_j == "Pasture"){price_j <- "Beef"} 
-#   if(crop_j == "Oilpalm"){price_j <- "Palm_oil"} 
-#   if(crop_j == "Soybean"){price_j <- j_soy} 
-#   if(crop_j == "Cocoa"){price_j <- "Cocoa"} 
-#   if(crop_j == "Coffee"){price_j <- "Coffee"} 
-#   
-#   # and lag it
-#   if(price_lag != 0){price_j <- paste0(price_j,"_lag",price_lag)}
-#   
-#   ## Do the revert for k: from price of k to the GAEZ crop 
-#   
-#   # first, save price_k for later purpose 
-#   original_price_k <- price_k 
-#   
-#   if(grepl(pattern = "Banana", x = price_k, ignore.case = TRUE)){crop_k <- "Banana"} 
-#   if(grepl(pattern = "Barley", x = price_k, ignore.case = TRUE)){crop_k <- "Barley"} 
-#   if(grepl(pattern = "Beef", x = price_k, ignore.case = TRUE)){crop_k <- "Pasture"} # currently does not exist
-#   if(grepl(pattern = "Orange", x = price_k, ignore.case = TRUE)){crop_k <- "Citrus"} 
-#   if(grepl(pattern = "Cocoa", x = price_k, ignore.case = TRUE)){crop_k <- "Cocoa"} 
-#   if(grepl(pattern = "Coconut", x = price_k, ignore.case = TRUE)){crop_k <- "Coconut"} 
-#   if(grepl(pattern = "Coffee", x = price_k, ignore.case = TRUE)){crop_k <- "Coffee"} 
-#   if(grepl(pattern = "Groundnuts", x = price_k, ignore.case = TRUE)){crop_k <- "Groundnut"} 
-#   if(grepl(pattern = "Maize", x = price_k, ignore.case = TRUE)){crop_k <- "Maize"} 
-#   if(grepl(pattern = "Oat", x = price_k, ignore.case = TRUE)){crop_k <- "Oat"} # aggregate different crops there ? like rye... 
-#   if(grepl(pattern = "Olive", x = price_k, ignore.case = TRUE)){crop_k <- "Olive"} 
-#   if(grepl(pattern = "Palm", x = price_k, ignore.case = TRUE)){crop_k <- "Oilpalm"} 
-#   if(grepl(pattern = "Rapeseed", x = price_k, ignore.case = TRUE)){crop_k <- "Rapeseed"} 
-#   if(grepl(pattern = "Rice", x = price_k, ignore.case = TRUE)){crop_k <- "Rice"} # currently does not exist
-#   if(grepl(pattern = "Sorghum", x = price_k, ignore.case = TRUE)){crop_k <- "Sorghum"} 
-#   if(grepl(pattern = "Soy", x = price_k, ignore.case = TRUE)){crop_k <- "Soybean"} # note that "Soy" will grab either of the 3 soy based commodities
-#   if(grepl(pattern = "Sugar", x = price_k, ignore.case = TRUE)){crop_k <- "sugar_crops"} 
-#   if(grepl(pattern = "Sunflower", x = price_k, ignore.case = TRUE)){crop_k <- "Sunflower"} 
-#   if(grepl(pattern = "Tea", x = price_k, ignore.case = TRUE)){crop_k <- "Tea"} 
-#   if(grepl(pattern = "Tobacco", x = price_k, ignore.case = TRUE)){crop_k <- "Tobacco"} 
-#   if(grepl(pattern = "Wheat", x = price_k, ignore.case = TRUE)){crop_k <- "Wheat"} # aggregate different wheat crops there ? 
-#   
-#   if(grepl(pattern = "Crude", x = price_k, ignore.case = TRUE)){crop_k <- NULL}
-#   
-#   
-#   if(length(crop_k) == 0){SkPk <- FALSE}
-#   
-#   # Construct the price of k
-#   if(price_lag != 0){price_k <- paste0(price_k,"_lag",price_lag)}
-#   
-#   
-#   # don't condition that, as we won't use non logged prices a priori. 
-#   price_j <- paste0("ln_", price_j)
-#   price_k <- paste0("ln_", price_k)
-#   
-#   # Identify the suitability index needed - don't condition that either for now, as the non stded indexes are not in the main dataset now (for memory issues) we'll see later how to conduct the rob check
-#   # if(standardized_si){
-#   suitability_j <- paste0(crop_j, "_std") 
-#   # there is no suitability variable for some commodities k 
-#   if(SkPk){
-#     suitability_k <- paste0(crop_k, "_std") 
-#   }else{suitability_k <- NULL}
-#   
-#   suitability <- c(suitability_j, suitability_k)
-#   
-#   # }else{
-#   # suitability_j <- crop_j
-#   # suitability_k <- price_j
-#   # }
-#   
-#   # Keep only in data the useful variables 
-#   d <- dplyr::select(d, all_of(c("grid_id", "year", "country_name", "country_year",
-#                                  outcome_variable, suitability))) 
-#   
-#   
-#   # Merge only the prices needed, not the whole price dataframe
-#   d <- left_join(d, prices[,c("year", price_j, price_k)], by = "year")
-#   
-#   # Create the variables
-#   if(SjPj & SkPk){
-#     d <- mutate(d, 
-#                 SjPk = !!as.symbol(suitability_j)*!!as.symbol(price_k), 
-#                 SkPk = !!as.symbol(suitability_k)*!!as.symbol(price_k), 
-#                 SjPj = !!as.symbol(suitability_j)*!!as.symbol(price_j))
-#   }
-#   if(SjPj & !SkPk){
-#     d <- mutate(d, 
-#                 SjPk = !!as.symbol(suitability_j)*!!as.symbol(price_k), 
-#                 SjPj = !!as.symbol(suitability_j)*!!as.symbol(price_j))
-#   }
-#   if(!SjPj & SkPk){
-#     d <- mutate(d, 
-#                 SjPk = !!as.symbol(suitability_j)*!!as.symbol(price_k), 
-#                 SkPk = !!as.symbol(suitability_k)*!!as.symbol(price_k))
-#   }
-#   if(!SjPj & !SkPk){
-#     d <- mutate(d, 
-#                 SjPk = !!as.symbol(suitability_j)*!!as.symbol(price_k))
-#   }
-#   
-#   controls <- c()
-#   if(SkPk){controls <- c(controls, "SkPk")}
-#   if(SjPj){controls <- c(controls, "SjPj")} 
-#   
-#   # MODEL SPECIFICATION FORMULAE
-#   if(length(controls) > 0){
-#     fe_model <- as.formula(paste0(outcome_variable,
-#                                   " ~ SjPk",
-#                                   " + ",
-#                                   paste0(controls, collapse = "+"),
-#                                   " | ",
-#                                   fe))
-#   }else{
-#     fe_model <- as.formula(paste0(outcome_variable,
-#                                   " ~ SjPk",
-#                                   " | ",
-#                                   fe))
-#   }
-#   
-#   
-#   ### KEEP OBSERVATIONS THAT: 
-#   
-#   # - are in study period 
-#   d <- dplyr::filter(d, year >= start_year)
-#   d <- dplyr::filter(d, year <= end_year)
-#   
-#   used_vars <- names(d)
-#   
-#   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
-#   # for instance, there are some NAs in the suitability index (places in water that we kept while processing other variables...) 
-#   usable <- lapply(used_vars, FUN = function(var){is.finite(d[,var]) | is.character(d[,var])})
-#   # used_vars[!(used_vars%in%names(d))]
-#   names(usable) <- used_vars            
-#   usable <- bind_cols(usable)
-#   filter_vec <- base::rowSums(usable)
-#   filter_vec <- filter_vec == length(used_vars)
-#   d_nona <- d[filter_vec, c(used_vars)]
-#   if(anyNA(d_nona)){stop()}
-#   rm(filter_vec, usable)
-#   
-#   # is.na(d$Oilpalm_std) %>% sum()
-#   
-#   
-#   # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
-#   d_clean <- d_nona[-obs2remove(fml = as.formula(paste0(outcome_variable, " ~ ", fe)),
-#                                 d_nona, 
-#                                 family = "poisson"),]
-#   
-#   
-#   ### REGRESSIONS
-#   
-#   if(distribution != "negbin"){ # i.e. if it's poisson or quasipoisson or gaussian
-#     reg_res <- fixest::feglm(fe_model,
-#                              data = d_clean, 
-#                              family = distribution, 
-#                              #glm.iter = 100,
-#                              #fixef.iter = 100000,
-#                              notes = TRUE)  
-#     
-#     
-#   }
-#   
-#   # this is necessary to compute SE as we want to.  
-#   reg_res <- summary(reg_res, se = se,
-#                      cluster = cluster)
-#   
-#   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
-#   df_res <- reg_res$coeftable
-#   
-#   # Keep only variable of interest, and rename it
-#   df_res <- df_res[row.names(df_res) == "SjPk",]
-#   row.names(df_res) <- paste0(crop_j, "_", original_price_k)
-#   
-#   
-#   if(output == "data"){
-#     toreturn <- list(reg_res, d_clean)
-#   }
-#   if(output == "est_obj"){
-#     toreturn <- reg_res
-#   }
-#   if(output == "coef_table"){
-#     toreturn <- df_res
-#   }
-#   
-#   
-#   rm(d, d_nona, d_clean, reg_res, df_res)
-#   return(toreturn)
-#   rm(toreturn)
-# }
+
+
 

@@ -286,7 +286,7 @@ rm(years, long_df, varying_vars, firstloss_gaez, gaez_m, mask, firstloss8320)
 #### 3. MERGE PHTF LOSS AND GAEZ #### 
 
 ## Read in PHTF LOSS 
-phtfloss <- brick(here("temp_data", "processed_phtfloss", "tropical_aoi", "resampled_phtf_loss.tif")) 
+phtfloss <- brick(here("temp_data", "processed_phtfloss", "tropical_aoi", "masked_phtfloss.tif")) 
 # Rename layers 
 names(phtfloss) <- paste0("phtf_loss.",seq(2002, 2020, 1))
 

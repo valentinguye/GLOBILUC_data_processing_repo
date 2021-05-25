@@ -121,10 +121,12 @@ resample(x = aggregated,
 ## Create the mask layer
 # Create a layer that has values either : NA if phtfloss always 0 across all years, 1 otherwise
 phtfloss <- brick(here("temp_data", "processed_phtfloss", "tropical_aoi", "resampled_phtf_loss.tif"))
-# not using if_else here to allow NA as an output... 
-always_zero <- function(y){
-  if(sum(y) == 0){d <- NA}else{d <- 1}
-  return(d)}
+# # not using if_else here to allow NA as an output...
+# always_zero <- function(y){
+#   if(sum(y) == 0){d <- NA}else{d <- 1}
+#   return(d)}
+# don't know why but it will work only with the function like this, converting to 0 and not to NA 
+# (which we handle in the masking function next)
 always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
 mask_path <- here("temp_data", "processed_phtfloss", "tropical_aoi", "always_zero_mask_phtfloss.tif")
 
@@ -139,7 +141,7 @@ plot(mask)
 
 mask(phtfloss, 
      mask = mask, 
-     maskvalue = 0, 
+     maskvalue = 0, # necessary here, because the always_zero function used converted to 0 and not to NA
      updatevalue = NA, 
      filename = here("temp_data", "processed_phtfloss", "tropical_aoi", "masked_phtfloss.tif"), 
      overwrite = TRUE)

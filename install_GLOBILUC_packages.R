@@ -46,6 +46,9 @@ renv::status()
 # This installs, if necessary, in renv/library, the project-specific packages as recorded in renv.lockpackages = neededPackages
 renv::restore()
 
+# Load them
+lapply(neededPackages, library, character.only = TRUE)
+
 #### /!\ IF renv::restore() FAILS TO INSTALL SOME PACKAGES FROM neededPackages /!\ #### 
 
 # For instance sf could cause trouble https://github.com/r-spatial/sf/issues/921 
