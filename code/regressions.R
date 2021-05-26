@@ -91,6 +91,7 @@ rm(dataset, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, standar
 dataset = "glass"
 start_year = 1983
 end_year = 2020
+further_lu_evidence = "none"
 crop_j = "Oilpalm"
 j_soy = "Soybean_oil"
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter. 
@@ -106,7 +107,7 @@ extra_price_k = c("Crude_oil") # ,
 standardized_si = TRUE
 price_lag = 1
 SjPj = TRUE
-SkPk = TRUE
+SkPk = FALSE
 fe = "grid_id + country_year"
 distribution = "quasipoisson"
 se = "cluster"
@@ -119,12 +120,12 @@ output = "coef_table"
 # "Maize", "Palm_oil", "Rubber", "Sorghum", "Soybean_oil", 
 # "Sugar", "Tea", "Tobacco", "Wheat", "Oat", "Olive_oil", "Rapeseed_oil", 
 # "Sunflower_oil"
-# rm(dataset, start_year, end_year, crop_j, j_soy, price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster, 
-#    controls, regressors, outcome_variable)
+# rm(dataset, start_year, end_year, crop_j, j_soy, price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
 
 make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
                           start_year = 2002, 
                           end_year = 2015, 
+                          further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
                           crop_j = "Oilpalm", # in GAEZ spelling
                           j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
                           price_k = c("Sugar", "Maize"), # in prices spelling
@@ -132,7 +133,7 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
                           standardized_si = TRUE,
                           price_lag = 1, 
                           SjPj = TRUE,
-                          SkPk = TRUE,
+                          SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "gaussian",#  "quasipoisson", 
@@ -156,6 +157,21 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
     outcome_variable <- "firstloss_glassgfc"}
   if(dataset=="phtfl"){
     outcome_variable <- "phtf_loss"}
+  
+  # restrict the outcome variable to evidence of further LU
+  if(dataset == "glass" & further_lu_evidence != "none"){
+    if(crop_j == "Pasture"){
+      d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 30)) # either direct or mode subsequent lu are grassland
+    }
+    if(crop_j == "Soybean"){
+      d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 10)) # either direct or mode subsequent lu are cropland
+    }
+    if(crop_j %in% c("Oilpalm", "Cocoa", "Coffee")){
+      d <- dplyr::mutate(d, lu_evidence = (sbqt_direct_lu != 20 & sbqt_mode_lu == 20)) # is not forest in the year directly after, but is forest again in the mode subsequent lu. 
+    }
+  }
+  
+  
   
   # We need to create the variables we will need, based on:
   # crop_j, price_k, whether the price is lagged, whether the suitability is standardized, and the controls we want 
@@ -265,8 +281,8 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
   }
   
   # Controls
+  controls <- c()
   if(SkPk){
-    controls <- c()
     for(i in 1:length(suitability_k)){
       varname <- paste0("ctrl_", original_price_k[i])
       controls <- c(controls, varname)
@@ -302,6 +318,7 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
   # - are in study period 
   d <- dplyr::filter(d, year >= start_year)
   d <- dplyr::filter(d, year <= end_year)
+  
   
   used_vars <- c("grid_id", "year", "country_name", "country_year", 
                  outcome_variable, regressors, controls)
@@ -368,14 +385,21 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
 }
 
 
-#### First loss (1983-2015) ####
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
+#### RUN AND PLOT ####
+DS <- "glass"
+SY <- 1983
+EY <- 2020
+if(DS == "glass"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))}
+if(DS == "fl8320"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_gaez_long_final.Rdata"))}
+if(DS == "phtfl"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))}
+
 
 ### PALM OIL
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
-                   "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
 
-oilpalm_res <- make_base_reg(#start_year = 1983, end_year = 2015,
+oilpalm_res <- make_base_reg(dataset = DS,
+                              start_year = SY, end_year = EY,
                               crop_j = "Oilpalm",
                               price_k = K_palmoil,
                               extra_price_k = "Crude_oil")
@@ -383,13 +407,108 @@ oilpalm_res <- make_base_reg(#start_year = 1983, end_year = 2015,
 
 ### SOY 
 K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", 
-            "Sugar", "Maize") # in prices spelling "Olive_oil",
+           "Sugar", "Maize") # in prices spelling "Olive_oil",
+
+
+soy_res <- make_base_reg(dataset = DS,
+                        start_year = SY, end_year = EY, 
+                        crop_j = "Soybean", 
+                        price_k = K_soy, 
+                        extra_price_k = "Crude_oil")
+
+
+### COCOA 
+K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
+
+
+cocoa_res <- make_base_reg(dataset = DS,
+                          start_year = SY, end_year = EY, 
+                          crop_j = "Cocoa", 
+                          price_k = K_cocoa)
+
+
+### COFFEE 
+K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
+
+
+coffee_res <- make_base_reg(dataset = DS,
+                            start_year = SY, end_year = EY, 
+                            crop_j = "Coffee", 
+                            price_k = K_coffee)
+
+
+### PLOT COEFFICIENTS ### 
+# prepare regression outputs in a tidy data frame readable by dwplot
+rm(df)
+df <- rbind(oilpalm_res, soy_res, cocoa_res, coffee_res)#
+df$model <- gsub(pattern = "_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+
+if(DS == "phtfl"){
+  title <- paste0("Indirect effects of commodity prices on the main agricultural drivers of global primary deforestation from ",SY," to ",EY)
+}else{
+  title <- paste0("Indirect effects of commodity prices on the main agricultural drivers of global deforestation from ",SY," to ",EY)
+}
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 1),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Crude_oil = "Crude oil",
+                         Palm_oil = "Palm oil",
+                         Soybean_oil = "Soybean oil",                       
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybeans = "Soybeans", 
+                         Soybean_meal = "Soybean meal", 
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
+
+
+#### First loss (1983-2015) ####
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
+
+### PALM OIL
+K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+
+oilpalm_res <- make_base_reg(#start_year = 1983, end_year = 2015,
+  crop_j = "Oilpalm",
+  price_k = K_palmoil,
+  extra_price_k = "Crude_oil")
+
+
+### SOY 
+K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", 
+           "Sugar", "Maize") # in prices spelling "Olive_oil",
 
 
 soy_res <- make_base_reg(#start_year = 1983, end_year = 2015, 
-                         crop_j = "Soybean", 
-                         price_k = K_soy, 
-                         extra_price_k = "Crude_oil")
+  crop_j = "Soybean", 
+  price_k = K_soy, 
+  extra_price_k = "Crude_oil")
 
 
 ### COCOA 
@@ -397,8 +516,8 @@ K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil
 
 
 cocoa_res <- make_base_reg(#start_year = 1983, end_year = 2015, 
-                           crop_j = "Cocoa", 
-                           price_k = K_cocoa)
+  crop_j = "Cocoa", 
+  price_k = K_cocoa)
 
 
 ### COFFEE 
@@ -406,8 +525,8 @@ K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 
 
 coffee_res <- make_base_reg( #start_year = 1983, end_year = 2015, 
-                             crop_j = "Coffee", 
-                             price_k = K_coffee)
+  crop_j = "Coffee", 
+  price_k = K_coffee)
 
 
 ### PLOT COEFFICIENTS ### 
@@ -424,33 +543,33 @@ names(df)[names(df)=="Std. Error"] <- "std.error"
 # brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
 #                  c("Biofuel feedstock", "Sugar", "Maize"))
 {dwplot(df,
-  dot_args = list(size = 2),
-  whisker_args = list(size = 1),
-vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
-  relabel_predictors(c(Sugar = "Sugar", 
-                       Maize = "Maize",
-                       Crude_oil = "Crude oil",
-                       Palm_oil = "Palm oil",
-                       Soybean_oil = "Soybean oil",                       
-                       Olive_oil = "Olive oil", 
-                       Rapeseed_oil = "Rapeseed oil", 
-                       Sunflower_oil = "Sunflower oil", 
-                       Coconut_oil = "Coconut oil", 
-                       Soybeans = "Soybeans", 
-                       Soybean_meal = "Soybean meal", 
-                       Cocoa = "Cocoa", 
-                       Coffee = "Coffee", 
-                       Tea = "Tea", 
-                       Tobacco = "Tobacco"
-                       )) +
-  theme_bw() + xlab("Coefficient Estimate") + ylab("") +
-  geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
-  ggtitle("Indirect effects of commodity prices on the main agricultural drivers of deforestation") +
-  theme(plot.title = element_text(face="bold", size=c(10)),
-        legend.position = c(0.007, 0.001),
-        legend.justification = c(0, 0), 
-        legend.background = element_rect(colour="grey80"),
-        legend.title = element_blank())}   #element_text("Direct drivers of tropical deforestation")
+        dot_args = list(size = 2),
+        whisker_args = list(size = 1),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Crude_oil = "Crude oil",
+                         Palm_oil = "Palm oil",
+                         Soybean_oil = "Soybean oil",                       
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybeans = "Soybeans", 
+                         Soybean_meal = "Soybean meal", 
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle("Indirect effects of commodity prices on the main agricultural drivers of deforestation") +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}   #element_text("Direct drivers of tropical deforestation")
 
 
 # table_title <- paste0("Indirect effects of commodity k prices on tropical deforestation for oil palm plantations, 1983-2015") 
@@ -470,23 +589,94 @@ vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot 
 
 
 
+
 #### Primary forest loss (2002-2020) ####
 main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
 
-oilpalm_res_list <-list()
-elm <- 1
-for(commodity in K_commodities){
-  oilpalm_res_list[[elm]] <- make_base_reg(dataset = "phtfl", 
-                                           start_year = 2002, end_year = 2020, 
-                                           crop_j = "Oilpalm", 
-                                           price_k = commodity)
-  
-  names(oilpalm_res_list)[elm] <- paste0("Oilpalm_",commodity)
-  elm <- elm + 1
-}
+### PALM OIL
+K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+
+oilpalm_res <- make_base_reg(dataset = "phtfl",
+                             start_year = 2002, end_year = 2020,
+                             crop_j = "Oilpalm",
+                             price_k = K_palmoil,
+                             extra_price_k = "Crude_oil")
 
 
+### SOY 
+K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", 
+           "Sugar", "Maize") # in prices spelling "Olive_oil",
 
+
+soy_res <- make_base_reg(dataset = "phtfl",
+                         start_year = 2002, end_year = 2020, 
+                         crop_j = "Soybean", 
+                         price_k = K_soy, 
+                         extra_price_k = "Crude_oil")
+
+
+### COCOA 
+K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
+
+
+cocoa_res <- make_base_reg(dataset = "phtfl",
+                           start_year = 2002, end_year = 2020, 
+                           crop_j = "Cocoa", 
+                           price_k = K_cocoa)
+
+
+### COFFEE 
+K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
+
+
+coffee_res <- make_base_reg(dataset = "phtfl",
+                            start_year = 2002, end_year = 2020, 
+                            crop_j = "Coffee", 
+                            price_k = K_coffee)
+
+
+### PLOT COEFFICIENTS ### 
+# prepare regression outputs in a tidy data frame readable by dwplot
+df <- rbind(oilpalm_res, soy_res, cocoa_res, coffee_res)#
+df$model <- gsub(pattern = "_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 1),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Crude_oil = "Crude oil",
+                         Palm_oil = "Palm oil",
+                         Soybean_oil = "Soybean oil",                       
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybeans = "Soybeans", 
+                         Soybean_meal = "Soybean meal", 
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle("Indirect effects of commodity prices on the main agricultural drivers of deforestation") +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
 
 
 
