@@ -40,8 +40,8 @@ lapply(neededPackages, library, character.only = TRUE)
 #   see in particular https://rstudio.github.io/renv/articles/renv.html 
 
 
-
-### NEW FOLDERS USED IN THIS SCRIPT 
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#### PREPARE SUITABILITY INDICES ####
 # dir.create(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input"), recursive = TRUE) 
 # dir.create(here("temp_data", "GAEZ", "AES_index_value_current", "Rain-fed", "High-input"), recursive = TRUE) 
 
@@ -54,8 +54,6 @@ if (dir.exists(targetdir)) {
   file.remove(list.files(path = targetdir,
                          pattern = ".tif", full.names = TRUE))
 } else dir.create(targetdir, recursive = TRUE)
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
 
@@ -102,6 +100,69 @@ rasterlist_gaez <- list.files(path = targetdir,
 gaez_all <- brick(rasterlist_gaez)
 
 writeRaster(gaez_all, here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "high_input_all.tif"), 
+            overwrite = TRUE)
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#### PREPARE POTENTIAL YIELDS ####
+# dir.create(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input"), recursive = TRUE) 
+# dir.create(here("temp_data", "GAEZ", "AES_index_value_current", "Rain-fed", "High-input"), recursive = TRUE) 
+
+datadir <- here("input_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input")
+targetdir <- here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input")
+tmpdir <- here("temp_data", "tmp")
+
+if (!dir.exists(tmpdir)) dir.create(tmpdir, recursive = TRUE)
+if (dir.exists(targetdir)) {
+  file.remove(list.files(path = targetdir,
+                         pattern = ".tif", full.names = TRUE))
+} else dir.create(targetdir, recursive = TRUE)
+
+
+
+files <- list.files(path = datadir, pattern = ".zip")
+crops <- unlist(strsplit(files, split = ".zip"))
+
+ext <- extent(c(-180, 179.9167, -30, 30))
+
+## Import most crops
+for (j in 1:length(files)) {
+  #if (any(crops[j] == cropsToAggregate)) next
+  print(files[j])
+  unzip(zipfile = here(datadir, files[j]), exdir = tmpdir)
+  dt <- raster(paste0(tmpdir, "/data.asc"))
+  
+  # crop to tropical AOI
+  dt_trop <- crop(dt, ext)
+  
+  # A few points are -0.09 with no apparent reason. 
+  dt_trop[dt_trop<0] <- NA 
+  
+  names(dt_trop) <- crops[j]
+  writeRaster(dt_trop,
+              filename = here(targetdir, paste0(crops[j], ".tif")),
+              overwrite = TRUE)
+  
+}
+
+
+### CHECK GRASS ### 
+# dt <- raster(here("input_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input", "Grass", "data.asc"))
+# # crop to tropical AOI
+# dt_trop <- crop(dt, ext)
+# # A few points are -0.09 with no apparent reason. 
+# dt_trop[dt_trop<0] <- NA 
+# names(dt_trop) <- "Grass"
+# 
+# summary(values(dt_trop))
+
+## Create a brick for convenience. 
+rasterlist_gaez <- list.files(path = targetdir, 
+                              pattern = "", 
+                              full.names = TRUE) %>% as.list()
+gaez_all <- brick(rasterlist_gaez)
+
+writeRaster(gaez_all, here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "high_input_all.tif"), 
             overwrite = TRUE)
 
 

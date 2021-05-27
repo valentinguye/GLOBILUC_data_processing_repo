@@ -68,8 +68,8 @@ targetdir <- here("temp_data", "merged_datasets", "tropical_aoi")
 
 ### READ IN AND RENAME GAEZ DATA ### 
 
-## GAEZ
-gaez_dir <- here("temp_data", "GAEZ", "AES_index_value", "Rain-fed")
+## SUITABILITY INDICES 
+gaez_dir <- here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed")
 gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
 # Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
@@ -83,7 +83,7 @@ names(gaez) <- gaez_crops
 
 
 
-#### 1. MERGE GLASS-GLC AND GAEZ #### 
+#### 1. MERGE GLASS-GLC AND SUITABILITY INDICES #### 
 
 ## Read in GLASS-GLC data 
 first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"))
@@ -123,10 +123,10 @@ mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "glass_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "glass_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -175,18 +175,18 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 varying_vars <- list(names(glass_gaez)[grep("first_loss.", names(glass_gaez), fixed = TRUE)],
                      names(glass_gaez)[grep("sbqt_direct_lu.", names(glass_gaez), fixed = TRUE)],
                      names(glass_gaez)[grep("sbqt_mode_lu.", names(glass_gaez), fixed = TRUE)])
-                    
+
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
-                       varying = varying_vars,
-                       v.names = c("first_loss", "sbqt_direct_lu", "sbqt_mode_lu"),
-                       sep = ".",
-                       timevar = "year",
-                       idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
-                       ids = "grid_id", # lonlat is our cross-sectional identifier.
-                       direction = "long",
-                       new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
+                          varying = varying_vars,
+                          v.names = c("first_loss", "sbqt_direct_lu", "sbqt_mode_lu"),
+                          sep = ".",
+                          timevar = "year",
+                          idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
+                          ids = "grid_id", # lonlat is our cross-sectional identifier.
+                          direction = "long",
+                          new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
 rm(wide_df)
 names(long_df)
 # replace the indices from the raster::as.data.frame with actual years.
@@ -196,12 +196,12 @@ long_df <- mutate(long_df, year = glc_sbqt_years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "glass_gaez_long.Rdata"))
+saveRDS(long_df, here(targetdir, "glass_acay_long.Rdata"))
 
 rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first_loss, sbqt_direct_lu, sbqt_mode_lu)
 
 
-# glass <- readRDS(here(targetdir, "glass_gaez_long.Rdata"))
+# glass <- readRDS(here(targetdir, "glass_acay_long.Rdata"))
 
 
 #### 2. MERGE 1983-2020 FIRST LOSS AND GAEZ #### 
@@ -218,10 +218,10 @@ mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "firstloss8320_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "firstloss8320_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "firstloss8320_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "firstloss8320_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -277,7 +277,7 @@ long_df <- mutate(long_df, year = years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "firstloss8320_gaez_long.Rdata"))
+saveRDS(long_df, here(targetdir, "firstloss8320_acay_long.Rdata"))
 
 rm(years, long_df, varying_vars, firstloss_gaez, gaez_m, mask, firstloss8320)
 
@@ -297,10 +297,10 @@ mask <- raster(here("temp_data", "processed_phtfloss", "tropical_aoi", "always_z
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "phtfloss_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "phtfloss_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "phtfloss_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "phtfloss_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -356,7 +356,7 @@ long_df <- mutate(long_df, year = years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "phtfloss_gaez_long.Rdata"))
+saveRDS(long_df, here(targetdir, "phtfloss_acay_long.Rdata"))
 
 rm(long_df, varying_vars, phtfloss_gaez, gaez_m, mask, phtfloss)
 
