@@ -12,6 +12,8 @@
 # Install all necessary packages intheir project-specific versions. 
 source("install_GLOBILUC_packages.R")
 
+# Prepare price time series. This is done first because potential yield GAEZ variables then need to be multiplied by prices in preparation. 
+
 # Prepare GAEZ data.This is done first because other data are aligned to the GAEZ resolution and therefore need some GAEZ data template
 source("code/prepare_gaez.R")
 # Inputs:  - all crop-specific raster zip-folders in "input_data/GAEZ/AES_index_value/Rain-fed/High-input"

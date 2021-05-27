@@ -88,8 +88,8 @@ ps_commo <- c("Banana, US",
 
 ps2 <- ps[, c("year", ps_commo)] 
 
-# Select years of interest 
-ps2 <- dplyr::filter(ps2, ps2$year %in% years_oi)
+# # Select years of interest 
+# ps2 <- dplyr::filter(ps2, ps2$year %in% years_oi)
 
 
 # Convert to numeric
@@ -167,16 +167,16 @@ annual_imf <- ddply(imf, "year", summarise,
                     Sunflower_oil = mean(Sunflower_oil), 
                     Pork = mean(Pork))
 
-
-# Restrict to years of interest
-annual_imf <- dplyr::filter(annual_imf, annual_imf$year %in% years_oi)
+ 
+# # Restrict to years of interest
+# annual_imf <- dplyr::filter(annual_imf, annual_imf$year %in% years_oi)
 
 
 
 #### Consolidate price annual time series data frame #### 
+# keep all years from each sources
+prices <- full_join(x = ps2, y = annual_imf, by = "year") 
 
-prices <- merge(x = ps2, y = annual_imf, by = "year") 
-head(prices)
 
 #### PREPARE ADDITIONAL PRICE VARIABLES #### 
 
@@ -184,6 +184,50 @@ head(prices)
 prices <- prices %>% rowwise() %>% mutate(cereal_crops = mean(c(Barley, Maize, Sorghum, Wheat, Oat), na.rm = T), # excluding rice as not comparable enough
                                         oil_crops = mean(c(Palm_oil, Rapeseed_oil, Soybean_oil, Sunflower_oil), na.rm = T), # using only "unflavored" oils
 ) %>% as.data.frame() # other commodities are not comparable enough to be grouped.
+
+head(prices)
+
+
+# unique(prices$year) %>% length()
+
+### Lags 
+variables <- names(prices)[names(prices) != "year"]
+
+for(voi in variables){
+  
+  ## short to long lags
+  for(lag in c(1:5)){
+    prices <- dplyr::arrange(prices, year)
+    prices <- DataCombine::slide(prices,
+                                  Var = voi, 
+                                  TimeVar = "year",
+                                  NewVar = paste0(voi,"_lag",lag),
+                                  slideBy = -lag, 
+                                  keepInvalid = FALSE)
+    prices <- dplyr::arrange(prices, year)
+    
+  }
+
+  for(py in c(2:5)){
+    ## Past-year averages (2, 3 and 4 years)  
+    # note that we DON'T add voi column (not lagged) in the row mean
+    prices$newv <- rowMeans(x = prices[,paste0(voi,"_lag",c(1:py))], na.rm = FALSE)
+    prices[is.nan(prices$newv),"newv"] <- NA
+    colnames(prices)[colnames(prices)=="newv"] <- paste0(voi,"_",py,"pya")
+  }
+}
+
+# remove some variables that were only temporarily necessary
+# (we want to keep lag1)
+vars_torm <- names(prices)[(grepl(pattern = "_lag2", x = names(prices)) |
+                                 grepl(pattern = "_lag3", x = names(prices)) |
+                                 grepl(pattern = "_lag4", x = names(prices)) |
+                                 grepl(pattern = "_lag5", x = names(prices)))]
+
+prices <- prices[,!(names(prices) %in% vars_torm)]
+
+
+variables <- names(prices)[grepl(pattern = "ln_", x = names(prices))]
 
 ### Make logarithms
 logs <- mutate(prices[,names(prices)[names(prices) != "year"]], 
@@ -194,30 +238,13 @@ names(logs) <- paste0("ln_", names(logs))
 prices <- cbind(prices, logs)
 head(prices)
 
-### Lags 
-variables <- names(prices)[grepl(pattern = "ln_", x = names(prices))]
-
-for(voi in variables){
-  for(lag in c(1:2)){
-    prices <- dplyr::arrange(prices, year)
-    prices <- DataCombine::slide(prices,
-                                  Var = voi, 
-                                  TimeVar = "year",
-                                  NewVar = paste0(voi,"_lag", lag),
-                                  slideBy = -lag, 
-                                  keepInvalid = FALSE)
-    prices <- dplyr::arrange(prices, year)
-  }
-}
-
-# bananas <- prices[, c("year", "Banana", "ln_Banana", "ln_Banana_lag1", "ln_Banana_lag2")] 
-
+# View(prices[,c("Banana", "Banana_lag1", "Banana_2pya", "Banana_3pya", "Banana_4pya")])
 
 saveRDS(prices, here("temp_data", "prepared_prices.Rdata"))
 
 
 
-rm(annual_imf, imf, logs, prices, ps, ps2, muv_index_2016, ps_commo, needed_imf_col, years_oi, lag, variables, voi)
+rm(annual_imf, imf, logs, prices, ps, ps2, muv_index_2016, ps_commo, needed_imf_col, years_oi, lag, voi, variables, vars_torm)
 
 
 
@@ -236,53 +263,53 @@ rm(annual_imf, imf, logs, prices, ps, ps2, muv_index_2016, ps_commo, needed_imf_
 #                           "IMF" = "",
 #                           "gaez" = gaez_crops)
 # 
-ps_gaez_map[ps_gaez_map$gaez == "Alfalfa", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Banana", "pink_sheet"] <- "Banana, US"
-ps_gaez_map[ps_gaez_map$gaez == "Barley", "pink_sheet"] <- "Barley"
-ps_gaez_map[ps_gaez_map$gaez == "Buckweat", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Cabbage", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Carrot", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Cassava", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Chickpea", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Citrus", "pink_sheet"] <- "Orange"
-ps_gaez_map[ps_gaez_map$gaez == "Cocoa", "pink_sheet"] <- "Cocoa"
-ps_gaez_map[ps_gaez_map$gaez == "Coconut", "pink_sheet"] <- "Coconut oil"
-ps_gaez_map[ps_gaez_map$gaez == "Coffee", "pink_sheet"] <- "Coffee, Arabica" # According to Table A4-3 in GAEZ v3 User guide, coffee is Arabica.
-ps_gaez_map[ps_gaez_map$gaez == "Cotton", "pink_sheet"] <- "Cotton, A Index"
-ps_gaez_map[ps_gaez_map$gaez == "Cowpea", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Dryland_rice", "pink_sheet"] <- "Rice, Thai 5%" # As it seems to be the most consistent series
-ps_gaez_map[ps_gaez_map$gaez == "Drypea", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Flax", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Foxtailmillet", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Gram", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Groundnut", "pink_sheet"] <- "Groundnuts" # take the rawest product available
-ps_gaez_map[ps_gaez_map$gaez == "Jatropha", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Maize", "pink_sheet"] <- "Maize"
-ps_gaez_map[ps_gaez_map$gaez == "Miscanthus", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Oat", "IMF"] <- colnames(imf)[grepl(pattern = "oat", x = imf[1,], ignore.case = TRUE)] # Oats, Generic 1st 'O ' Future, USD/bushel
-ps_gaez_map[ps_gaez_map$gaez == "Oilpalm", "pink_sheet"] <- "Palm oil"
-ps_gaez_map[ps_gaez_map$gaez == "Olive", "IMF"] <- colnames(imf)[grepl(pattern = "olive", x = imf[1,], ignore.case = TRUE)] # Olive Oil, extra virgin less than 1% free fatty acid, ex-tanker price U.K., US$ per metric ton
-ps_gaez_map[ps_gaez_map$gaez == "Onion", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Pearlmillet", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Phaseolusbean", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Pigeonpea", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Rapeseed", "IMF"] <- colnames(imf)[grepl(pattern = "rapeseed", x = imf[1,], ignore.case = TRUE)] # Rapeseed oil, crude, fob Rotterdam, US$ per metric ton
-ps_gaez_map[ps_gaez_map$gaez == "Reedcanarygrass", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Rye", "pink_sheet"] <- "" # cereal grain
-ps_gaez_map[ps_gaez_map$gaez == "Sorghum", "pink_sheet"] <- "Sorghum"
-ps_gaez_map[ps_gaez_map$gaez == "Soybean", "pink_sheet"] <- "Soybeans" # take the rawest product available
-ps_gaez_map[ps_gaez_map$gaez == "Sugarbeet", "pink_sheet"] <- "Sugar, world"
-ps_gaez_map[ps_gaez_map$gaez == "Sugarcane", "pink_sheet"] <- "Sugar, world"
-ps_gaez_map[ps_gaez_map$gaez == "Sunflower", "IMF"] <- colnames(imf)[grepl(pattern = "sunflower", x = imf[1,], ignore.case = TRUE)] # Sunflower oil, Sunflower Oil, US export price from Gulf of Mexico, US$ per metric ton
-ps_gaez_map[ps_gaez_map$gaez == "Sweetpotato", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Switchgrass", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Tea", "pink_sheet"] <- "Tea, avg 3 auctions"
-ps_gaez_map[ps_gaez_map$gaez == "Tobacco", "pink_sheet"] <- "Tobacco, US import u.v."
-ps_gaez_map[ps_gaez_map$gaez == "Tomato", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Wetland_rice", "pink_sheet"] <- "Rice, Thai 5%" # same price as dryland rice, as output is the same...
-ps_gaez_map[ps_gaez_map$gaez == "Wheat", "pink_sheet"] <- "Wheat, US HRW" # hard red winter wheat is more common
-ps_gaez_map[ps_gaez_map$gaez == "Whitepotato", "pink_sheet"] <- ""
-ps_gaez_map[ps_gaez_map$gaez == "Yam", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Alfalfa", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Banana", "pink_sheet"] <- "Banana, US"
+# ps_gaez_map[ps_gaez_map$gaez == "Barley", "pink_sheet"] <- "Barley"
+# ps_gaez_map[ps_gaez_map$gaez == "Buckweat", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Cabbage", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Carrot", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Cassava", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Chickpea", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Citrus", "pink_sheet"] <- "Orange"
+# ps_gaez_map[ps_gaez_map$gaez == "Cocoa", "pink_sheet"] <- "Cocoa"
+# ps_gaez_map[ps_gaez_map$gaez == "Coconut", "pink_sheet"] <- "Coconut oil"
+# ps_gaez_map[ps_gaez_map$gaez == "Coffee", "pink_sheet"] <- "Coffee, Arabica" # According to Table A4-3 in GAEZ v3 User guide, coffee is Arabica.
+# ps_gaez_map[ps_gaez_map$gaez == "Cotton", "pink_sheet"] <- "Cotton, A Index"
+# ps_gaez_map[ps_gaez_map$gaez == "Cowpea", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Dryland_rice", "pink_sheet"] <- "Rice, Thai 5%" # As it seems to be the most consistent series
+# ps_gaez_map[ps_gaez_map$gaez == "Drypea", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Flax", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Foxtailmillet", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Gram", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Groundnut", "pink_sheet"] <- "Groundnuts" # take the rawest product available
+# ps_gaez_map[ps_gaez_map$gaez == "Jatropha", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Maize", "pink_sheet"] <- "Maize"
+# ps_gaez_map[ps_gaez_map$gaez == "Miscanthus", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Oat", "IMF"] <- colnames(imf)[grepl(pattern = "oat", x = imf[1,], ignore.case = TRUE)] # Oats, Generic 1st 'O ' Future, USD/bushel
+# ps_gaez_map[ps_gaez_map$gaez == "Oilpalm", "pink_sheet"] <- "Palm oil"
+# ps_gaez_map[ps_gaez_map$gaez == "Olive", "IMF"] <- colnames(imf)[grepl(pattern = "olive", x = imf[1,], ignore.case = TRUE)] # Olive Oil, extra virgin less than 1% free fatty acid, ex-tanker price U.K., US$ per metric ton
+# ps_gaez_map[ps_gaez_map$gaez == "Onion", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Pearlmillet", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Phaseolusbean", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Pigeonpea", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Rapeseed", "IMF"] <- colnames(imf)[grepl(pattern = "rapeseed", x = imf[1,], ignore.case = TRUE)] # Rapeseed oil, crude, fob Rotterdam, US$ per metric ton
+# ps_gaez_map[ps_gaez_map$gaez == "Reedcanarygrass", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Rye", "pink_sheet"] <- "" # cereal grain
+# ps_gaez_map[ps_gaez_map$gaez == "Sorghum", "pink_sheet"] <- "Sorghum"
+# ps_gaez_map[ps_gaez_map$gaez == "Soybean", "pink_sheet"] <- "Soybeans" # take the rawest product available
+# ps_gaez_map[ps_gaez_map$gaez == "Sugarbeet", "pink_sheet"] <- "Sugar, world"
+# ps_gaez_map[ps_gaez_map$gaez == "Sugarcane", "pink_sheet"] <- "Sugar, world"
+# ps_gaez_map[ps_gaez_map$gaez == "Sunflower", "IMF"] <- colnames(imf)[grepl(pattern = "sunflower", x = imf[1,], ignore.case = TRUE)] # Sunflower oil, Sunflower Oil, US export price from Gulf of Mexico, US$ per metric ton
+# ps_gaez_map[ps_gaez_map$gaez == "Sweetpotato", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Switchgrass", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Tea", "pink_sheet"] <- "Tea, avg 3 auctions"
+# ps_gaez_map[ps_gaez_map$gaez == "Tobacco", "pink_sheet"] <- "Tobacco, US import u.v."
+# ps_gaez_map[ps_gaez_map$gaez == "Tomato", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Wetland_rice", "pink_sheet"] <- "Rice, Thai 5%" # same price as dryland rice, as output is the same...
+# ps_gaez_map[ps_gaez_map$gaez == "Wheat", "pink_sheet"] <- "Wheat, US HRW" # hard red winter wheat is more common
+# ps_gaez_map[ps_gaez_map$gaez == "Whitepotato", "pink_sheet"] <- ""
+# ps_gaez_map[ps_gaez_map$gaez == "Yam", "pink_sheet"] <- ""
 # 
 # 
 # 
