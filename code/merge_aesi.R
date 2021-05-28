@@ -196,12 +196,12 @@ long_df <- mutate(long_df, year = glc_sbqt_years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "glass_gaez_long.Rdata"))
+saveRDS(long_df, here(targetdir, "glass_aesi_long.Rdata"))
 
 rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first_loss, sbqt_direct_lu, sbqt_mode_lu)
 
 
-# glass <- readRDS(here(targetdir, "glass_gaez_long.Rdata"))
+# glass <- readRDS(here(targetdir, "glass_aesi_long.Rdata"))
 
 
 #### 2. MERGE 1983-2020 FIRST LOSS AND GAEZ #### 
@@ -277,7 +277,7 @@ long_df <- mutate(long_df, year = years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "firstloss8320_gaez_long.Rdata"))
+saveRDS(long_df, here(targetdir, "firstloss8320_aesi_long.Rdata"))
 
 rm(years, long_df, varying_vars, firstloss_gaez, gaez_m, mask, firstloss8320)
 
@@ -356,7 +356,7 @@ long_df <- mutate(long_df, year = years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "phtfloss_gaez_long.Rdata"))
+saveRDS(long_df, here(targetdir, "phtfloss_aesi_long.Rdata"))
 
 rm(long_df, varying_vars, phtfloss_gaez, gaez_m, mask, phtfloss)
 

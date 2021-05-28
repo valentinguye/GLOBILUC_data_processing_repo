@@ -77,11 +77,17 @@ setFixest_dict(c(grid_id = "grid cell",
 
 ### READ ALL POSSIBLE DATASETS HERE 
 # but not all together because of memory issues. 
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
 
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_gaez_long_final.Rdata"))
-# 
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aesi_long_final.Rdata"))
+
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
+
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))
+
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_acay_long_final.Rdata"))
+
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))
 
 prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
 
@@ -122,7 +128,8 @@ output = "coef_table"
 # "Sunflower_oil"
 # rm(dataset, start_year, end_year, crop_j, j_soy, price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
 
-make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
+make_reg <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
+                     gaez = "aesi", # one of "aesi" or "acay" 
                           start_year = 2002, 
                           end_year = 2015, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
@@ -147,16 +154,32 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
   ### DATA 
   d <- main_data
   
+  # PREPARE rj, the standardized achiavable revenues
+  if(gaez == "acay"){
+    if(crop_j == "fodder_crops"){
+      d <- dplyr::mutate(d, fodder_crops*Beef)
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+  }
+
   
-  #### SPECIFICATIONS  
-  
-  ## Outcome variable
-  if(dataset=="glass"){
-    outcome_variable <- "first_loss"} #   "sbqt_direct_lu"      "sbqt_mode_lu" 
-  if(dataset=="fl8320"){
-    outcome_variable <- "firstloss_glassgfc"}
-  if(dataset=="phtfl"){
-    outcome_variable <- "phtf_loss"}
+  # ## Outcome variable
+  # if(dataset=="glass"){
+  #   outcome_variable <- "first_loss"} #   "sbqt_direct_lu"      "sbqt_mode_lu" 
+  # if(dataset=="fl8320"){
+  #   outcome_variable <- "firstloss_glassgfc"}
+  # if(dataset=="phtfl"){
+  #   outcome_variable <- "phtf_loss"}
   
   # restrict the outcome variable to evidence of further LU
   if(dataset == "glass" & further_lu_evidence != "none"){
@@ -171,7 +194,7 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
     }
   }
   
-  
+#### SPECIFICATIONS    
   
   # We need to create the variables we will need, based on:
   # crop_j, price_k, whether the price is lagged, whether the suitability is standardized, and the controls we want 
@@ -389,16 +412,16 @@ make_base_reg <- function(dataset = "glass", # one of "glass", "fl8320", "phtfl"
 DS <- "glass"
 SY <- 1983
 EY <- 2020
-if(DS == "glass"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))}
-if(DS == "fl8320"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_gaez_long_final.Rdata"))}
-if(DS == "phtfl"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))}
+if(DS == "glass"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))}
+if(DS == "fl8320"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aesi_long_final.Rdata"))}
+if(DS == "phtfl"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))}
 
 
 ### PALM OIL
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
                "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
 
-oilpalm_res <- make_base_reg(dataset = DS,
+oilpalm_res <- make_reg_aesi(dataset = DS,
                               start_year = SY, end_year = EY,
                               crop_j = "Oilpalm",
                               price_k = K_palmoil,
@@ -410,7 +433,7 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
            "Sugar", "Maize") # in prices spelling "Olive_oil",
 
 
-soy_res <- make_base_reg(dataset = DS,
+soy_res <- make_reg_aesi(dataset = DS,
                         start_year = SY, end_year = EY, 
                         crop_j = "Soybean", 
                         price_k = K_soy, 
@@ -421,7 +444,7 @@ soy_res <- make_base_reg(dataset = DS,
 K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
 
 
-cocoa_res <- make_base_reg(dataset = DS,
+cocoa_res <- make_reg_aesi(dataset = DS,
                           start_year = SY, end_year = EY, 
                           crop_j = "Cocoa", 
                           price_k = K_cocoa)
@@ -431,7 +454,7 @@ cocoa_res <- make_base_reg(dataset = DS,
 K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 
 
-coffee_res <- make_base_reg(dataset = DS,
+coffee_res <- make_reg_aesi(dataset = DS,
                             start_year = SY, end_year = EY, 
                             crop_j = "Coffee", 
                             price_k = K_coffee)
@@ -488,13 +511,13 @@ if(DS == "phtfl"){
 
 
 #### First loss (1983-2015) ####
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_gaez_long_final.Rdata"))
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
 
 ### PALM OIL
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
                "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
 
-oilpalm_res <- make_base_reg(#start_year = 1983, end_year = 2015,
+oilpalm_res <- make_reg_aesi(#start_year = 1983, end_year = 2015,
   crop_j = "Oilpalm",
   price_k = K_palmoil,
   extra_price_k = "Crude_oil")
@@ -505,7 +528,7 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
            "Sugar", "Maize") # in prices spelling "Olive_oil",
 
 
-soy_res <- make_base_reg(#start_year = 1983, end_year = 2015, 
+soy_res <- make_reg_aesi(#start_year = 1983, end_year = 2015, 
   crop_j = "Soybean", 
   price_k = K_soy, 
   extra_price_k = "Crude_oil")
@@ -515,7 +538,7 @@ soy_res <- make_base_reg(#start_year = 1983, end_year = 2015,
 K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
 
 
-cocoa_res <- make_base_reg(#start_year = 1983, end_year = 2015, 
+cocoa_res <- make_reg_aesi(#start_year = 1983, end_year = 2015, 
   crop_j = "Cocoa", 
   price_k = K_cocoa)
 
@@ -524,7 +547,7 @@ cocoa_res <- make_base_reg(#start_year = 1983, end_year = 2015,
 K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 
 
-coffee_res <- make_base_reg( #start_year = 1983, end_year = 2015, 
+coffee_res <- make_reg_aesi( #start_year = 1983, end_year = 2015, 
   crop_j = "Coffee", 
   price_k = K_coffee)
 
@@ -591,13 +614,13 @@ names(df)[names(df)=="Std. Error"] <- "std.error"
 
 
 #### Primary forest loss (2002-2020) ####
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_gaez_long_final.Rdata"))
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
 
 ### PALM OIL
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
                "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
 
-oilpalm_res <- make_base_reg(dataset = "phtfl",
+oilpalm_res <- make_reg_aesi(dataset = "phtfl",
                              start_year = 2002, end_year = 2020,
                              crop_j = "Oilpalm",
                              price_k = K_palmoil,
@@ -609,7 +632,7 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
            "Sugar", "Maize") # in prices spelling "Olive_oil",
 
 
-soy_res <- make_base_reg(dataset = "phtfl",
+soy_res <- make_reg_aesi(dataset = "phtfl",
                          start_year = 2002, end_year = 2020, 
                          crop_j = "Soybean", 
                          price_k = K_soy, 
@@ -620,7 +643,7 @@ soy_res <- make_base_reg(dataset = "phtfl",
 K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
 
 
-cocoa_res <- make_base_reg(dataset = "phtfl",
+cocoa_res <- make_reg_aesi(dataset = "phtfl",
                            start_year = 2002, end_year = 2020, 
                            crop_j = "Cocoa", 
                            price_k = K_cocoa)
@@ -630,7 +653,7 @@ cocoa_res <- make_base_reg(dataset = "phtfl",
 K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 
 
-coffee_res <- make_base_reg(dataset = "phtfl",
+coffee_res <- make_reg_aesi(dataset = "phtfl",
                             start_year = 2002, end_year = 2020, 
                             crop_j = "Coffee", 
                             price_k = K_coffee)

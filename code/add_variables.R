@@ -38,7 +38,7 @@ lapply(neededPackages, library, character.only = TRUE)
 #   see in particular https://rstudio.github.io/renv/articles/renv.html 
 
 
-# Define GAEZ variables
+#### Define GAEZ AESI variables ####
 gaez_crops <- list.files(path = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
@@ -47,9 +47,9 @@ gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
 origindir <- here("temp_data", "merged_datasets", "tropical_aoi")
 
-dataset_names <- c("glass_gaez_long",
-                    "firstloss8320_gaez_long", 
-                     "phtfloss_gaez_long")
+dataset_names <- c("glass_aesi_long",
+                    "firstloss8320_aesi_long", 
+                     "phtfloss_aesi_long")
 
 #### ADD COUNTRY INFORMATION #### 
 
@@ -70,9 +70,9 @@ length(unique(countries$COUNTRY_NA)) == nrow(countries)
 # 
 # st_join(x = c1, y = point, join = st_contains, prepared = TRUE, left = FALSE)
 
-# dataset_names <- c("glass_gaez_long_country_nf",
-#                    "firstloss8320_gaez_long_country_nf",
-#                    "phtfloss_gaez_long_country_nf")
+# dataset_names <- c("glass_aesi_long_country_nf",
+#                    "firstloss8320_aesi_long_country_nf",
+#                    "phtfloss_aesi_long_country_nf")
 
 # ~6h for the first one, the two second over night
 for(name in dataset_names){
@@ -131,7 +131,7 @@ for(name in dataset_names){
 
 
  
-# df <- readRDS(here(origindir, "glass_gaez_long_country_nf.Rdata"))
+# df <- readRDS(here(origindir, "glass_aesi_long_country_nf.Rdata"))
 # summary(df$soy)
 
 
@@ -191,7 +191,7 @@ for(name in dataset_names){
 
 
 
-#### MERGE DATASETS WITH ADDED VARIABLES #### 
+#### MERGE AESI DATASETS WITH ADDED VARIABLES #### 
 for(name in dataset_names){
   
   # Base dataset (including outcome variable(s))
@@ -223,16 +223,104 @@ for(name in dataset_names){
   
   rm(final)
 }
-
-
-
 ### Repeat it for the heavier phtf loss data set, with a slight difference: we do not 
 # append to the non standardized suitability indexes (which are only useful for robustness checks)
 
 
 
 
+#### Define GAEZ ACAY variables ####
+gaez_crops <- list.files(path = here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
+
+origindir <- here("temp_data", "merged_datasets", "tropical_aoi")
+
+dataset_names <- c("glass_acay_long",
+                   "firstloss8320_acay_long", 
+                   "phtfloss_acay_long")
+
+#### GROUP ACAY CROPS #### 
+
+
+# name = dataset_names[1]
+
+for(name in dataset_names){
+  
+  path <- paste0(here(origindir, name), ".Rdata")
+  df <- readRDS(path)
+  # Use cross section only
+  df_cs <- df[!duplicated(df$grid_id),]
+  
+  rm(df)
+  
+  ### Aggregate achievable yields of similar crops
+  # The grouping here corresponds to the categories by GAEZ-IIASA 
+  # sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
+  # Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
+  df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
+                                          oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
+                                          sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
+                                          fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
+                                          fibre_crops = max(c(Cotton, Flax)),
+                                          stimulant_crops = max(c(Coffee, Tea, Tobacco)),
+                                          fodder_crops = max(c(Alfalfa, Pasture_legume, Grass)), # To adjust once we have Grass as a GAEZ crop  
+                                          bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass)), 
+                                          rice_crops = max(c(Dryland_rice, Wetland_rice)) # (this one is not a GAEZ group)
+  ) %>% as.data.frame()
+  
+  # Select only newly constructed variables, and id
+  var_names <- names(df_cs)[grepl(pattern = "_crops", x = names(df_cs))]
+  df_cs <- df_cs[,c("grid_id", var_names)]
+  
+  # # merge back to panel - NOPE, not anymore
+  # df <- left_join(df, df_cs, by = "grid_id")
+  
+  # Keep only new variables and id
+  # df_cs <- df_cs[,(names(df_cs)=="grid_id" | grepl(pattern = "_std", x = names(df_cs)))]
+  
+  saveRDS(df_cs, paste0(here(origindir, name), "_groupedcrops.Rdata"))  
+  rm(df_cs, path)
+}
+
+
+
+
+#### MERGE ACAY DATASETS WITH ADDED VARIABLES #### 
+for(name in dataset_names){
+  
+  # Base dataset (including outcome variable(s))
+  base_path <- paste0(here(origindir, name), ".Rdata")
+  df_base <- readRDS(base_path)
+  
+  # Country variable
+  # do that because we 
+  if(name=="glass_acay_long"){country_path <- paste0(here(origindir, "glass_aesi_long"), "_country_nf.Rdata")}
+  if(name=="firstloss8320_acay_long"){country_path <- paste0(here(origindir, "firstloss8320_aesi_long"), "_country_nf.Rdata")}
+  if(name=="phtfloss_acay_long"){country_path <- paste0(here(origindir, "phtfloss_aesi_long"), "_country_nf.Rdata")}
+  
+  df_country <- readRDS(country_path)
+  
+  # Merge them and remove to save memory 
+  final <- left_join(df_base, df_country, by = "grid_id")
+  rm(df_base, df_country)
+  
+  # Grouped crops
+  grouped_path <- paste0(here(origindir, name), "_groupedcrops.Rdata")
+  df_grouped <- readRDS(grouped_path)  
+  
+  final <- left_join(final, df_grouped, by = "grid_id")
+  rm(df_grouped)
+  
+  # Create country trends variable
+  final <- mutate(final, country_year = paste0(country_name, "_", year))
+  
+  saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
+  
+  rm(final)
+}
 
 
 

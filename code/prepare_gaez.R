@@ -79,9 +79,8 @@ for (j in 1:length(files)) {
   writeRaster(dt_trop,
               filename = here(targetdir, paste0(crops[j], ".tif")),
               overwrite = TRUE)
-  
 }
-
+rm(dt, dt_trop)
 
 ### CHECK GRASS ### 
 # dt <- raster(here("input_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input", "Grass", "data.asc"))
@@ -101,6 +100,8 @@ gaez_all <- brick(rasterlist_gaez)
 
 writeRaster(gaez_all, here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "high_input_all.tif"), 
             overwrite = TRUE)
+
+rm(rasterlist_gaez, gaez_all)
 
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
@@ -144,17 +145,8 @@ for (j in 1:length(files)) {
               overwrite = TRUE)
   
 }
+rm(dt, dt_trop)
 
-
-### CHECK GRASS ### 
-# dt <- raster(here("input_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input", "Grass", "data.asc"))
-# # crop to tropical AOI
-# dt_trop <- crop(dt, ext)
-# # A few points are -0.09 with no apparent reason. 
-# dt_trop[dt_trop<0] <- NA 
-# names(dt_trop) <- "Grass"
-# 
-# summary(values(dt_trop))
 
 ## Create a brick for convenience. 
 rasterlist_gaez <- list.files(path = targetdir, 
@@ -166,3 +158,5 @@ writeRaster(gaez_all, here("temp_data", "GAEZ", "Agro_climatically_attainable_yi
             overwrite = TRUE)
 
 
+rm(rasterlist_gaez, gaez_all)
+rm(ext)

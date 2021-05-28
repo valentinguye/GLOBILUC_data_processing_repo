@@ -204,7 +204,7 @@ rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first
 # glass <- readRDS(here(targetdir, "glass_acay_long.Rdata"))
 
 
-#### 2. MERGE 1983-2020 FIRST LOSS AND GAEZ #### 
+#### 2. MERGE 1983-2020 FIRST LOSS AND SUITABILITY INDICES #### 
 
 ## Read in FIRST LOSS 1983 2020 
 firstloss8320 <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_firstloss8320.tif")) 
@@ -283,7 +283,7 @@ rm(years, long_df, varying_vars, firstloss_gaez, gaez_m, mask, firstloss8320)
 
 
 
-#### 3. MERGE PHTF LOSS AND GAEZ #### 
+#### 3. MERGE PHTF LOSS AND SUITABILITY INDICES #### 
 
 ## Read in PHTF LOSS 
 phtfloss <- brick(here("temp_data", "processed_phtfloss", "tropical_aoi", "masked_phtfloss.tif")) 
@@ -359,7 +359,7 @@ long_df <- dplyr::arrange(long_df, grid_id, year)
 saveRDS(long_df, here(targetdir, "phtfloss_acay_long.Rdata"))
 
 rm(long_df, varying_vars, phtfloss_gaez, gaez_m, mask, phtfloss)
-
+rm(gaez)
 
 # Note: much more cells have no some deforestation in the phtfloss data than in the first_loss. This is due to the starting resolution of each original data set. 
 
