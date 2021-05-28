@@ -94,9 +94,10 @@ prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
 rm(dataset, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster, 
    controls, regressors, outcome_variable)
 
-dataset = "glass"
+outcome_variable = "first_loss"
 start_year = 1983
 end_year = 2020
+price_info = "lag1"
 further_lu_evidence = "none"
 crop_j = "Oilpalm"
 j_soy = "Soybean_oil"
@@ -128,8 +129,233 @@ output = "coef_table"
 # "Sunflower_oil"
 # rm(dataset, start_year, end_year, crop_j, j_soy, price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
 
-make_reg <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
-                     gaez = "aesi", # one of "aesi" or "acay" 
+make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
+                          gaez = "aesi", # one of "aesi" or "acay" 
+                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
+                          start_year = 2002, 
+                          end_year = 2015, 
+                          further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
+                          crop_j = "Oilpalm", # in GAEZ spelling
+                          j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
+                          price_k = c("Sugar", "Maize"), # in prices spelling
+                          extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
+                          standardized_si = TRUE,
+                          price_lag = 1, 
+                          SjPj = TRUE,
+                          SkPk = FALSE,
+                          #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
+                          fe = "grid_id + country_year", 
+                          distribution = "gaussian",#  "quasipoisson", 
+                          se = "cluster", 
+                          cluster ="grid_id",
+                          coefstat = "confint", # one of "se", "tstat", "confint"
+                          output = "coef_table" # one of "data", "est_obj", "coef_table" 
+){
+  
+  
+  d <- main_data
+  
+  ### PREPARE rj, the standardized achiavable revenues
+  
+  # We will need prices of all these crops
+  all_crop_prices <- c("Banana",
+                        "Barley",
+                       "Beef",
+                        "Orange",
+                        "Cocoa",
+                        "Coconut_oil",
+                        "Coffee",
+                        "Cotton",
+                        "Groundnuts",
+                        "Maize",
+                        "Oat", 
+                        "Olive_oil", 
+                        "Palm_oil", 
+                        "Rapeseed_oil", 
+                        "Rice",
+                        "Sorghum",
+                        "Soybeans",
+                        "Soybean_oil",
+                        "Soybean_meal",
+                        "Sugar",
+                        "Sunflower_oil",
+                        "Tea",
+                        "Tobacco",
+                        "Wheat")
+
+  # code like that allows to order corresponding crops in crop_k in the same order as in price_k, irrespectively of the order prices are passed to price_k 
+  all_crop_acay <- c()
+  if("Banana"%in% all_crop_prices){all_crop_acay[match("Banana", all_crop_prices)] <- "Banana"}
+  if("Barley"%in% all_crop_prices){all_crop_acay[match("Barley", all_crop_prices)] <- "Barley"}
+  if("Beef"%in% all_crop_prices){all_crop_acay[match("Beef", all_crop_prices)] <- "fodder_crops"} 
+  if("Orange"%in% all_crop_prices){all_crop_acay[match("Orange", all_crop_prices)] <- "Citrus"}
+  if("Cocoa"%in% all_crop_prices){all_crop_acay[match("Cocoa", all_crop_prices)] <- "Cocoa"}
+  if("Coconut_oil"%in% all_crop_prices){all_crop_acay[match("Coconut_oil", all_crop_prices)] <- "Coconut"}
+  if("Coffee"%in% all_crop_prices){all_crop_acay[match("Coffee", all_crop_prices)] <- "Coffee"}
+  if("Cotton"%in% all_crop_prices){all_crop_acay[match("Cotton", all_crop_prices)] <- "fibre_crops"}
+  if("Groundnuts"%in% all_crop_prices){all_crop_acay[match("Groundnuts", all_crop_prices)] <- "Groundnut"}
+  if("Maize"%in% all_crop_prices){all_crop_acay[match("Maize", all_crop_prices)] <- "Maize"}
+  if("Oat"%in% all_crop_prices){all_crop_acay[match("Oat", all_crop_prices)] <- "Oat"} # aggregate different crops there ? like rye...
+  if("Olive_oil"%in% all_crop_prices){all_crop_acay[match("Olive_oil", all_crop_prices)] <- "Olive"}
+  if("Palm_oil"%in% all_crop_prices){all_crop_acay[match("Palm_oil", all_crop_prices)] <- "Oilpalm"}
+  if("Rapeseed_oil"%in% all_crop_prices){all_crop_acay[match("Rapeseed_oil", all_crop_prices)] <- "Rapeseed"}
+  if("Rice"%in% all_crop_prices){all_crop_acay[match("Rice", all_crop_prices)] <- "rice_crops"}
+  if("Sorghum"%in% all_crop_prices){all_crop_acay[match("Sorghum", all_crop_prices)] <- "Sorghum"}
+  if("Soybeans"%in% all_crop_prices){all_crop_acay[match("Soybeans", all_crop_prices)] <- "Soybean"}
+  if("Soybean_oil"%in% all_crop_prices){all_crop_acay[match("Soybean_oil", all_crop_prices)] <- "Soybean"}
+  if("Soybean_meal"%in% all_crop_prices){all_crop_acay[match("Soybean_meal", all_crop_prices)] <- "Soybean"}
+  if("Sugar"%in% all_crop_prices){all_crop_acay[match("Sugar", all_crop_prices)] <- "sugar_crops"}
+  if("Sunflower_oil"%in% all_crop_prices){all_crop_acay[match("Sunflower_oil", all_crop_prices)] <- "Sunflower"}
+  if("Tea"%in% all_crop_prices){all_crop_acay[match("Tea", all_crop_prices)] <- "Tea"}
+  if("Tobacco"%in% all_crop_prices){all_crop_acay[match("Tobacco", all_crop_prices)] <- "Tobacco"}
+  if("Wheat"%in% all_crop_prices){all_crop_acay[match("Wheat", all_crop_prices)] <- "Wheat"}
+  if("cereal_crops"%in% all_crop_prices){all_crop_acay[match("cereal_crops", all_crop_prices)] <- "cereal_crops"}
+ 
+  needed_prices <- paste0(all_crop_prices, "_", price_info)
+  # Merge only the prices needed, not the whole price dataframe
+  d <- left_join(d, prices[,c("year", needed_prices)], by = "year")
+  
+  ## Construct revenues for all crops - not just those in price_k or crop_j.
+  
+  for(i in 1:length(all_crop_prices)){
+    # take the first lag or the X past year average of the prices (but not the log, here)
+    price_i <- paste0(all_crop_prices[i], "_", price_info)
+    revenue_i <- paste0("R_", all_crop_acay[i])
+    d <- dplyr::mutate(d, 
+                       !!as.symbol(revenue_i) := !!as.symbol(all_crop_acay[i])*!!as.symbol(price_i))
+                       
+  }
+  
+  # ON EN EST LA; FAIRE UN PEU DE MENAGE DANS d ON N'EST PAS OBLIGES DE GARDER TOUTES LES VARIABLES 
+
+  
+  ## Standardize the one needed here (crop_j) -> stream dj = Rj/sumRi 
+  
+  ## Construct the max indicatrice -> stream dj = 1[Rj = maxRi]
+  
+  
+  ## Then we prepare Pk, SkPk, etc. 
+  
+
+  
+  if(gaez == "acay"){
+    if(crop_j == "fodder_crops"){
+      d <- dplyr::mutate(d, fodder_crops*price_j)
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+  }
+  
+  
+  # Keep only in data the useful variables 
+  d <- dplyr::select(d, all_of(c("grid_id", "year", "country_name", "country_year",
+                                 outcome_variable, crop_j, crop_k))) 
+  
+  
+  
+  
+  
+  ### PREPARE EQUIVALENCES BETWEEN SUITABILITY AND PRICE 
+  # this does not involve data, just function arguments 
+  
+  ## Identify the price of j based on crop_j (GAEZ spelling)
+  if(crop_j == "Pasture"){price_j <- "Beef"}
+  if(crop_j == "Oilpalm"){price_j <- "Palm_oil"}
+  if(crop_j == "Soybean"){price_j <- j_soy}
+  if(crop_j == "Cocoa"){price_j <- "Cocoa"}
+  if(crop_j == "Coffee"){price_j <- "Coffee"}
+  
+  ## Do the revert for k: from price of k to the GAEZ crop 
+  
+  # code like that allows to order corresponding crops in crop_k in the same order as in price_k, irrespectively of the order prices are passed to price_k 
+  crop_k <- c()
+  if("Banana"%in% price_k){crop_k[match("Banana", price_k)] <- "Banana"}
+  if("Barley"%in% price_k){crop_k[match("Barley", price_k)] <- "Barley"}
+  # if("Beef"%in% price_k){crop_k[match("Beef", price_k)] <- "Pasture"} # currently does not exist
+  if("Orange"%in% price_k){crop_k[match("Orange", price_k)] <- "Citrus"}
+  if("Cocoa"%in% price_k){crop_k[match("Cocoa", price_k)] <- "Cocoa"}
+  if("Coconut_oil"%in% price_k){crop_k[match("Coconut_oil", price_k)] <- "Coconut"}
+  if("Coffee"%in% price_k){crop_k[match("Coffee", price_k)] <- "Coffee"}
+  if("Cotton"%in% price_k){crop_k[match("Cotton", price_k)] <- "fibre_crops"}
+  if("Groundnuts"%in% price_k){crop_k[match("Groundnuts", price_k)] <- "Groundnut"}
+  if("Maize"%in% price_k){crop_k[match("Maize", price_k)] <- "Maize"}
+  if("Oat"%in% price_k){crop_k[match("Oat", price_k)] <- "Oat"} # aggregate different crops there ? like rye...
+  if("Olive_oil"%in% price_k){crop_k[match("Olive_oil", price_k)] <- "Olive"}
+  if("Palm_oil"%in% price_k){crop_k[match("Palm_oil", price_k)] <- "Oilpalm"}
+  if("Rapeseed_oil"%in% price_k){crop_k[match("Rapeseed_oil", price_k)] <- "Rapeseed"}
+  if("Rice"%in% price_k){crop_k[match("Rice", price_k)] <- "rice_crops"}
+  if("Sorghum"%in% price_k){crop_k[match("Sorghum", price_k)] <- "Sorghum"}
+  if("Soybeans"%in% price_k){crop_k[match("Soybeans", price_k)] <- "Soybean"}
+  if("Soybean_oil"%in% price_k){crop_k[match("Soybean_oil", price_k)] <- "Soybean"}
+  if("Soybean_meal"%in% price_k){crop_k[match("Soybean_meal", price_k)] <- "Soybean"}
+  if("Sugar"%in% price_k){crop_k[match("Sugar", price_k)] <- "sugar_crops"}
+  if("Sunflower_oil"%in% price_k){crop_k[match("Sunflower_oil", price_k)] <- "Sunflower"}
+  if("Tea"%in% price_k){crop_k[match("Tea", price_k)] <- "Tea"}
+  if("Tobacco"%in% price_k){crop_k[match("Tobacco", price_k)] <- "Tobacco"}
+  if("Wheat"%in% price_k){crop_k[match("Wheat", price_k)] <- "Wheat"}
+  if("cereal_crops"%in% price_k){crop_k[match("cereal_crops", price_k)] <- "cereal_crops"}
+  if("oil_crops"%in% price_k){crop_k[match("oil_crops", price_k)] <- "oil_crops"}
+  
+  
+  # handle commodities that do not have SI
+  # if("Crude_oil" %in% price_k){crop_k <- c(crop_k, NULL)}
+  # if("Rubber" %in% price_k){crop_k <- c(crop_k, NULL)}
+  # if("Chicken" %in% price_k){crop_k <- c(crop_k, NULL)}
+  # if("Pork" %in% price_k){crop_k <- c(crop_k, NULL)}
+  # if("Sheep" %in% price_k){crop_k <- c(crop_k, NULL)}
+  
+  # this is mostly useless
+  if(length(crop_k) == 0){SkPk <- FALSE}
+  
+  
+  ### SELECT PRICE AND SUITABILITY VARIABLES 
+  # first, save price_k for later purpose 
+  original_price_j <- price_j 
+  original_price_k <- price_k 
+  original_extra_price_k <- extra_price_k 
+  original_price_all <- c(price_j, price_k, extra_price_k)
+  
+  # For j
+  if(price_lag != 0){price_j <- paste0(price_j,"_lag",price_lag)}
+  price_j <- paste0("ln_", price_j)
+  
+  # For k 
+  if(price_lag != 0){price_k <- paste0(price_k,"_lag",price_lag)}
+  # don't condition that, as we won't use non logged prices a priori. 
+  price_k <- paste0("ln_", price_k)
+  
+  # For extra commodities k 
+  if(length(extra_price_k) > 0){
+    if(price_lag != 0){extra_price_k <- paste0(extra_price_k,"_lag",price_lag)}
+    extra_price_k <- paste0("ln_", extra_price_k)
+  }
+  
+  # group all prices transformed
+  price_all <- c(price_j, price_k, extra_price_k)
+  
+  
+  ### MAKE THE VARIABLES NEEDED IN THE DATA
+  
+  
+  
+
+  
+  
+
+}
+
+
+make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
+                          gaez = "aesi", # one of "aesi" or "acay" 
                           start_year = 2002, 
                           end_year = 2015, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
@@ -153,24 +379,6 @@ make_reg <- function(outcome_variable = "first_loss", # one of "first_loss", "fi
    
   ### DATA 
   d <- main_data
-  
-  # PREPARE rj, the standardized achiavable revenues
-  if(gaez == "acay"){
-    if(crop_j == "fodder_crops"){
-      d <- dplyr::mutate(d, fodder_crops*Beef)
-    }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-  }
 
   
   # ## Outcome variable
@@ -182,7 +390,7 @@ make_reg <- function(outcome_variable = "first_loss", # one of "first_loss", "fi
   #   outcome_variable <- "phtf_loss"}
   
   # restrict the outcome variable to evidence of further LU
-  if(dataset == "glass" & further_lu_evidence != "none"){
+  if(outcome_variable == "first_loss" & further_lu_evidence != "none"){
     if(crop_j == "Pasture"){
       d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 30)) # either direct or mode subsequent lu are grassland
     }
