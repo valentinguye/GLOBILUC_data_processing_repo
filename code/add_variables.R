@@ -296,7 +296,7 @@ for(name in dataset_names){
   df_base <- readRDS(base_path)
   
   # Country variable
-  # do that because we 
+  # do that because we did not run the spatial join with countries for acay dataset
   if(name=="glass_acay_long"){country_path <- paste0(here(origindir, "glass_aesi_long"), "_country_nf.Rdata")}
   if(name=="firstloss8320_acay_long"){country_path <- paste0(here(origindir, "firstloss8320_aesi_long"), "_country_nf.Rdata")}
   if(name=="phtfloss_acay_long"){country_path <- paste0(here(origindir, "phtfloss_aesi_long"), "_country_nf.Rdata")}
