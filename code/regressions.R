@@ -116,7 +116,7 @@ colnames(mapmat) <- c("Prices", "Crops")
 
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
 
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))
 
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_acay_long_final.Rdata"))
 
@@ -124,26 +124,27 @@ main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass
 
 prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
 
-rm(dataset, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster, 
+rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster, 
    controls, regressors, outcome_variable)
 
-outcome_variable = "first_loss"
+outcome_variable = "first_loss" # "first_loss", "firstloss_glassgfc", "phtf_loss"
 start_year = 1983
 end_year = 2020
 price_info = "lag1"
 further_lu_evidence = "none"
-crop_j = "Oilpalm"
+crop_j = "fodder_crops"
 j_soy = "Soybean_oil"
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter. 
 # but maybe not with skPk controls. 
-price_k <- c( "Soybean_oil", "Rapeseed_oil", "Sunflower_oil", 
-              "Coconut_oil", "Soybeans","Sugar", "Maize") 
+price_k <- K_beef
+# c( "Soybean_oil", "Rapeseed_oil", "Sunflower_oil", 
+#               "Coconut_oil", "Soybeans","Sugar", "Maize") 
 # "Barley",  "Chicken", "Sheep", "Banana", "Beef", "Olive_oil",
 #               "Orange",  "Cotton",  "Groundnuts",  "Rubber", "Sorghum","Cocoa",  "Coffee",
 #                "Rice",   "Wheat",  "Palm_oil", ), 
 #                "Tea", "Tobacco",  "Oat",  
 #               , "Pork")
-extra_price_k = c("Crude_oil") # , 
+extra_price_k = c("Sheep", "Pork", "Chicken") # , 
 standardized_si = TRUE
 price_lag = 1
 SjPj = TRUE
@@ -163,7 +164,6 @@ output = "coef_table"
 # rm(dataset, start_year, end_year, crop_j, j_soy, price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
 
 make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
-                          gaez = "aesi", # one of "aesi" or "acay" 
                           price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           start_year = 2002, 
                           end_year = 2015, 
@@ -172,8 +172,6 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
                           j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
-                          standardized_si = TRUE,
-                          price_lag = 1, 
                           SjPj = TRUE,
                           SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
@@ -223,8 +221,29 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   
 
   #### MAKE THE VARIABLES NEEDED IN THE DATA
-  d <- main_data
-
+  #d <- main_data
+  if(outcome_variable == "first_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))}
+  if(outcome_variable == "firstloss_glassgfc"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_acay_long_final.Rdata"))}
+  if(outcome_variable == "phtf_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))}
+  
+  # # restrict the outcome variable to evidence of further LU
+  # d <- dplyr::mutate(d, lu_evidence = TRUE)
+  # if(outcome_variable == "first_loss" & further_lu_evidence != "none"){
+  #    # , cropland, or tree plantation
+  #   # if it is actually forest afterwards, this means that 
+  #   
+  #   if(crop_j == "fodder_crops"){
+  #     d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 30)) # either direct or mode subsequent lu are grassland
+  #   }
+  #   if(crop_j == "Soybean"){
+  #     d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 10)) # either direct or mode subsequent lu are cropland
+  #   }
+  #   if(crop_j %in% c("Oilpalm", "Cocoa", "Coffee")){
+  #     d <- dplyr::mutate(d, lu_evidence = (sbqt_direct_lu != 20 & sbqt_mode_lu == 20)) # is not forest in the year directly after, but is forest again in the mode subsequent lu. 
+  #   }
+  # }
+  
+  
   ### PREPARE rj, the standardized achievable revenues
   
   # Merge only the prices needed, not the whole price dataframe
@@ -333,6 +352,8 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   d <- dplyr::filter(d, year >= start_year)
   d <- dplyr::filter(d, year <= end_year)
   
+  # # - have a lu_evidence 
+  # d <- dplyr::filter(d, lu_evidence)
   
   used_vars <- c("grid_id", "year", "country_name", "country_year", 
                  outcome_variable, regressors, controls)
@@ -356,13 +377,14 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   d_clean <- d[-obs2remove(fml = as.formula(paste0(outcome_variable, " ~ ", fe)),
                            d, 
                            family = "poisson"),]
+  rm(d)
   
   ### REGRESSIONS
   
   if(distribution != "negbin"){ # i.e. if it's poisson or quasipoisson or gaussian
     reg_res <- fixest::feglm(fe_model,
                              data = d_clean, 
-                             family = distribution,# "gaussian",#  # "poisson" ,
+                             family = "gaussian",#distribution,#   # "poisson" ,
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
@@ -393,7 +415,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   }
   
   
-  rm(d, d_clean, reg_res, df_res)
+  rm(d_clean, reg_res, df_res)
   return(toreturn)
   rm(toreturn)
 
@@ -401,7 +423,6 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
 
 
 make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
-                          gaez = "aesi", # one of "aesi" or "acay" 
                           start_year = 2002, 
                           end_year = 2015, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
@@ -437,7 +458,7 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
   
   # restrict the outcome variable to evidence of further LU
   if(outcome_variable == "first_loss" & further_lu_evidence != "none"){
-    if(crop_j == "Pasture"){
+    if(crop_j == "fodder_crops"){
       d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 30)) # either direct or mode subsequent lu are grassland
     }
     if(crop_j == "Soybean"){
@@ -661,8 +682,119 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
   rm(toreturn)
 }
 
+#### RUN AND PLOT ACAY ####
+OV <- "phtf_loss"
+SY <- 1983
+EY <- 2020
+if(OV == "first_loss"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))}
+if(OV == "firstloss_glassgfc"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_acay_long_final.Rdata"))}
+if(OV == "phtf_loss"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))}
 
-#### RUN AND PLOT ####
+### BEEF
+K_beef <- c("Soybeans", "Soybean_meal", "Palm_oil", 
+             "cereal_crops") # in prices spelling "Barley", "Oat", "Sorghum", "Maize", "Rice"
+
+beef_res <- make_reg_acay(outcome_variable = OV,
+                             start_year = SY, end_year = EY,
+                             crop_j = "fodder_crops",
+                             price_k = K_beef,
+                          SkPk= F,
+                             extra_price_k = c())#"Sheep", "Pork", "Chicken"
+
+### PALM OIL
+K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+
+oilpalm_res <- make_reg_acay(outcome_variable = OV,
+                             start_year = SY, end_year = EY,
+                             crop_j = "Oilpalm",
+                             price_k = K_palmoil,
+                             extra_price_k = "Crude_oil")
+
+
+### SOY 
+K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", 
+           "Sugar", "Maize") # in prices spelling "Olive_oil",
+
+
+soy_res <- make_reg_acay(outcome_variable = OV,
+                         start_year = SY, end_year = EY, 
+                         crop_j = "Soybean", 
+                         price_k = K_soy, 
+                         extra_price_k = "Crude_oil")
+
+
+### COCOA 
+K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
+
+
+cocoa_res <- make_reg_acay(outcome_variable = OV,
+                           start_year = SY, end_year = EY, 
+                           crop_j = "Cocoa", 
+                           price_k = K_cocoa)
+
+
+### COFFEE 
+K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
+
+
+coffee_res <- make_reg_acay(outcome_variable = OV,
+                            start_year = SY, end_year = EY, 
+                            crop_j = "Coffee", 
+                            price_k = K_coffee)
+
+
+### PLOT COEFFICIENTS ### 
+# prepare regression outputs in a tidy data frame readable by dwplot
+rm(df)
+df <- rbind(beef_res, oilpalm_res, soy_res, cocoa_res, coffee_res)#
+df$model <- gsub(pattern = "_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+
+if(DS == "phtfl"){
+  title <- paste0("Indirect effects of commodity prices on the main agricultural drivers of global primary deforestation from ",SY," to ",EY)
+}else{
+  title <- paste0("Indirect effects of commodity prices on the main agricultural drivers of global deforestation from ",SY," to ",EY)
+}
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 1),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Crude_oil = "Crude oil",
+                         Palm_oil = "Palm oil",
+                         Soybean_oil = "Soybean oil",                       
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybeans = "Soybeans", 
+                         Soybean_meal = "Soybean meal", 
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
+
+
+#### RUN AND PLOT AESI ####
 DS <- "glass"
 SY <- 1983
 EY <- 2020
