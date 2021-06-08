@@ -124,29 +124,27 @@ colnames(mapmat) <- c("Prices", "Crops")
 
 prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
 
-rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster, 
+rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, SjPj, SkPk, fe, distribution, output, se, cluster, 
    controls, regressors, outcome_variable)
 
 outcome_variable = "first_loss" # "first_loss", "firstloss_glassgfc", "phtf_loss"
-start_year = 1983
+start_year = 2002
 end_year = 2020
 price_info = "lag1"
 further_lu_evidence = "none"
-crop_j = "fodder_crops"
+crop_j = "Oilpalm"
 j_soy = "Soybean_oil"
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter. 
 # but maybe not with skPk controls. 
-price_k <- K_beef
-# c( "Soybean_oil", "Rapeseed_oil", "Sunflower_oil", 
-#               "Coconut_oil", "Soybeans","Sugar", "Maize") 
+price_k <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", 
+             "Coconut_oil", "Soybeans","Sugar", "Maize")
+# c( "Sugar", "Maize") 
 # "Barley",  "Chicken", "Sheep", "Banana", "Beef", "Olive_oil",
 #               "Orange",  "Cotton",  "Groundnuts",  "Rubber", "Sorghum","Cocoa",  "Coffee",
 #                "Rice",   "Wheat",  "Palm_oil", ), 
 #                "Tea", "Tobacco",  "Oat",  
 #               , "Pork")
-extra_price_k = c("Sheep", "Pork", "Chicken") # , 
-standardized_si = TRUE
-price_lag = 1
+extra_price_k = c() # , "Sheep", "Pork", "Chicken"
 SjPj = TRUE
 SkPk = TRUE
 fe = "grid_id + country_year"
@@ -161,17 +159,17 @@ output = "coef_table"
 # "Maize", "Palm_oil", "Rubber", "Sorghum", "Soybean_oil", 
 # "Sugar", "Tea", "Tobacco", "Wheat", "Oat", "Olive_oil", "Rapeseed_oil", 
 # "Sunflower_oil"
-# rm(dataset, start_year, end_year, crop_j, j_soy, price_k, standardized_si, price_lag, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
+# rm(dataset, start_year, end_year, crop_j, j_soy, price_k, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
 
 make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
-                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           start_year = 2002, 
-                          end_year = 2015, 
+                          end_year = 2020, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
                           crop_j = "Oilpalm", # in GAEZ spelling
                           j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
+                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           SjPj = TRUE,
                           SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
@@ -179,7 +177,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
                           distribution = "gaussian",#  "quasipoisson", 
                           se = "cluster", 
                           cluster ="grid_id",
-                          coefstat = "confint", # one of "se", "tstat", "confint"
+                          # coefstat = "confint", # one of "se", "tstat", "confint"
                           output = "coef_table" # one of "data", "est_obj", "coef_table" 
 ){
   
@@ -287,13 +285,8 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   #                              .names = paste0("{.col}", "_max")))
 
   # Keep only usefull variables
-  if(outcome_variable=="first_loss"){
-    vars <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", outcome_variable, "sbqt_direct_lu", "sbqt_mode_lu",
+  vars <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", outcome_variable, 
               names(d)[grepl(pattern ="_std", x= names(d))])
-  }else {
-    vars <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", outcome_variable, 
-              names(d)[grepl(pattern ="_std", x= names(d))])
-  } 
   d <- dplyr::select(d, all_of(vars))
 
 
@@ -308,12 +301,17 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   # Main regressors
   regressors <- c()
   for(Pk in price_all){
-    varname <- paste0(crop_j, "_r_", original_price_all[match(Pk, price_all)])
+    varname <- paste0(crop_j, "_X_", original_price_all[match(Pk, price_all)])
     regressors <- c(regressors, varname)
     d <- mutate(d, 
                 !!as.symbol(varname) := !!as.symbol(Pk)/(!!as.symbol(revenue_j_std)))
   }
   rm(varname)
+  
+  # Remove the first of the regressors if we do not control for SjPj. The first is necessart SjPj because of the construction of price_all that has price_j first. 
+  if(!SjPj){
+    regressors <- regressors[-1]
+  }
   
   # Controls  
   controls <- c() # it's important that this is not conditioned on SkPk
@@ -394,15 +392,23 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
     
   }
   
-  # this is necessary to compute SE as we want to.  
-  reg_res <- summary(reg_res, se = se,
-                     cluster = cluster)
-  
   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
-  df_res <- reg_res$coeftable
+  # this is necessary to compute SE as we want to.  
+  df_res <- summary(reg_res, se = se,
+                    cluster = cluster)$coeftable
   
-  # Keep only variable of interest, and rename it
-  df_res <- df_res[!grepl(pattern = "ctrl_", x = row.names(df_res)),]
+  # ci <- confint(reg_res, se =se, cluster = cluster, level = 0.95)   
+  # 
+  # df_res <- cbind(df_res, ci)
+  
+  # add a column with the number of observations
+  df_res$Observations <- reg_res$nobs
+  # mat[row.names(mat)=="Observations",] <- mat[row.names(mat)=="Observations",] %>% formatC(digits = 0, format = "f")
+  
+  # add a row with the number of clusters
+  df_res$Clusters <- length(unique(d_clean[,cluster]))
+  # mat[row.names(mat)=="Clusters",] <- mat[row.names(mat)=="Clusters",] %>% formatC(digits = 0, format = "f")
+  
   
   if(output == "data"){
     toreturn <- list(reg_res, d_clean)
@@ -424,14 +430,13 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
 
 make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2002, 
-                          end_year = 2015, 
+                          end_year = 2020, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
                           crop_j = "Oilpalm", # in GAEZ spelling
                           j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
-                          standardized_si = TRUE,
-                          price_lag = 1, 
+                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           SjPj = TRUE,
                           SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
@@ -439,159 +444,114 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
                           distribution = "gaussian",#  "quasipoisson", 
                           se = "cluster", 
                           cluster ="grid_id",
-                          coefstat = "confint", # one of "se", "tstat", "confint"
+                          # coefstat = "confint", # one of "se", "tstat", "confint"
                           output = "coef_table" # one of "data", "est_obj", "coef_table" 
                           ){
 
-   
-  ### DATA 
-  d <- main_data
+  #### PREPARE NEEDED VARIABLE NAMES
+  # this does not involve data, just arguments of the make_reg function 
 
   
-  # ## Outcome variable
-  # if(dataset=="glass"){
-  #   outcome_variable <- "first_loss"} #   "sbqt_direct_lu"      "sbqt_mode_lu" 
-  # if(dataset=="fl8320"){
-  #   outcome_variable <- "firstloss_glassgfc"}
-  # if(dataset=="phtfl"){
-  #   outcome_variable <- "phtf_loss"}
+  ## Price variable names
+  # Explicit the name of the price of j based on crop_j (GAEZ spelling)
+  price_j <- mapmat[mapmat[,"Crops"]==crop_j,"Prices"]
+  names(price_j) <- NULL
   
-  # restrict the outcome variable to evidence of further LU
-  if(outcome_variable == "first_loss" & further_lu_evidence != "none"){
-    if(crop_j == "fodder_crops"){
-      d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 30)) # either direct or mode subsequent lu are grassland
-    }
-    if(crop_j == "Soybean"){
-      d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 10)) # either direct or mode subsequent lu are cropland
-    }
-    if(crop_j %in% c("Oilpalm", "Cocoa", "Coffee")){
-      d <- dplyr::mutate(d, lu_evidence = (sbqt_direct_lu != 20 & sbqt_mode_lu == 20)) # is not forest in the year directly after, but is forest again in the mode subsequent lu. 
-    }
-  }
-  
-#### SPECIFICATIONS    
-  
-  # We need to create the variables we will need, based on:
-  # crop_j, price_k, whether the price is lagged, whether the suitability is standardized, and the controls we want 
-  
-  
-  ### PREPARE EQUIVALENCES BETWEEN SUITABILITY AND PRICE
-  
-  ## Identify the price of j based on crop_j (GAEZ spelling)
-  if(crop_j == "Pasture"){price_j <- "Beef"}
-  if(crop_j == "Oilpalm"){price_j <- "Palm_oil"}
-  if(crop_j == "Soybean"){price_j <- j_soy}
-  if(crop_j == "Cocoa"){price_j <- "Cocoa"}
-  if(crop_j == "Coffee"){price_j <- "Coffee"}
-  
-  ## Do the revert for k: from price of k to the GAEZ crop 
-  
-  # code like that allows to order corresponding crops in crop_k in the same order as in price_k, irrespectively of the order prices are passed to price_k 
-  crop_k <- c()
-  if("Banana"%in% price_k){crop_k[match("Banana", price_k)] <- "Banana"}
-  if("Barley"%in% price_k){crop_k[match("Barley", price_k)] <- "Barley"}
-  # if("Beef"%in% price_k){crop_k[match("Beef", price_k)] <- "Pasture"} # currently does not exist
-  if("Orange"%in% price_k){crop_k[match("Orange", price_k)] <- "Citrus"}
-  if("Cocoa"%in% price_k){crop_k[match("Cocoa", price_k)] <- "Cocoa"}
-  if("Coconut_oil"%in% price_k){crop_k[match("Coconut_oil", price_k)] <- "Coconut"}
-  if("Coffee"%in% price_k){crop_k[match("Coffee", price_k)] <- "Coffee"}
-  if("Cotton"%in% price_k){crop_k[match("Cotton", price_k)] <- "fibre_crops"}
-  if("Groundnuts"%in% price_k){crop_k[match("Groundnuts", price_k)] <- "Groundnut"}
-  if("Maize"%in% price_k){crop_k[match("Maize", price_k)] <- "Maize"}
-  if("Oat"%in% price_k){crop_k[match("Oat", price_k)] <- "Oat"} # aggregate different crops there ? like rye...
-  if("Olive_oil"%in% price_k){crop_k[match("Olive_oil", price_k)] <- "Olive"}
-  if("Palm_oil"%in% price_k){crop_k[match("Palm_oil", price_k)] <- "Oilpalm"}
-  if("Rapeseed_oil"%in% price_k){crop_k[match("Rapeseed_oil", price_k)] <- "Rapeseed"}
-  if("Rice"%in% price_k){crop_k[match("Rice", price_k)] <- "rice_crops"}
-  if("Sorghum"%in% price_k){crop_k[match("Sorghum", price_k)] <- "Sorghum"}
-  if("Soybeans"%in% price_k){crop_k[match("Soybeans", price_k)] <- "Soybean"}
-  if("Soybean_oil"%in% price_k){crop_k[match("Soybean_oil", price_k)] <- "Soybean"}
-  if("Soybean_meal"%in% price_k){crop_k[match("Soybean_meal", price_k)] <- "Soybean"}
-  if("Sugar"%in% price_k){crop_k[match("Sugar", price_k)] <- "sugar_crops"}
-  if("Sunflower_oil"%in% price_k){crop_k[match("Sunflower_oil", price_k)] <- "Sunflower"}
-  if("Tea"%in% price_k){crop_k[match("Tea", price_k)] <- "Tea"}
-  if("Tobacco"%in% price_k){crop_k[match("Tobacco", price_k)] <- "Tobacco"}
-  if("Wheat"%in% price_k){crop_k[match("Wheat", price_k)] <- "Wheat"}
-  if("cereal_crops"%in% price_k){crop_k[match("cereal_crops", price_k)] <- "cereal_crops"}
-  if("oil_crops"%in% price_k){crop_k[match("oil_crops", price_k)] <- "oil_crops"}
-
-  
-  # handle commodities that do not have SI
-  # if("Crude_oil" %in% price_k){crop_k <- c(crop_k, NULL)}
-  # if("Rubber" %in% price_k){crop_k <- c(crop_k, NULL)}
-  # if("Chicken" %in% price_k){crop_k <- c(crop_k, NULL)}
-  # if("Pork" %in% price_k){crop_k <- c(crop_k, NULL)}
-  # if("Sheep" %in% price_k){crop_k <- c(crop_k, NULL)}
-  
-  # this is mostly useless
-  if(length(crop_k) == 0){SkPk <- FALSE}
-
-  
-  ### SELECT PRICE AND SUITABILITY VARIABLES 
-  # first, save price_k for later purpose 
-  original_price_j <- price_j 
-  original_price_k <- price_k 
-  original_extra_price_k <- extra_price_k 
+  # Group the names of the different prices 
   original_price_all <- c(price_j, price_k, extra_price_k)
-  
-  # For j
-  if(price_lag != 0){price_j <- paste0(price_j,"_lag",price_lag)}
-  price_j <- paste0("ln_", price_j)
-  
-  # For k 
-  if(price_lag != 0){price_k <- paste0(price_k,"_lag",price_lag)}
-  # don't condition that, as we won't use non logged prices a priori. 
+  original_price_k <- price_k
+  # lag and log
+  price_all <- paste0(original_price_all, "_", price_info)
+  price_all <- paste0("ln_", price_all)
+  price_k <- paste0(original_price_k, "_", price_info)
   price_k <- paste0("ln_", price_k)
 
-  # For extra commodities k 
-  if(length(extra_price_k) > 0){
-    if(price_lag != 0){extra_price_k <- paste0(extra_price_k,"_lag",price_lag)}
-    extra_price_k <- paste0("ln_", extra_price_k)
-  }
+  ## Suitability index variable names
+
+  # Explicit the name of the variable sj, the standardized suitability index of j. 
+  suitability_j_std <- paste0(crop_j, "_std")  
   
-  # group all prices transformed
-  price_all <- c(price_j, price_k, extra_price_k)
+  # Explicit the names of the sk variables corresponding to commodities in price_k only (i.e. not in price_j nor extra_price_k)
+  # match function is important because suitability_k_std must have commodities in the same order as price_k 
+  crop_k <- mapmat[,"Crops"][match(original_price_k, mapmat[,"Prices"])]
+  suitability_k_std <- paste0(crop_k, "_std")
   
-  # Identify the suitability index needed - don't condition that either for now, as the non stded indexes are not in the main dataset now (for memory issues) we'll see later how to conduct the rob check
-  suitability_j <- paste0(crop_j, "_std")
-  suitability_k <- paste0(crop_k, "_std")
+  
+  
+  
+  # ### SELECT PRICE AND SUITABILITY VARIABLES 
+  # # first, save price_k for later purpose 
+  # original_price_j <- price_j 
+  # original_price_k <- price_k 
+  # original_extra_price_k <- extra_price_k 
+  # original_price_all <- c(price_j, price_k, extra_price_k)
+  # 
+  # # For j
+  # if(price_lag != 0){price_j <- paste0(price_j,"_lag",price_lag)}
+  # price_j <- paste0("ln_", price_j)
+  # 
+  # # For k 
+  # if(price_lag != 0){price_k <- paste0(price_k,"_lag",price_lag)}
+  # # don't condition that, as we won't use non logged prices a priori. 
+  # price_k <- paste0("ln_", price_k)
+  # 
+  # # For extra commodities k 
+  # if(length(extra_price_k) > 0){
+  #   if(price_lag != 0){extra_price_k <- paste0(extra_price_k,"_lag",price_lag)}
+  #   extra_price_k <- paste0("ln_", extra_price_k)
+  # }
+  
+  # # group all prices transformed
+  # price_all <- c(price_j, price_k, extra_price_k)
+  
+
+  
+  
+  #### MAKE THE VARIABLES NEEDED IN THE DATA
+  #d <- main_data
+  if(outcome_variable == "first_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))}
+  if(outcome_variable == "firstloss_glassgfc"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aesi_long_final.Rdata"))}
+  if(outcome_variable == "phtf_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))}
   
   # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(c("grid_id", "year", "country_name", "country_year",
-                               outcome_variable, suitability_j, suitability_k))) 
+  d <- dplyr::select(d, all_of(c("grid_id", "year", "country_name", "country_year", outcome_variable, 
+                               suitability_j_std, suitability_k_std))) 
     
   # and keep only the cells with positive suitability for crop j 
-  d <- dplyr::filter(d, !!as.symbol(suitability_j) > 0)
+  d <- dplyr::filter(d, !!as.symbol(suitability_j_std) > 0)
 
   # Merge only the prices needed, not the whole price dataframe
   d <- left_join(d, prices[,c("year", price_all)], by = "year")
   
   
-  ### MAKE NECESSARY VARIABLES 
-
   # Main regressors
   regressors <- c()
-  for(k in price_all){
-    varname <- paste0(crop_j, "_", original_price_all[match(k, price_all)])
+  for(Pk in price_all){
+    varname <- paste0(crop_j, "_X_", original_price_all[match(Pk, price_all)])
     regressors <- c(regressors, varname)
     d <- mutate(d, 
-                !!as.symbol(varname) := !!as.symbol(k)/(!!as.symbol(suitability_j)))
+                !!as.symbol(varname) := !!as.symbol(Pk)/(!!as.symbol(suitability_j_std)))
+  }
+  rm(varname)
+  
+  # Remove the first of the regressors if we do not control for SjPj. The first is necessart SjPj because of the construction of price_all that has price_j first. 
+  if(!SjPj){
+    regressors <- regressors[-1]
   }
   
-  # Controls
-  controls <- c()
+  # Controls  
+  controls <- c() # it's important that this is not conditioned on SkPk
   if(SkPk){
-    for(i in 1:length(suitability_k)){
-      varname <- paste0("ctrl_", original_price_k[i])
+    for(Pk in price_k){
+      sk <- suitability_k_std[match(Pk, price_k)]
+      varname <- paste0("ctrl_", original_price_k[match(Pk, price_k)])
       controls <- c(controls, varname)
       d <- mutate(d, 
-                  !!as.symbol(varname) := !!as.symbol(suitability_k[i])*!!as.symbol(price_k[i]))
+                  !!as.symbol(varname) := !!as.symbol(sk)*!!as.symbol(Pk))
     }
   }
-  
+  rm(varname)
 
-  # # if(SkPk){controls <- c(controls, "SkPk")}
-  # if(SjPj){controls <- c(controls, "SjPj")} 
   
   # MODEL SPECIFICATION FORMULAE
   if(length(controls) > 0){
@@ -656,15 +616,23 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
    
   }
   
-  # this is necessary to compute SE as we want to.  
-  reg_res <- summary(reg_res, se = se,
-                    cluster = cluster)
-  
   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
-  df_res <- reg_res$coeftable
+  # this is necessary to compute SE as we want to.  
+  df_res <- summary(reg_res, se = se,
+                    cluster = cluster)$coeftable
   
-  # Keep only variable of interest, and rename it
-  df_res <- df_res[!grepl(pattern = "ctrl_", x = row.names(df_res)),]
+  # ci <- confint(reg_res, se =se, cluster = cluster, level = 0.95)   
+  # 
+  # df_res <- cbind(df_res, ci)
+  
+  # add a column with the number of observations
+  df_res$Observations <- reg_res$nobs
+  # mat[row.names(mat)=="Observations",] <- mat[row.names(mat)=="Observations",] %>% formatC(digits = 0, format = "f")
+  
+  # add a row with the number of clusters
+  df_res$Clusters <- length(unique(d_clean[,cluster]))
+  # mat[row.names(mat)=="Clusters",] <- mat[row.names(mat)=="Clusters",] %>% formatC(digits = 0, format = "f")
+  
   
   if(output == "data"){
     toreturn <- list(reg_res, d_clean)
@@ -681,6 +649,170 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
   return(toreturn)
   rm(toreturn)
 }
+
+
+# This function takes as main input the table of results outputted from one regression. It's purpose is to be applied over a list of such results. 
+make_table_mat <- function(df_res, rounding=5){
+  
+  # Note if there are SkPk controls
+  SkPk <- any(grepl(pattern = "ctrl_", x = row.names(df_res)))
+  # Keep only variable of interest
+  df_res <- df_res[!grepl(pattern = "ctrl_", x = row.names(df_res)),]  
+  
+  df_res <- round(df_res, digits = rounding)
+  
+  
+  # make a one column matrix with all coeficient point estimates and std error next to each others
+  # for each coefficient we want the point estimate and the std error (hence *2). In addition we want # obs. and # clusters (hence +2)
+  
+  mat_res <- NULL
+  for(i in 1:nrow(df_res)){
+    mat_res <- rbind(mat_res, as.matrix(df_res[i,"Estimate"]), as.matrix(paste0("(",df_res[i,"Std. Error"],")")))
+  }
+  
+  # make row names
+  k_crops <- row.names(df_res)
+  k_crops <- sub(pattern = ".+?(_X_)", x = k_crops, replacement = "") # replace everything before the first underscore with nothing
+  names <- c()
+  for(crop in k_crops){
+    names <- c(names, crop, "")
+  }
+  row.names(mat_res) <- names 
+  
+  # Mark whether there were controls or not
+  if(SkPk){
+    mat_res <- rbind(mat_res, "X")
+  } else {
+    mat_res <- rbind(mat_res, "")
+  }
+  row.names(mat_res)[nrow(mat_res)] <- "Controls"
+  
+  # Indicate the number of observations and clusters
+  mat_res <- rbind(mat_res, unique(df_res$Observations))
+  row.names(mat_res)[nrow(mat_res)] <- "Observations"
+
+  mat_res <- rbind(mat_res, unique(df_res$Clusters))
+  row.names(mat_res)[nrow(mat_res)] <- "Clusters"
+  return(mat_res)
+  
+}
+
+
+
+#### CONSTRUCT MAIN TABLE ####
+
+# We build 5 tables, one for each j crop. 
+# These tables compare first_loss and phtf_loss, for the same period, 2002, 2020, for acay (rj) and aesi (sj) models, with and without controlling for SkPk. 
+
+### BEEF
+K_beef <- c("Soybeans", "Soybean_meal", "Palm_oil", 
+            "cereal_crops") # in prices spelling "Barley", "Oat", "Sorghum", "Maize", "Rice"
+
+res_data_list_full <- list()
+elm <- 1
+
+# Forest definition
+outcome_variableS <- c("first_loss", "phtf_loss")
+
+# with controls or not 
+control_ornot <- c(FALSE, TRUE)
+
+
+for(OV in outcome_variableS){
+  for(CTRL in control_ornot){
+    res_data_list_full[[elm]] <- make_reg_acay(outcome_variable = OV,
+                                               start_year = 2002, end_year = 2020,
+                                               crop_j = "fodder_crops",
+                                               price_k = K_beef,
+                                               SkPk= CTRL,
+                                               extra_price_k = c())#"Sheep", "Pork", "Chicken"
+    names(res_data_list_full)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    elm <- elm + 1
+    
+    res_data_list_full[[elm]] <- make_reg_aesi(outcome_variable = OV,
+                                               start_year = 2002, end_year = 2020,
+                                               crop_j = "fodder_crops",
+                                               price_k = K_beef,
+                                               SkPk= CTRL,
+                                               extra_price_k = c())#"Sheep", "Pork", "Chicken"
+    names(res_data_list_full)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    elm <- elm + 1
+  }
+}
+
+rm(ape_mat)
+ape_mat <- bind_cols(lapply(res_data_list_full, FUN = make_table_mat)) %>% as.matrix()
+row.names(ape_mat) <- rep("", nrow(ape_mat))
+row.names(ape_mat)[(nrow(ape_mat)-2):nrow(ape_mat)] <- c("Controls", "Observations", "Clusters") 
+ape_mat
+colnames(ape_mat) <- NULL
+
+options(knitr.table.format = "latex")
+kable(ape_mat, booktabs = T, align = "r",
+      caption = "Indirect effects of global commodity markets on deforestation for cattle") %>% #of 1 percentage change in medium-run price signal
+  kable_styling(latex_options = c("scale_down", "hold_position")) %>%
+  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+                   bold = F,
+                   align = "c") %>%
+  add_header_above(c(" " = 1, "First loss measure" = 4,"Primary forest loss measure" = 4),
+                   align = "c",
+                   strikeout = F) %>%
+  # pack_rows(start_row =  nrow(ape_mat)-1, end_row = nrow(ape_mat),  latex_gap_space = "0.5em", hline_before = FALSE) %>% 
+  column_spec(column = 1,
+              width = "7em",
+              latex_valign = "b") %>% 
+  column_spec(column = c(2:(ncol(ape_mat))),
+              width = "7em",
+              latex_valign = "b") 
+
+
+
+### PALM OIL
+K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+
+oilpalm_res <- make_reg_acay(outcome_variable = OV,
+                             start_year = SY, end_year = EY,
+                             crop_j = "Oilpalm",
+                             price_k = K_palmoil,
+                             extra_price_k = "Crude_oil")
+
+
+### SOY 
+K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", 
+           "Sugar", "Maize") # in prices spelling "Olive_oil",
+
+
+soy_res <- make_reg_acay(outcome_variable = OV,
+                         start_year = SY, end_year = EY, 
+                         crop_j = "Soybean", 
+                         price_k = K_soy, 
+                         extra_price_k = "Crude_oil")
+
+
+### COCOA 
+K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
+
+
+cocoa_res <- make_reg_acay(outcome_variable = OV,
+                           start_year = SY, end_year = EY, 
+                           crop_j = "Cocoa", 
+                           price_k = K_cocoa)
+
+
+### COFFEE 
+K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
+
+
+coffee_res <- make_reg_acay(outcome_variable = OV,
+                            start_year = SY, end_year = EY, 
+                            crop_j = "Coffee", 
+                            price_k = K_coffee)
+
+
+
+
+
 
 #### RUN AND PLOT ACAY ####
 OV <- "phtf_loss"
@@ -748,8 +880,8 @@ coffee_res <- make_reg_acay(outcome_variable = OV,
 # prepare regression outputs in a tidy data frame readable by dwplot
 rm(df)
 df <- rbind(beef_res, oilpalm_res, soy_res, cocoa_res, coffee_res)#
-df$model <- gsub(pattern = "_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
-df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+df$model <- gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
 
 names(df)[names(df)=="Estimate"] <- "estimate"
 names(df)[names(df)=="Std. Error"] <- "std.error"
