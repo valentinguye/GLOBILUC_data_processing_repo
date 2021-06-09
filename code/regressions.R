@@ -652,7 +652,7 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
 
 
 # This function takes as main input the table of results outputted from one regression. It's purpose is to be applied over a list of such results. 
-make_table_mat <- function(df_res, rounding=5){
+make_table_mat <- function(df_res, rounding=4){
   
   # Note if there are SkPk controls
   SkPk <- any(grepl(pattern = "ctrl_", x = row.names(df_res)))
@@ -698,8 +698,48 @@ make_table_mat <- function(df_res, rounding=5){
 }
 
 
+#### DESCRIPTIVE STATISTICS #### 
+# make_des_stats <- function(outcome_variable, 
+#                            crop_j,
+#                            start_year = 2002, 
+#                            end_year = 2020, 
+#                            qj = "rj", 
+#                            price_info = "lag1")
 
-#### CONSTRUCT MAIN TABLE ####
+# For both measures aesi and acay, we compute a summarising quantity for each crop j. 
+# For each crop j, this quantity differs in the forest loss measure, and the time and space it is aggregated to. 
+# Depending on what forest loss measure is used, we need to convert to hectares differently. 
+
+# For oil palm, GFR compute GFC forest loss in plantation boundaries and outside 2000's plantations for Indonesia and Malaysia.  
+
+#### AESI
+## OIL PALM 
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
+d <- dplyr::select(d, grid_id, year, country_name, phtf_loss, Oilpalm_std)
+d <- dplyr::mutate(d, Y_oilpalm = phtf_loss*Oilpalm_std)
+
+### SOY
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
+d <- dplyr::select(d, grid_id, year, country_name, firstloss_glassgfc, Soybean_std)
+d <- dplyr::mutate(d, Y_soybean = firstloss_glassgfc*Soybean_std)
+
+
+### COCOA
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
+d <- dplyr::select(d, grid_id, year, country_name, firstloss_glassgfc, Cocoa_std)
+d <- dplyr::mutate(d, Y_Cocoa = firstloss_glassgfc*Cocoa_std)
+
+### COFFEE
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
+d <- dplyr::select(d, grid_id, year, country_name, firstloss_glassgfc, Coffee_std)
+d <- dplyr::mutate(d, Y_coffee = firstloss_glassgfc*Coffee_std)
+
+
+
+
+
+
+#### CONSTRUCT SPECIFICATION COMPARATIVE TABLES ####
 
 # We build 5 tables, one for each j crop. 
 # These tables compare first_loss and phtf_loss, for the same period, 2002, 2020, for acay (rj) and aesi (sj) models, with and without controlling for SkPk. 
@@ -708,11 +748,11 @@ make_table_mat <- function(df_res, rounding=5){
 K_beef <- c("Soybeans", "Soybean_meal", "Palm_oil", 
             "cereal_crops") # in prices spelling "Barley", "Oat", "Sorghum", "Maize", "Rice"
 
-res_data_list_full <- list()
+res_list_beef <- list()
 elm <- 1
 
 # Forest definition
-outcome_variableS <- c("first_loss", "phtf_loss")
+outcome_variableS <- c("firstloss_glassgfc", "phtf_loss")
 
 # with controls or not 
 control_ornot <- c(FALSE, TRUE)
@@ -720,44 +760,43 @@ control_ornot <- c(FALSE, TRUE)
 
 for(OV in outcome_variableS){
   for(CTRL in control_ornot){
-    res_data_list_full[[elm]] <- make_reg_acay(outcome_variable = OV,
+    res_list_beef[[elm]] <- make_reg_acay(outcome_variable = OV,
                                                start_year = 2002, end_year = 2020,
                                                crop_j = "fodder_crops",
                                                price_k = K_beef,
                                                SkPk= CTRL,
                                                extra_price_k = c())#"Sheep", "Pork", "Chicken"
-    names(res_data_list_full)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    names(res_list_beef)[elm] <- paste0(OV,"_",CTRL, "_acay")
     elm <- elm + 1
     
-    res_data_list_full[[elm]] <- make_reg_aesi(outcome_variable = OV,
+    res_list_beef[[elm]] <- make_reg_aesi(outcome_variable = OV,
                                                start_year = 2002, end_year = 2020,
                                                crop_j = "fodder_crops",
                                                price_k = K_beef,
                                                SkPk= CTRL,
                                                extra_price_k = c())#"Sheep", "Pork", "Chicken"
-    names(res_data_list_full)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    names(res_list_beef)[elm] <- paste0(OV,"_",CTRL, "_aesi")
     elm <- elm + 1
   }
 }
 
+# Prepare matrix for table
 rm(ape_mat)
-ape_mat <- bind_cols(lapply(res_data_list_full, FUN = make_table_mat)) %>% as.matrix()
-row.names(ape_mat) <- rep("", nrow(ape_mat))
-row.names(ape_mat)[(nrow(ape_mat)-2):nrow(ape_mat)] <- c("Controls", "Observations", "Clusters") 
+ape_mat <- bind_cols(lapply(res_list_beef, FUN = make_table_mat)) %>% as.matrix()
+row.names(ape_mat) <- make_table_mat(res_list_beef[[1]]) %>% row.names()
 ape_mat
 colnames(ape_mat) <- NULL
 
 options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
-      caption = "Indirect effects of global commodity markets on deforestation for cattle") %>% #of 1 percentage change in medium-run price signal
+      caption = "Indirect effects of global commodity markets on deforestation for cattle, 2002-2020") %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
   add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "First loss measure" = 4,"Primary forest loss measure" = 4),
+  add_header_above(c(" " = 1, "First loss" = 4,"Primary forest loss" = 4),
                    align = "c",
                    strikeout = F) %>%
-  # pack_rows(start_row =  nrow(ape_mat)-1, end_row = nrow(ape_mat),  latex_gap_space = "0.5em", hline_before = FALSE) %>% 
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -768,14 +807,65 @@ kable(ape_mat, booktabs = T, align = "r",
 
 
 ### PALM OIL
-K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
+K_oilpalm <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
                "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
 
-oilpalm_res <- make_reg_acay(outcome_variable = OV,
-                             start_year = SY, end_year = EY,
-                             crop_j = "Oilpalm",
-                             price_k = K_palmoil,
-                             extra_price_k = "Crude_oil")
+
+res_list_oilpalm <- list()
+elm <- 1
+
+# Forest definition
+outcome_variableS <- c("firstloss_glassgfc", "phtf_loss")
+
+# with controls or not 
+control_ornot <- c(FALSE, TRUE)
+
+for(OV in outcome_variableS){
+  for(CTRL in control_ornot){
+    res_list_oilpalm[[elm]] <- make_reg_acay(outcome_variable = OV,
+                                               start_year = 2002, end_year = 2020,
+                                               crop_j = "Oilpalm",
+                                               price_k = K_oilpalm,
+                                               SkPk= CTRL,
+                                               extra_price_k = c())#
+    names(res_list_oilpalm)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    elm <- elm + 1
+    
+    res_list_oilpalm[[elm]] <- make_reg_aesi(outcome_variable = OV,
+                                               start_year = 2002, end_year = 2020,
+                                               crop_j = "Oilpalm",
+                                               price_k = K_oilpalm,
+                                               SkPk= CTRL,
+                                               extra_price_k = c())#
+    names(res_list_oilpalm)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    elm <- elm + 1
+  }
+}
+
+# Prepare matrix for table
+rm(ape_mat)
+ape_mat <- bind_cols(lapply(res_list_oilpalm, FUN = make_table_mat)) %>% as.matrix()
+row.names(ape_mat) <- make_table_mat(res_list_oilpalm[[1]]) %>% row.names()
+ape_mat
+colnames(ape_mat) <- NULL
+
+options(knitr.table.format = "latex")
+kable(ape_mat, booktabs = T, align = "r",
+      caption = "Indirect effects of global commodity markets on deforestation for oil palm, 2002-2020") %>% #
+  kable_styling(latex_options = c("scale_down", "hold_position")) %>%
+  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+                   bold = F,
+                   align = "c") %>%
+  add_header_above(c(" " = 1, "First loss" = 4,"Primary forest loss" = 4),
+                   align = "c",
+                   strikeout = F) %>%
+  column_spec(column = 1,
+              width = "7em",
+              latex_valign = "b") %>% 
+  column_spec(column = c(2:(ncol(ape_mat))),
+              width = "7em",
+              latex_valign = "b") 
+
 
 
 ### SOY 
@@ -783,33 +873,178 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
            "Sugar", "Maize") # in prices spelling "Olive_oil",
 
 
-soy_res <- make_reg_acay(outcome_variable = OV,
-                         start_year = SY, end_year = EY, 
-                         crop_j = "Soybean", 
-                         price_k = K_soy, 
-                         extra_price_k = "Crude_oil")
+res_list_soy <- list()
+elm <- 1
 
+# Forest definition
+outcome_variableS <- c("firstloss_glassgfc", "phtf_loss")
+
+# with controls or not 
+control_ornot <- c(FALSE, TRUE)
+
+for(OV in outcome_variableS){
+  for(CTRL in control_ornot){
+    res_list_soy[[elm]] <- make_reg_acay(outcome_variable = OV,
+                                             start_year = 2002, end_year = 2020,
+                                             crop_j = "Soybean",
+                                             price_k = K_soy,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#
+    names(res_list_soy)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    elm <- elm + 1
+    
+    res_list_soy[[elm]] <- make_reg_aesi(outcome_variable = OV,
+                                             start_year = 2002, end_year = 2020,
+                                             crop_j = "Soybean",
+                                             price_k = K_soy,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#
+    names(res_list_soy)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    elm <- elm + 1
+  }
+}
+
+# Prepare matrix for table
+rm(ape_mat)
+ape_mat <- bind_cols(lapply(res_list_soy, FUN = make_table_mat)) %>% as.matrix()
+row.names(ape_mat) <- make_table_mat(res_list_soy[[1]]) %>% row.names()
+ape_mat
+colnames(ape_mat) <- NULL
+
+options(knitr.table.format = "latex")
+kable(ape_mat, booktabs = T, align = "r",
+      caption = "Indirect effects of global commodity markets on deforestation for soy, 2002-2020") %>% #
+  kable_styling(latex_options = c("scale_down", "hold_position")) %>%
+  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+                   bold = F,
+                   align = "c") %>%
+  add_header_above(c(" " = 1, "First loss" = 4,"Primary forest loss" = 4),
+                   align = "c",
+                   strikeout = F) %>%
+  column_spec(column = 1,
+              width = "7em",
+              latex_valign = "b") %>% 
+  column_spec(column = c(2:(ncol(ape_mat))),
+              width = "7em",
+              latex_valign = "b") 
 
 ### COCOA 
 K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
 
 
-cocoa_res <- make_reg_acay(outcome_variable = OV,
-                           start_year = SY, end_year = EY, 
-                           crop_j = "Cocoa", 
-                           price_k = K_cocoa)
+res_list_cocoa <- list()
+elm <- 1
 
+# Forest definition
+outcome_variableS <- c("firstloss_glassgfc", "phtf_loss")
+
+# with controls or not 
+control_ornot <- c(FALSE, TRUE)
+
+for(OV in outcome_variableS){
+  for(CTRL in control_ornot){
+    res_list_cocoa[[elm]] <- make_reg_acay(outcome_variable = OV,
+                                             start_year = 2002, end_year = 2020,
+                                             crop_j = "Cocoa",
+                                             price_k = K_cocoa,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#
+    names(res_list_cocoa)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    elm <- elm + 1
+    
+    res_list_cocoa[[elm]] <- make_reg_aesi(outcome_variable = OV,
+                                             start_year = 2002, end_year = 2020,
+                                             crop_j = "Cocoa",
+                                             price_k = K_cocoa,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#
+    names(res_list_cocoa)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    elm <- elm + 1
+  }
+}
+
+# Prepare matrix for table
+rm(ape_mat)
+ape_mat <- bind_cols(lapply(res_list_cocoa, FUN = make_table_mat)) %>% as.matrix()
+row.names(ape_mat) <- make_table_mat(res_list_cocoa[[1]]) %>% row.names()
+ape_mat
+colnames(ape_mat) <- NULL
+
+options(knitr.table.format = "latex")
+kable(ape_mat, booktabs = T, align = "r",
+      caption = "Indirect effects of global commodity markets on deforestation for cocoa, 2002-2020") %>% #
+  kable_styling(latex_options = c("scale_down", "hold_position")) %>%
+  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+                   bold = F,
+                   align = "c") %>%
+  add_header_above(c(" " = 1, "First loss" = 4,"Primary forest loss" = 4),
+                   align = "c",
+                   strikeout = F) %>%
+  column_spec(column = 1,
+              width = "7em",
+              latex_valign = "b") %>% 
+  column_spec(column = c(2:(ncol(ape_mat))),
+              width = "7em",
+              latex_valign = "b") 
 
 ### COFFEE 
 K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 
 
-coffee_res <- make_reg_acay(outcome_variable = OV,
-                            start_year = SY, end_year = EY, 
-                            crop_j = "Coffee", 
-                            price_k = K_coffee)
+res_list_coffee <- list()
+elm <- 1
 
+# Forest definition
+outcome_variableS <- c("firstloss_glassgfc", "phtf_loss")
 
+# with controls or not 
+control_ornot <- c(FALSE, TRUE)
+
+for(OV in outcome_variableS){
+  for(CTRL in control_ornot){
+    res_list_coffee[[elm]] <- make_reg_acay(outcome_variable = OV,
+                                             start_year = 2002, end_year = 2020,
+                                             crop_j = "Coffee",
+                                             price_k = K_coffee,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#
+    names(res_list_coffee)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    elm <- elm + 1
+    
+    res_list_coffee[[elm]] <- make_reg_aesi(outcome_variable = OV,
+                                             start_year = 2002, end_year = 2020,
+                                             crop_j = "Coffee",
+                                             price_k = K_coffee,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#
+    names(res_list_coffee)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    elm <- elm + 1
+  }
+}
+
+# Prepare matrix for table
+rm(ape_mat)
+ape_mat <- bind_cols(lapply(res_list_coffee, FUN = make_table_mat)) %>% as.matrix()
+row.names(ape_mat) <- make_table_mat(res_list_coffee[[1]]) %>% row.names()
+ape_mat
+colnames(ape_mat) <- NULL
+
+options(knitr.table.format = "latex")
+kable(ape_mat, booktabs = T, align = "r",
+      caption = "Indirect effects of global commodity markets on deforestation for coffee, 2002-2020") %>% #
+  kable_styling(latex_options = c("scale_down", "hold_position")) %>%
+  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+                   bold = F,
+                   align = "c") %>%
+  add_header_above(c(" " = 1, "First loss" = 4,"Primary forest loss" = 4),
+                   align = "c",
+                   strikeout = F) %>%
+  column_spec(column = 1,
+              width = "7em",
+              latex_valign = "b") %>% 
+  column_spec(column = c(2:(ncol(ape_mat))),
+              width = "7em",
+              latex_valign = "b") 
 
 
 
