@@ -13,7 +13,7 @@
 # These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
 neededPackages = c("plyr", "dplyr", "here", #"tibble", "data.table",
                    "foreign", # "readxl",
-                   # "raster", "rgdal",  "sp", "sf", # "spdep",
+                   "raster", "rgdal",  "sp", "sf", # "spdep",
                    "DataCombine",
                    "knitr", "kableExtra",
                    "fixest", #,"msm", "car",  "sandwich", "lmtest", "boot", "multcomp",
@@ -652,7 +652,9 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
 
 
 # This function takes as main input the table of results outputted from one regression. It's purpose is to be applied over a list of such results. 
-make_table_mat <- function(df_res, rounding=4){
+make_table_mat <- function(df_res, 
+                           rounding=4
+                           ){
   
   # Note if there are SkPk controls
   SkPk <- any(grepl(pattern = "ctrl_", x = row.names(df_res)))
@@ -706,13 +708,98 @@ make_table_mat <- function(df_res, rounding=4){
 #                            qj = "rj", 
 #                            price_info = "lag1")
 
-# For both measures aesi and acay, we compute one or more summarizing quantities for each crop j. 
-# For each crop j, these quantities differ in the forest loss measure, and the time and space it is aggregated to. 
-# Depending on what forest loss measure is used, we need to convert to hectares differently. 
+
+# For each crop j, we produce two quantities, for aesi and acay. 
+# Across crops, these quantities differ in the forest loss measure, and (the time and) space it is aggregated to. 
+
+# For acay we need to compute the revenue here. This helper function does it
+make_rj <- function(data, crop_j, price_info){
+  ## Revenue variable names
+  # To determine land use, only the potential revenue of soybeans is considered (for simplicity) 
+  all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & mapmat[,"Prices"]!="Soybean_meal" ,"Prices"]
+  all_crop_acay <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & mapmat[,"Prices"]!="Soybean_meal" ,"Crops"]
+  
+  # We will construct expected revenues for all crops - not just those in price_k or crop_j.
+  # Thus we take the first lag or the X past year average of the prices, but not the log.
+  prices_4_revenue <- paste0(all_crop_prices, "_", price_info)
+  
+  # Explicit the name of the variable rj, the standardized potential revenue of j. 
+  revenue_j <- paste0("R_", crop_j)
+  revenue_j_std <- paste0(revenue_j, "_std")
+  
+
+  ### MAKE THE VARIABLES NEEDED IN THE DATA
+  
+  ### PREPARE rj, the standardized achievable revenues
+  
+  # Merge only the prices needed, not the whole price dataframe
+  data <- left_join(data, prices[,c("year", prices_4_revenue)], by = "year")
+  
+  # Agro-climatic achievable yield data from GAEZ are in t/ha (as shown by the Map tool on the platform)
+  # Prices have been converted to $/t in prepare_prices.R
+  for(i in 1:length(prices_4_revenue)){
+    price_i <- prices_4_revenue[i]
+    revenue_i <- paste0("R_", all_crop_acay[i])
+    acay_i <- all_crop_acay[i]
+    data <- dplyr::mutate(data, 
+                       !!as.symbol(revenue_i) := !!as.symbol(acay_i)*!!as.symbol(price_i))
+  }
+  rm(price_i, revenue_i, acay_i)                   
+  
+  # scale fodder crop revenues by a feed conversion ratio. 
+  # Following Alexander et al. 2016, 25 tons of feed transform into 1 ton of beef meat (in edible weight). 
+  # Thus, every ton of feed counted in R_fodder_crops (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/25 ton of beef meat  
+  data <- dplyr::mutate(data, R_fodder_crops = R_fodder_crops/25)
+  
+  
+  ## Standardize the revenue variable(s) needed here -> stream dj = Rj/sumRi 
+  
+  # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
+  data <- dplyr::mutate(data, Ri_sum = rowSums(across(.cols = starts_with("R_", ignore.case = FALSE))))
+  
+  data <- dplyr::mutate(data, !!as.symbol(revenue_j_std) := !!as.symbol(revenue_j)/Ri_sum)
+  
+  ## Construct the max indicatrice -> stream dj = 1[Rj = maxRi]
+  # data <- dplyr::mutate(data, across(.cols = starts_with("R_", ignore.case = FALSE),
+  #                              .names = paste0("{.col}", "_max")))
+  
+  return(data)
+  
+}
+
+# Infrastructure to store results
+defo_table <- matrix(nrow = 5, ncol = 5, data = "")
+colnames(defo_table) <- c("Crop", "Region", "Goldman et al. 2020 estimate", "AESI estimate", "ACAY estimate")
+row.names(defo_table) <- c("Pasture", "Oil palm", "Soybean", "Cocoa", "Coffee")
+
+# First we need to prepare some shapes for Soy and Cattle
+countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
+
+# We simplify the continent but not Brazil, as the border effect on deforestation is significant (Burgess) 
+brazil <- countries[countries$COUNTRY_NA=="Brazil",] %>% st_geometry() %>% 
+  st_transform("EPSG:31970","+proj=utm +zone=16 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs") 
+
+southam <- countries[countries$COUNTRY_NA=="Argentina" |
+                       countries$COUNTRY_NA=="Bolivia" |
+                       countries$COUNTRY_NA=="Brazil" | countries$COUNTRY_NA=="Isla Brasilera (disp)" | 
+                       countries$COUNTRY_NA=="Chile" |   
+                       countries$COUNTRY_NA=="Colombia" | 
+                       countries$COUNTRY_NA=="Ecuador" | 
+                       countries$COUNTRY_NA=="French Guiana (Fr)" |
+                       countries$COUNTRY_NA=="Guyana" |
+                       countries$COUNTRY_NA=="Panama" |
+                       countries$COUNTRY_NA=="Paraguay" | 
+                       countries$COUNTRY_NA=="Peru" | 
+                       countries$COUNTRY_NA=="Suriname" | 
+                       countries$COUNTRY_NA=="Trinidad & Tobago" | 
+                       countries$COUNTRY_NA=="Uruguay" | 
+                       countries$COUNTRY_NA=="Venezuela"  ,] %>% st_union() %>% st_geometry() %>% 
+  st_transform("EPSG:31970","+proj=utm +zone=16 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs") %>% 
+  st_simplify(dTolerance = 10000) # simplifies by 10km
 
 
-#### AESI
-## OIL PALM 
+### OIL PALM 
+## AESI
 # Summarize at global (tropical) scale, first loss,in 2001-2015. 
 d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
 d <- dplyr::select(d, grid_id, year, country_name, first_loss, Oilpalm_std)
@@ -722,9 +809,61 @@ summary(d$first_loss)
 summary(d$Y_oilpalm)
 
 ### SOY
-d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
-d <- dplyr::select(d, grid_id, year, country_name, firstloss_glassgfc, Soybean_std)
-d <- dplyr::mutate(d, Y_soybean = firstloss_glassgfc*Soybean_std)
+# For soy, we input different data, prepared in south_america_track.R
+# This is necessary because we want to compare to a measure of deforestation to soy in Goldman et al. 2020 that aggregates the whole continent.
+
+## AESI
+d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aesi_long_final.Rdata"))
+d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, Soybean_std)
+d <- dplyr::mutate(d, Y_soybean = first_loss*Soybean_std)
+
+# add up annual deforestation over the period
+d <- dplyr::filter(d, year >= 2001 & year <= 2015)
+
+accu <- ddply(d, "grid_id", summarise, accu_defo = sum(Y_soybean, na.rm = TRUE))
+d_cs <- d[!duplicated(d$grid_id), c("grid_id", "year", "lon", "lat")]
+accu <- left_join(accu, d_cs, by = "grid_id")
+
+
+# Restrict to cells in South America 
+accu <- st_as_sf(accu, coords=c("lon", "lat"), crs = 4326)
+accu <- st_transform(accu, "EPSG:31970","+proj=utm +zone=16 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs") 
+
+plot(st_geometry(accu))
+
+sgbp <- st_within(accu, southam)
+
+accu_southam <- accu[lengths(sgbp)>0,]
+
+defo_table["Soybean", "AESI estimate"] <- round(sum(accu_southam$accu_defo)/1e6,digits=2) 
+
+## ACAY
+d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_acay_long_final.Rdata"))
+# here we need to construct rj 
+d <- make_rj(data = d, crop_j = "Soybean", price_info = "lag1")
+d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, R_Soybean_std)
+d <- dplyr::mutate(d, Y_soybean = first_loss*R_Soybean_std)
+
+# add up annual deforestation over the period
+d <- dplyr::filter(d, year >= 2001 & year <= 2015)
+accu <- ddply(d, "grid_id", summarise, accu_defo = sum(Y_soybean, na.rm = TRUE))
+d_cs <- d[!duplicated(d$grid_id), c("grid_id", "lon", "lat")]
+accu <- left_join(accu, d_cs, by = "grid_id")
+
+
+# Restrict to cells in South America 
+# not necessary to compute sgbp again (which is long), just reuse that of aesi
+# (Even if there are missing in rj that were not in sj, there is no filtering based on this.)
+
+# accu <- st_as_sf(accu, coords=c("lon", "lat"), crs = 4326)
+# accu <- st_transform(accu, "EPSG:31970","+proj=utm +zone=16 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs") 
+
+# sgbp <- st_within(accu, southam)
+
+accu_southam <- accu[lengths(sgbp)>0,]
+
+defo_table["Soybean", "ACAY estimate"] <- round(sum(accu_southam$accu_defo)/1e6,digits=2) 
+
 
 
 ### COCOA
@@ -755,11 +894,10 @@ d <- dplyr::mutate(d, Y_coffee = firstloss_glassgfc*Coffee_std)
 ### Pasture and Soy are compared in out-of-tropical-boundary areas.  
 
 ## Limit to 2001-2015 and sum over these years
-first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"))
+first_loss <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aesi_long_final.Rdata"))
 
-# select 2001-2015 layers 
-layer_names <- paste0("ha_first_loss.",c(19:33)) # those 19 to 33 correspond to 2001 and 2015 years given that 1 is for 1983. 
-first_loss <- raster::subset(first_loss, layer_names)
+# select 2001-2015 period 
+first_loss <- dplyr::filter(first_loss, year >= 2001 & year <= 2015)
 
 # Add up annual aggregated LUCFP (result is a single layer with cell values = the sum of annual cell values over the selected time period)
 accu_firstloss <- calc(first_loss, fun = sum, na.rm = TRUE)
