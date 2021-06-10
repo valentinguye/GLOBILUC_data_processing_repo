@@ -706,17 +706,20 @@ make_table_mat <- function(df_res, rounding=4){
 #                            qj = "rj", 
 #                            price_info = "lag1")
 
-# For both measures aesi and acay, we compute a summarising quantity for each crop j. 
-# For each crop j, this quantity differs in the forest loss measure, and the time and space it is aggregated to. 
+# For both measures aesi and acay, we compute one or more summarizing quantities for each crop j. 
+# For each crop j, these quantities differ in the forest loss measure, and the time and space it is aggregated to. 
 # Depending on what forest loss measure is used, we need to convert to hectares differently. 
 
-# For oil palm, GFR compute GFC forest loss in plantation boundaries and outside 2000's plantations for Indonesia and Malaysia.  
 
 #### AESI
 ## OIL PALM 
-d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
-d <- dplyr::select(d, grid_id, year, country_name, phtf_loss, Oilpalm_std)
-d <- dplyr::mutate(d, Y_oilpalm = phtf_loss*Oilpalm_std)
+# Summarize at global (tropical) scale, first loss,in 2001-2015. 
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
+d <- dplyr::select(d, grid_id, year, country_name, first_loss, Oilpalm_std)
+d <- dplyr::mutate(d, Y_oilpalm = first_loss*Oilpalm_std)
+d <- dplyr::filter(d, year >= 2001 & year <= 2015)
+summary(d$first_loss)
+summary(d$Y_oilpalm)
 
 ### SOY
 d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
@@ -736,6 +739,62 @@ d <- dplyr::mutate(d, Y_coffee = firstloss_glassgfc*Coffee_std)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Pasture and Soy are compared in out-of-tropical-boundary areas.  
+
+## Limit to 2001-2015 and sum over these years
+first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"))
+
+# select 2001-2015 layers 
+layer_names <- paste0("ha_first_loss.",c(19:33)) # those 19 to 33 correspond to 2001 and 2015 years given that 1 is for 1983. 
+first_loss <- raster::subset(first_loss, layer_names)
+
+# Add up annual aggregated LUCFP (result is a single layer with cell values = the sum of annual cell values over the selected time period)
+accu_firstloss <- calc(first_loss, fun = sum, na.rm = TRUE)
+
+## Extract in Brazil and in all South America
+
+countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
+
+brazil <- countries[countries$COUNTRY_NA=="Brazil",] %>% st_geometry() %>% as("Spatial")
+
+southam <- countries[countries$COUNTRY_NA=="Argentina" |
+                       countries$COUNTRY_NA=="Bolivia" |
+                       countries$COUNTRY_NA=="Brazil" | countries$COUNTRY_NA=="Isla Brasilera (disp)" | 
+                       countries$COUNTRY_NA=="Chile" |   
+                       countries$COUNTRY_NA=="Colombia" | 
+                       countries$COUNTRY_NA=="Ecuador" | 
+                       countries$COUNTRY_NA=="French Guiana (Fr)" |
+                       countries$COUNTRY_NA=="Guyana" |
+                       countries$COUNTRY_NA=="Panama" |
+                       countries$COUNTRY_NA=="Paraguay" | 
+                       countries$COUNTRY_NA=="Peru" | 
+                       countries$COUNTRY_NA=="Suriname" | 
+                       countries$COUNTRY_NA=="Trinidad & Tobago" | 
+                       countries$COUNTRY_NA=="Uruguay" | 
+                       countries$COUNTRY_NA=="Venezuela"  ,] %>% st_union() %>% st_geometry() %>% as("Spatial")
+
+firstloss_brazil <- raster::extract(x = accu_firstloss, 
+                                    y =  brazil,
+                                    fun = sum, 
+                                    na.rm = TRUE) 
+
+firstloss_southam <- raster::extract(x = accu_firstloss, 
+                                     y =  southam,
+                                     fun = sum, 
+                                     na.rm = TRUE) 
 
 
 

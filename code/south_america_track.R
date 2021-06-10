@@ -1,0 +1,687 @@
+##### 0. PACKAGES, WD, OBJECTS #####
+
+
+### WORKING DIRECTORY SHOULD BE CORRECT IF THIS SCRIPT IS RUN WITHIN R_project_for_individual_runs
+### OR CALLED FROM LUCFP PROJECT master.do FILE.
+### IN ANY CASE IT SHOULD BE (~/LUCFP/data_processing) 
+
+
+### PACKAGES ###
+# see this project's README for a better understanding of how packages are handled in this project. 
+
+
+neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
+                    "here", "readstata13", "foreign", "readxl", "writexl",
+                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", # "osrm", "osrmr",
+                    "lubridate","exactextractr",
+                    "doParallel", "foreach", "snow", 
+                    "knitr", "kableExtra",
+                    "DataCombine", 
+                    "fixest",
+                    "ggplot2", "leaflet", "dotwhisker")
+
+# Install them in their project-specific versions
+renv::restore(packages = neededPackages)
+
+# Load them
+lapply(neededPackages, library, character.only = TRUE)
+
+# /!\/!\ IF renv::restore(neededPackages) FAILS TO INSTALL SOME PACKAGES /!\/!\ 
+
+# For instance sf could cause trouble https://github.com/r-spatial/sf/issues/921 
+# or magick, as a dependency of raster and rgdal. 
+
+# FOLLOW THESE STEPS:
+# 1. Remove these package names from neededPackages above, and rerun renv::restore(packages = neededPackages)
+# 2. Write them in troublePackages below, uncomment, and run the following code chunk: 
+
+# # /!\ THIS BREAKS THE PROJECT REPRODUCIBILITY GUARANTY /!\
+# troublePackages <- c() 
+# # Attempt to load packages from user's default libraries.
+# lapply(troublePackages, library, lib.loc = default_libraries, character.only = TRUE)
+
+# 3. If the troubling packages could not be loaded ("there is no package called ...") 
+#   you should try to install them, preferably in their versions stated in the renv.lock file. 
+#   see in particular https://rstudio.github.io/renv/articles/renv.html 
+
+
+# # # /!\ THIS BREAKS THE PROJECT REPRODUCIBILITY GUARANTY /!\
+# troublePackages <- c("leaflet", "leaflet.providers", "png")
+# # Attempt to load packages from user's default libraries.
+# lapply(troublePackages, library, lib.loc = default_libraries, character.only = TRUE)
+
+### WORKING DIRECTORY SHOULD BE CORRECT IF THIS SCRIPT IS RUN WITHIN R_project_for_individual_runs
+### OR CALLED FROM LUCFP PROJECT master.do FILE.
+### IN ANY CASE IT SHOULD BE (~/LUCFP/data_processing
+
+
+### THIS IS THE IMPORTANT LINE DEFINING THIS WHOLE SCRIPT: 
+ext <- extent(c(-95, -25, -57, 15))
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#### PREPARE GAEZ #### 
+
+### PREPARE SUITABILITY INDICES
+# dir.create(here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input"), recursive = TRUE) 
+# dir.create(here("temp_data", "GAEZ", "South_America", "AES_index_value_current", "Rain-fed", "High-input"), recursive = TRUE) 
+
+datadir <- here("input_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input")
+targetdir <- here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input")
+tmpdir <- here("temp_data", "tmp")
+
+if (!dir.exists(tmpdir)) dir.create(tmpdir, recursive = TRUE)
+if (dir.exists(targetdir)) {
+  file.remove(list.files(path = targetdir,
+                         pattern = ".tif", full.names = TRUE))
+} else dir.create(targetdir, recursive = TRUE)
+
+
+
+files <- list.files(path = datadir, pattern = ".zip")
+crops <- unlist(strsplit(files, split = ".zip"))
+
+
+## Import most crops
+for (j in 1:length(files)) {
+  #if (any(crops[j] == cropsToAggregate)) next
+  print(files[j])
+  unzip(zipfile = here(datadir, files[j]), exdir = tmpdir)
+  dt <- raster(paste0(tmpdir, "/data.asc"))
+  
+  # crop to tropical AOI
+  dt_trop <- crop(dt, ext)
+  
+  # A few points are -0.09 with no apparent reason. 
+  dt_trop[dt_trop<0] <- NA 
+  
+  names(dt_trop) <- crops[j]
+  writeRaster(dt_trop,
+              filename = here(targetdir, paste0(crops[j], ".tif")),
+              overwrite = TRUE)
+}
+rm(dt, dt_trop)
+
+### CHECK GRASS ### 
+# dt <- raster(here("input_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input", "Grass", "data.asc"))
+# # crop to tropical AOI
+# dt_trop <- crop(dt, ext)
+# # A few points are -0.09 with no apparent reason. 
+# dt_trop[dt_trop<0] <- NA 
+# names(dt_trop) <- "Grass"
+# 
+# summary(values(dt_trop))
+
+## Create a brick for convenience. 
+rasterlist_gaez <- list.files(path = targetdir, 
+                              pattern = "", 
+                              full.names = TRUE) %>% as.list()
+gaez_all <- brick(rasterlist_gaez)
+
+writeRaster(gaez_all, here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "high_input_all.tif"), 
+            overwrite = TRUE)
+
+rm(rasterlist_gaez, gaez_all)
+
+
+### PREPARE POTENTIAL YIELDS 
+# dir.create(here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input"), recursive = TRUE) 
+# dir.create(here("temp_data", "GAEZ", "South_America", "AES_index_value_current", "Rain-fed", "High-input"), recursive = TRUE) 
+
+datadir <- here("input_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input")
+targetdir <- here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "High-input")
+tmpdir <- here("temp_data", "tmp")
+
+if (!dir.exists(tmpdir)) dir.create(tmpdir, recursive = TRUE)
+if (dir.exists(targetdir)) {
+  file.remove(list.files(path = targetdir,
+                         pattern = ".tif", full.names = TRUE))
+} else dir.create(targetdir, recursive = TRUE)
+
+
+
+files <- list.files(path = datadir, pattern = ".zip")
+crops <- unlist(strsplit(files, split = ".zip"))
+
+## Import most crops
+for (j in 1:length(files)) {
+  #if (any(crops[j] == cropsToAggregate)) next
+  print(files[j])
+  unzip(zipfile = here(datadir, files[j]), exdir = tmpdir)
+  dt <- raster(paste0(tmpdir, "/data.asc"))
+  
+  # crop to tropical AOI
+  dt_trop <- crop(dt, ext)
+  
+  # A few points are -0.09 with no apparent reason. 
+  dt_trop[dt_trop<0] <- NA 
+  
+  names(dt_trop) <- crops[j]
+  writeRaster(dt_trop,
+              filename = here(targetdir, paste0(crops[j], ".tif")),
+              overwrite = TRUE)
+  
+}
+rm(dt, dt_trop)
+
+
+## Create a brick for convenience. 
+rasterlist_gaez <- list.files(path = targetdir, 
+                              pattern = "", 
+                              full.names = TRUE) %>% as.list()
+gaez_all <- brick(rasterlist_gaez)
+
+writeRaster(gaez_all, here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "high_input_all.tif"), 
+            overwrite = TRUE)
+
+
+rm(rasterlist_gaez, gaez_all)
+
+
+#### PREPARE GLASS GLC DATA #### 
+# We reproduce the data preparation workflow applied to years 1983-2015, even if only 2001-2015 is necessary, it is safer. 
+# Read data in
+rasterlist <- list.files(path = "input_data/GLASS-GLC", 
+                         pattern = paste0("GLASS-GLC_7classes_"), 
+                         full.names = TRUE) %>% as.list()
+parcels_brick <- brick(rasterlist)
+
+# crop to ***SOUTH AMERICA*** AOI 
+southam_aoi <- crop(parcels_brick, ext)
+
+# Write
+writeRaster(southam_aoi, here("temp_data", "processed_glass-glc", "southam_aoi", "brick_southam_aoi.tif"), 
+            overwrite = TRUE)
+
+
+southam_aoi <- brick( here("temp_data", "processed_glass-glc", "southam_aoi", "brick_southam_aoi.tif"))
+
+# Create annual layers of forest loss defined as: class is not 20 in a given year while it was 20 in *all the previous year*.
+# This restricts annual loss to that occurring for the first time
+
+# construct previous: a collection of annual layers, each giving the mean of the class value in the previous years. 
+previous_years <- seq(1982, 2014, 1) 
+for(t in 1:length(previous_years)){ # goes only up to 2014, as we don't need the average up to 2015.
+  calc(southam_aoi[[1:t]], fun = mean, 
+       filename = here("temp_data", "processed_glass-glc", "southam_aoi", paste0("past_mean_lu_",previous_years[t], ".tif")), 
+       datatype = "FLT4S", # necessary so that a 19.9 mean is not counted as a 20 (i.e. so far undisturbed forest pixel)
+       overwrite = TRUE)
+}
+
+# this is a raster of 33 layers, giving the mean of GLC class value in 1982, 1982-83, 1982-84, ..., 1982-2014. 
+rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
+                         pattern = "past_mean_lu_", 
+                         full.names = TRUE) %>% as.list()
+previous <- brick(rasterlist)
+
+#unique(values(previous))
+
+make_first_loss <- function(previous, current){if_else(condition = (previous == 20 & current != 20), 
+                                                       true = 1, false = 0)}
+
+years <- seq(1982, 2015, 1) 
+for(t in 2:length(years)){ # starts from 1983 as we need t-1 and thus t starts from 2
+  overlay(previous[[t-1]], southam_aoi[[t]], fun = make_first_loss, 
+          filename = here("temp_data", "processed_glass-glc", "southam_aoi", paste0("first_loss_",years[t], ".tif")), 
+          datatype = "INT1U", 
+          overwrite = TRUE) 
+}
+
+
+
+
+rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
+                         pattern = "first_loss_", 
+                         full.names = TRUE) %>% as.list()
+first_loss <- brick(rasterlist)
+
+aggregate(first_loss, 
+          fact = 2, 
+          fun = sum, 
+          expand = FALSE, 
+          na.rm = FALSE, 
+          filename = here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"),
+          datatype = "INT1U",
+          overwrite = TRUE)
+
+
+aggr_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"))
+
+gaez <- raster(here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input", "Banana.tif"))
+
+beginCluster() # this uses by default detectCores() - 1
+
+resample(x = aggr_first_loss, y = gaez,
+         method = "ngb",
+         filename = here("temp_data", "processed_glass-glc", "southam_aoi", "resampled_first_loss.tif"),
+         datatype = "INT1U",
+         overwrite = TRUE )
+
+endCluster()
+
+
+## Create the mask layer
+# Create a layer that has values either : NA if first_loss always 0 across all years, 1 otherwise
+res_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "resampled_first_loss.tif"))
+# not using if_else here to allow NA as an output... 
+always_zero <- function(y){
+  if(sum(y, na.rm = TRUE) == 0){d <- NA}else{d <- 1}
+  return(d)}
+
+mask_path <- here("temp_data", "processed_glass-glc", "southam_aoi", "always_zero_mask.tif")
+
+overlay(x = res_first_loss, 
+        fun = always_zero, 
+        filename = mask_path,
+        na.rm = TRUE, # but there is no NA anyway
+        datatype = "INT2U", # INT2U to allow have NAs
+        overwrite = TRUE)  
+
+mask <- raster(mask_path)
+# plot(mask)
+
+# then use it to mask the brick 
+
+mask(x = res_first_loss, 
+     mask = mask, 
+     filename = here("temp_data", "processed_glass-glc", "southam_aoi", "masked_first_loss.tif"), 
+     datatype = "INT2U", 
+     overwrite = TRUE)
+
+first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "masked_first_loss.tif"))
+
+cell_area <- area(first_loss)
+
+make_area <- function(values, areas){
+  # *0.25 to transform 0:4 scale into proportion of cell. *100 to convert km2 (returned by raster::area) to hectares, to match phtfl 
+  return(values*0.25*areas*100) 
+}
+
+overlay(first_loss, cell_area, 
+        fun = make_area, 
+        filename = here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"), 
+        overwrite = TRUE)
+
+
+#### MERGE AESI #### 
+
+### NEW FOLDERS USED IN THIS SCRIPT 
+dir.create(here("temp_data", "merged_datasets", "southam_aoi"), recursive = TRUE)
+
+### This script's target dir
+targetdir <- here("temp_data", "merged_datasets", "southam_aoi")
+
+
+### READ IN AND RENAME GAEZ DATA ### 
+
+## SUITABILITY INDICES 
+gaez_dir <- here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed")
+gaez <- brick(here(gaez_dir, "high_input_all.tif"))
+
+# Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
+gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+names(gaez) <- gaez_crops
+
+
+
+### 1. MERGE GLASS-GLC AND SUITABILITY INDICES
+
+## Read in GLASS-GLC data 
+first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"))
+
+# Rename layers 
+glc_sbqt_years <- seq(1983, 2015, 1)
+names(first_loss) <- paste0("first_loss.",glc_sbqt_years)
+
+glass <- first_loss
+
+
+### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+
+mask <- raster(here("temp_data", "processed_glass-glc", "southam_aoi", "always_zero_mask.tif"))
+
+mask(x = gaez, 
+     mask = mask, 
+     filename = here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"), 
+     overwrite = TRUE)
+
+gaez_m <- brick(here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"))
+# Rename layers (important, as writing the masked gaez lost the layer names)
+names(gaez_m) <- gaez_crops
+
+# (note that masking changes the summary values of gaez)
+
+
+# Stack together the annual layers of GLASS-GLC data and GAEZ crop cross sections 
+glass_gaez <- stack(glass, gaez_m)
+names(glass_gaez)
+
+
+### RASTER TO DATAFRAME ### 
+
+# na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
+# We also set long to false because we reshape with a proper function for more control
+wide_df <- raster::as.data.frame(glass_gaez, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ///!!!\\\ ~700s (rather 2-3 hours last time) 
+
+# Rename coordinate variables
+names(wide_df)
+head(wide_df[,c("x", "y")])
+wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+
+### WIDE TO LONG ###
+
+# Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
+# So we can simply create an ID that's a sequence. 
+wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
+
+# the dot is, by construction of all variable names, only in the names of time varying variables. 
+# fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
+# Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
+# Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
+varying_vars <- list(names(glass_gaez)[grep("first_loss.", names(glass_gaez), fixed = TRUE)])
+
+
+# reshape to long.
+long_df <- stats::reshape(wide_df,
+                          varying = varying_vars,
+                          v.names = c("first_loss"),
+                          sep = ".",
+                          timevar = "year",
+                          idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
+                          ids = "grid_id", # lonlat is our cross-sectional identifier.
+                          direction = "long",
+                          new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
+rm(wide_df)
+names(long_df)
+# replace the indices from the raster::as.data.frame with actual years.
+
+long_df <- mutate(long_df, year = glc_sbqt_years[year])
+
+long_df <- dplyr::arrange(long_df, grid_id, year)
+
+
+saveRDS(long_df, here(targetdir, "glass_aesi_long.Rdata"))
+
+rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first_loss)
+
+
+
+#### MERGE ACAY #### 
+
+### NEW FOLDERS USED IN THIS SCRIPT 
+dir.create(here("temp_data", "merged_datasets", "southam_aoi"), recursive = TRUE)
+
+### Raster global options
+rasterOptions(timer = TRUE, 
+              progress = "text")
+
+
+### This script's target dir
+targetdir <- here("temp_data", "merged_datasets", "southam_aoi")
+
+
+### READ IN AND RENAME GAEZ DATA ### 
+
+## SUITABILITY INDICES 
+gaez_dir <- here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed")
+gaez <- brick(here(gaez_dir, "high_input_all.tif"))
+
+# Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
+gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+names(gaez) <- gaez_crops
+
+
+
+
+### 1. MERGE GLASS-GLC AND SUITABILITY INDICES
+
+## Read in GLASS-GLC data 
+first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"))
+
+# Rename layers 
+glc_sbqt_years <- seq(1983, 2015, 1)
+names(first_loss) <- paste0("first_loss.",glc_sbqt_years)
+
+
+glass <- first_loss
+
+
+### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+
+mask <- raster(here("temp_data", "processed_glass-glc", "southam_aoi", "always_zero_mask.tif"))
+
+mask(x = gaez, 
+     mask = mask, 
+     filename = here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "glass_masked_high_input_all.tif"), 
+     overwrite = TRUE)
+
+gaez_m <- brick(here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "glass_masked_high_input_all.tif"))
+# Rename layers (important, as writing the masked gaez lost the layer names)
+names(gaez_m) <- gaez_crops
+
+# (note that masking changes the summary values of gaez)
+
+
+### STACK RASTERS TO MERGE ###
+
+# # Mask all the layers with ocean mask from GAEZ (more masked pixels than phtfloss that has only some rectangles between continents masked. plot both to see this)
+# # take one layer from gaez
+# gaez_mask <- gaez[[1]]
+# mask(x = glass, mask = gaez_mask, 
+#      filename = here("temp_data", "processed_glass-glc", "southam_aoi", "glass_masked.tif"),
+#      overwrite = TRUE)
+# 
+# glass <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "glass_masked.tif"))
+# names(glass) <- glass_names
+
+# Stack together the annual layers of GLASS-GLC data and GAEZ crop cross sections 
+glass_gaez <- stack(glass, gaez_m)
+names(glass_gaez)
+
+
+### RASTER TO DATAFRAME ### 
+
+# na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
+# We also set long to false because we reshape with a proper function for more control
+wide_df <- raster::as.data.frame(glass_gaez, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ///!!!\\\ ~700s (rather 2-3 hours last time) 
+
+# Rename coordinate variables
+names(wide_df)
+head(wide_df[,c("x", "y")])
+wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+
+### WIDE TO LONG ###
+
+# Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
+# So we can simply create an ID that's a sequence. 
+wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
+
+# the dot is, by construction of all variable names, only in the names of time varying variables. 
+# fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
+# Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
+# Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
+varying_vars <- list(names(glass_gaez)[grep("first_loss.", names(glass_gaez), fixed = TRUE)])
+
+
+# reshape to long.
+long_df <- stats::reshape(wide_df,
+                          varying = varying_vars,
+                          v.names = c("first_loss"),
+                          sep = ".",
+                          timevar = "year",
+                          idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
+                          ids = "grid_id", # lonlat is our cross-sectional identifier.
+                          direction = "long",
+                          new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
+rm(wide_df)
+names(long_df)
+# replace the indices from the raster::as.data.frame with actual years.
+
+long_df <- mutate(long_df, year = glc_sbqt_years[year])
+
+long_df <- dplyr::arrange(long_df, grid_id, year)
+
+
+saveRDS(long_df, here(targetdir, "glass_acay_long.Rdata"))
+
+rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first_loss)
+
+
+# glass <- readRDS(here(targetdir, "glass_acay_long.Rdata"))
+
+
+#### ADD VARIABLES #### 
+# Here we do not do the country workflow. 
+
+### Define GAEZ AESI variables
+gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+
+
+origindir <- here("temp_data", "merged_datasets", "southam_aoi")
+
+# Contrary to what is done in the main add_variables.R script, here we execute code only for first_loss.
+name <- "glass_aesi_long"
+
+path <- paste0(here(origindir, name), ".Rdata")
+df <- readRDS(path)
+# Use cross section only
+df_cs <- df[!duplicated(df$grid_id),]
+
+rm(df)
+
+### Standardize suitability indexes
+# To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
+df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = Alfalfa:Yam)))
+
+# df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum))
+# that adds the 47 new variables, with new names.
+df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
+
+### Aggregate suitability indexes of similar crops
+# The grouping here corresponds to the categories by GAEZ-IIASA 
+# sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
+# Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
+df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
+                                        oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
+                                        sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
+                                        fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
+                                        fibre_crops = max(c(Cotton, Flax)),
+                                        stimulant_crops = max(c(Coffee, Tea, Tobacco)),
+                                        fodder_crops = max(c(Alfalfa)), # To adjust once we have Grass as a GAEZ crop  
+                                        bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass)), 
+                                        rice_crops = max(c(Dryland_rice, Wetland_rice)) # (this one is not a GAEZ group)
+) %>% as.data.frame()
+
+# standardize crop groups
+df_cs <- dplyr::mutate(df_cs, across(.cols = contains("_crops"), .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
+
+# Select only newly constructed variables, and id
+var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs)) | grepl(pattern = "_crops", x = names(df_cs))]
+df_cs <- df_cs[,c("grid_id", var_names)]
+
+# # merge back to panel - NOPE, not anymore
+# df <- left_join(df, df_cs, by = "grid_id")
+
+# Keep only new variables and id
+# df_cs <- df_cs[,(names(df_cs)=="grid_id" | grepl(pattern = "_std", x = names(df_cs)))]
+
+saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))  
+rm(df_cs, path)
+
+
+### MERGE AESI DATASETS WITH ADDED VARIABLES
+
+# Base dataset (including outcome variable(s))
+base_path <- paste0(here(origindir, name), ".Rdata")
+df_base <- readRDS(base_path)
+
+# Remove non-standardized suitability indexes
+df_base <- dplyr::select(df_base,-all_of(gaez_crops))
+
+# Standardized and aggregated suitability indexes
+stdsi_path <- paste0(here(origindir, name), "_stdsi.Rdata")
+df_stdsi <- readRDS(stdsi_path)  
+
+final <- left_join(df_base, df_stdsi, by = "grid_id")
+rm(df_stdsi, df_base)
+
+
+saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
+
+rm(final)
+
+
+
+### Define GAEZ ACAY variables 
+gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+
+
+origindir <- here("temp_data", "merged_datasets", "southam_aoi")
+
+name <- "glass_acay_long"
+
+### GROUP ACAY CROPS
+path <- paste0(here(origindir, name), ".Rdata")
+df <- readRDS(path)
+# Use cross section only
+df_cs <- df[!duplicated(df$grid_id),]
+
+rm(df)
+
+### Aggregate achievable yields of similar crops
+# The grouping here corresponds to the categories by GAEZ-IIASA 
+# sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
+# Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
+df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
+                                        oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
+                                        sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
+                                        fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
+                                        fibre_crops = max(c(Cotton, Flax)),
+                                        stimulant_crops = max(c(Coffee, Tea, Tobacco)),
+                                        fodder_crops = max(c(Alfalfa, Pasture_legume, Grass)), # To adjust once we have Grass as a GAEZ crop  
+                                        bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass)), 
+                                        rice_crops = max(c(Dryland_rice, Wetland_rice)) # (this one is not a GAEZ group)
+) %>% as.data.frame()
+
+# Select only newly constructed variables, and id
+var_names <- names(df_cs)[grepl(pattern = "_crops", x = names(df_cs))]
+df_cs <- df_cs[,c("grid_id", var_names)]
+
+# # merge back to panel - NOPE, not anymore
+# df <- left_join(df, df_cs, by = "grid_id")
+
+# Keep only new variables and id
+# df_cs <- df_cs[,(names(df_cs)=="grid_id" | grepl(pattern = "_std", x = names(df_cs)))]
+
+saveRDS(df_cs, paste0(here(origindir, name), "_groupedcrops.Rdata"))  
+rm(df_cs, path)
+
+
+### MERGE ACAY DATASETS WITH ADDED VARIABLES
+# Base dataset (including outcome variable(s))
+base_path <- paste0(here(origindir, name), ".Rdata")
+df_base <- readRDS(base_path)
+
+# Grouped crops
+grouped_path <- paste0(here(origindir, name), "_groupedcrops.Rdata")
+df_grouped <- readRDS(grouped_path)  
+
+final <- left_join(df_base, df_grouped, by = "grid_id")
+rm(df_grouped, df_base)
+
+saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
+
+rm(final)

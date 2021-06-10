@@ -160,7 +160,7 @@ for(name in dataset_names){
   # The grouping here corresponds to the categories by GAEZ-IIASA 
   # sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
   # Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
-  df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckweat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
+  df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
                                           oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
                                           sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
                                            fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 

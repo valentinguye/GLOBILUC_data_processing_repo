@@ -31,30 +31,55 @@ source("code/prepare_phtfloss.R")
 #        - "temp_data/GAEZ/AES_index_value/Rain-fed/High-input/Alfalfa.tif"
 # Outputs: - all what is in "temp_data/processed_phtfloss/tropical_aoi"
 
-# Merge each outcome variable individual dataset with gaez
-source("code/merge.R")
+# Merge each outcome variable individual dataset with gaez Agro-Ecological Suitability Index (aesi)
+source("code/merge_aesi.R")
 # Inputs: - "temp_data/GAEZ/AES_index_value/Rain-fed/high_input_all.tif"
 #         - everything in "temp_data/GAEZ/AES_index_value/Rain-fed/High-input"
 
 #         - "temp_data/processed_glass-glc/tropical_aoi/always_zero_mask.tif"
-#         - "temp_data/processed_glass-glc/tropical_aoi/masked_first_loss.tif"
+#         - "temp_data/processed_glass-glc/tropical_aoi/ha_first_loss.tif"
 #         - "temp_data/processed_glass-glc/tropical_aoi/masked_sbqt_direct_lu.tif"
 #         - "temp_data/processed_glass-glc/tropical_aoi/masked_sbqt_mode_lu.tif"
 
 #         - "temp_data/processed_glass-glc/tropical_aoi/always_zero_mask8320.tif"
-#         - "temp_data/processed_glass-glc/tropical_aoi/masked_firstloss8320.tif"
+#         - "temp_data/processed_glass-glc/tropical_aoi/ha_firstloss8320.tif"
 
 #         - "temp_data/processed_phtfloss/tropical_aoi/always_zero_mask_phtfloss.tif"
 #         - "temp_data/processed_phtfloss/tropical_aoi/resampled_phtf_loss.tif"
 
 # Outputs:  - "temp_data/GAEZ/AES_index_value/Rain-fed/glass_masked_high_input_all.tif"
-#           - "temp_data/merged_datasets/tropical_aoi/glass_gaez_long.Rdata"
+#           - "temp_data/merged_datasets/tropical_aoi/glass_aesi_long.Rdata"
 
 #           - "temp_data/GAEZ/AES_index_value/Rain-fed/firstloss8320_masked_high_input_all.tif"
-#           - "temp_data/merged_datasets/tropical_aoi/firstloss8320_gaez_long.Rdata"
+#           - "temp_data/merged_datasets/tropical_aoi/firstloss8320_aesi_long.Rdata"
 
 #           - "temp_data/GAEZ/AES_index_value/Rain-fed/phtfloss_masked_high_input_all.tif"
-#           - "temp_data/merged_datasets/tropical_aoi/phtfloss_gaez_long.Rdata"
+#           - "temp_data/merged_datasets/tropical_aoi/phtfloss_aesi_long.Rdata"
+
+# Merge each outcome variable individual dataset with gaez Agro-Climatic Achievable Yield (acay)
+source("code/merge_acay.R")
+# Inputs: - "temp_data/GAEZ/AES_index_value/Rain-fed/high_input_all.tif"
+#         - everything in "temp_data/GAEZ/AES_index_value/Rain-fed/High-input"
+
+#         - "temp_data/processed_glass-glc/tropical_aoi/always_zero_mask.tif"
+#         - "temp_data/processed_glass-glc/tropical_aoi/ha_first_loss.tif"
+#         - "temp_data/processed_glass-glc/tropical_aoi/masked_sbqt_direct_lu.tif"
+#         - "temp_data/processed_glass-glc/tropical_aoi/masked_sbqt_mode_lu.tif"
+
+#         - "temp_data/processed_glass-glc/tropical_aoi/always_zero_mask8320.tif"
+#         - "temp_data/processed_glass-glc/tropical_aoi/ha_firstloss8320.tif"
+
+#         - "temp_data/processed_phtfloss/tropical_aoi/always_zero_mask_phtfloss.tif"
+#         - "temp_data/processed_phtfloss/tropical_aoi/resampled_phtf_loss.tif"
+
+# Outputs:  - "temp_data/GAEZ/AES_index_value/Rain-fed/glass_masked_high_input_all.tif"
+#           - "temp_data/merged_datasets/tropical_aoi/glass_acay_long.Rdata"
+
+#           - "temp_data/GAEZ/AES_index_value/Rain-fed/firstloss8320_masked_high_input_all.tif"
+#           - "temp_data/merged_datasets/tropical_aoi/firstloss8320_acay_long.Rdata"
+
+#           - "temp_data/GAEZ/AES_index_value/Rain-fed/phtfloss_masked_high_input_all.tif"
+#           - "temp_data/merged_datasets/tropical_aoi/phtfloss_acay_long.Rdata"
 
 
 # Add country variable and construct standardized suitability indices 
@@ -62,8 +87,12 @@ source("code/add_variables.R")
 # Inputs: - datasets in "temp_data/merged_datasets/tropical_aoi"
 #         - everything in "temp_data/GAEZ/AES_index_value/Rain-fed/High-input"
 #         - "input_data/Global_LSIB_Polygons_Detailed"
-# Outputs: - "temp_data/merged_datasets/tropical_aoi/glass_gaez_long_final.Rdata"
-#          - "temp_data/merged_datasets/tropical_aoi/firstloss8320_gaez_long_final.Rdata"
-#          - "temp_data/merged_datasets/tropical_aoi/phtfloss_gaez_long_final.Rdata" 
+# Outputs: - "temp_data/merged_datasets/tropical_aoi/glass_aesi_long_final.Rdata"
+#          - "temp_data/merged_datasets/tropical_aoi/firstloss8320_aesi_long_final.Rdata"
+#          - "temp_data/merged_datasets/tropical_aoi/phtfloss_aesi_long_final.Rdata" 
+#          - "temp_data/merged_datasets/tropical_aoi/glass_acay_long_final.Rdata"
+#          - "temp_data/merged_datasets/tropical_aoi/firstloss8320_acay_long_final.Rdata"
+#          - "temp_data/merged_datasets/tropical_aoi/phtfloss_acay_long_final.Rdata" 
 
 
+source("code/final_analyses.R")

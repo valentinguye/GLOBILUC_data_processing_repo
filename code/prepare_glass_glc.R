@@ -43,6 +43,7 @@ lapply(neededPackages, library, character.only = TRUE)
 
 ### NEW FOLDERS USED IN THIS SCRIPT 
 dir.create(here("temp_data", "processed_glass-glc", "tropical_aoi"), recursive = TRUE)
+dir.create(here("temp_data", "processed_glass-glc", "southam_aoi"), recursive = TRUE)
 
 
 ### Raster global options
@@ -358,7 +359,8 @@ mask <- raster(mask_path)
 mask(x = res_first_loss, 
      mask = mask, 
      filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"), 
-     datatype = "INT2U")
+     datatype = "INT2U", 
+     overwrite = TRUE)
 
 # masked <- brick( here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"))
 # plot(masked[[1]])
@@ -369,7 +371,8 @@ res_sbqt_direct_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_a
 mask(x = res_sbqt_direct_lu, 
      mask = mask, 
      filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_direct_lu.tif"), 
-     datatype = "INT2U")
+     datatype = "INT2U", 
+     overwrite = TRUE)
 
 ### 3. SUBSEQUENT MODE LU
 res_sbqt_mode_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_sbqt_mode_lu.tif"))
@@ -377,7 +380,8 @@ res_sbqt_mode_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi
 mask(x = res_sbqt_mode_lu, 
      mask = mask, 
      filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_mode_lu.tif"), 
-     datatype = "INT2U")
+     datatype = "INT2U", 
+     overwrite = TRUE)
 
 
 
@@ -412,6 +416,22 @@ plot(res_sbqt_mode_lu[[20]])
 # plot(sbqt_mode_lu_aggr[[20]])
 
 
+
+
+#### 83-15 TRACK: CONVERT TO AREA #### 
+first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"))
+
+cell_area <- area(first_loss)
+
+make_area <- function(values, areas){
+# *0.25 to transform 0:4 scale into proportion of cell. *100 to convert km2 (returned by raster::area) to hectares, to match phtfl 
+  return(values*0.25*areas*100) 
+}
+
+overlay(first_loss, cell_area, 
+        fun = make_area, 
+        filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_first_loss.tif"), 
+        overwrite = TRUE)
 
 
 
@@ -556,5 +576,154 @@ mask(x = res_firstloss8320,
      datatype = "INT2U", # INT2U to allow have NAs
      overwrite = TRUE)
 
+
+#### 83-20 TRACK: CONVERT TO AREA #### 
+firstloss8320 <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_firstloss8320.tif"))
+
+cell_area <- area(firstloss8320)
+
+make_area <- function(values, areas){
+  # *0.25 to transform 0:4 scale into proportion of cell. *100 to convert km2 (returned by raster::area) to hectares, to match phtfl 
+  return(values*0.25*areas*100) 
+}
+
+overlay(firstloss8320, cell_area, 
+        fun = make_area, 
+        filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_firstloss8320.tif"),
+        overwrite = TRUE)
+
+
+rm(firstloss8320, cell_area)
+
+
+
+
+
+#### SOUTH AMERICA TRACK ####
+# We reproduce the data preparation workflow applied to years 1983-2015, even if only 2001-2015 is necessary, it is more safe. 
+# Read data in
+rasterlist <- list.files(path = "input_data/GLASS-GLC", 
+                         pattern = paste0("GLASS-GLC_7classes_"), 
+                         full.names = TRUE) %>% as.list()
+parcels_brick <- brick(rasterlist)
+
+# crop to ***SOUTH AMERICA*** AOI 
+ext <- extent(c(-95, -25, -57, 15))
+southam_aoi <- crop(parcels_brick, ext)
+
+# Write
+writeRaster(southam_aoi, here("temp_data", "processed_glass-glc", "southam_aoi", "brick_southam_aoi.tif"), 
+            overwrite = TRUE)
+
+
+southam_aoi <- brick( here("temp_data", "processed_glass-glc", "southam_aoi", "brick_southam_aoi.tif"))
+
+# Create annual layers of forest loss defined as: class is not 20 in a given year while it was 20 in *all the previous year*.
+# This restricts annual loss to that occurring for the first time
+
+# construct previous: a collection of annual layers, each giving the mean of the class value in the previous years. 
+previous_years <- seq(1982, 2014, 1) 
+for(t in 1:length(previous_years)){ # goes only up to 2014, as we don't need the average up to 2015.
+  calc(southam_aoi[[1:t]], fun = mean, 
+       filename = here("temp_data", "processed_glass-glc", "southam_aoi", paste0("past_mean_lu_",previous_years[t], ".tif")), 
+       datatype = "FLT4S", # necessary so that a 19.9 mean is not counted as a 20 (i.e. so far undisturbed forest pixel)
+       overwrite = TRUE)
+}
+
+# this is a raster of 33 layers, giving the mean of GLC class value in 1982, 1982-83, 1982-84, ..., 1982-2014. 
+rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
+                         pattern = "past_mean_lu_", 
+                         full.names = TRUE) %>% as.list()
+previous <- brick(rasterlist)
+
+#unique(values(previous))
+
+make_first_loss <- function(previous, current){if_else(condition = (previous == 20 & current != 20), 
+                                                       true = 1, false = 0)}
+
+years <- seq(1982, 2015, 1) 
+for(t in 2:length(years)){ # starts from 1983 as we need t-1 and thus t starts from 2
+  overlay(previous[[t-1]], southam_aoi[[t]], fun = make_first_loss, 
+          filename = here("temp_data", "processed_glass-glc", "southam_aoi", paste0("first_loss_",years[t], ".tif")), 
+          datatype = "INT1U", 
+          overwrite = TRUE) 
+}
+
+
+
+
+rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
+                         pattern = "first_loss_", 
+                         full.names = TRUE) %>% as.list()
+first_loss <- brick(rasterlist)
+
+aggregate(first_loss, 
+          fact = 2, 
+          fun = sum, 
+          expand = FALSE, 
+          na.rm = FALSE, 
+          filename = here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"),
+          datatype = "INT1U",
+          overwrite = TRUE)
+
+
+# We do not align on GAEZ
+# aggr_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"))
+# gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Banana.tif"))
+# 
+# beginCluster() # this uses by default detectCores() - 1
+# 
+# resample(x = aggr_first_loss, y = gaez,
+#          method = "ngb",
+#          filename = here("temp_data", "processed_glass-glc", "southam_aoi", "resampled_first_loss.tif"),
+#          datatype = "INT1U",
+#          overwrite = TRUE )
+# 
+# endCluster()
+
+
+## Create the mask layer
+# This is not useful for the descriptive statistics but it replicates the data preparation workflow more closely. 
+# Note the input of aggr_first_loss.tif and not resampled_first_loss.tif
+# Create a layer that has values either : NA if first_loss always 0 across all years, 1 otherwise
+res_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"))
+# not using if_else here to allow NA as an output... 
+always_zero <- function(y){
+  if(sum(y) == 0){d <- NA}else{d <- 1}
+  return(d)}
+
+mask_path <- here("temp_data", "processed_glass-glc", "southam_aoi", "always_zero_mask.tif")
+
+overlay(x = res_first_loss, 
+        fun = always_zero, 
+        filename = mask_path,
+        na.rm = TRUE, # but there is no NA anyway
+        datatype = "INT2U", # INT2U to allow have NAs
+        overwrite = TRUE)  
+
+mask <- raster(mask_path)
+# plot(mask)
+
+# then use it to mask the brick 
+
+mask(x = res_first_loss, 
+     mask = mask, 
+     filename = here("temp_data", "processed_glass-glc", "southam_aoi", "masked_first_loss.tif"), 
+     datatype = "INT2U", 
+     overwrite = TRUE)
+
+first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "masked_first_loss.tif"))
+
+cell_area <- area(first_loss)
+
+make_area <- function(values, areas){
+  # *0.25 to transform 0:4 scale into proportion of cell. *100 to convert km2 (returned by raster::area) to hectares, to match phtfl 
+  return(values*0.25*areas*100) 
+}
+
+overlay(first_loss, cell_area, 
+        fun = make_area, 
+        filename = here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"), 
+        overwrite = TRUE)
 
 

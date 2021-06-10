@@ -86,7 +86,7 @@ names(gaez) <- gaez_crops
 #### 1. MERGE GLASS-GLC AND SUITABILITY INDICES #### 
 
 ## Read in GLASS-GLC data 
-first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"))
+first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_first_loss.tif"))
 sbqt_direct_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_direct_lu.tif"))
 sbqt_mode_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_mode_lu.tif"))
 # Rename layers 
@@ -207,7 +207,7 @@ rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first
 #### 2. MERGE 1983-2020 FIRST LOSS AND SUITABILITY INDICES #### 
 
 ## Read in FIRST LOSS 1983 2020 
-firstloss8320 <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_firstloss8320.tif")) 
+firstloss8320 <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_firstloss8320.tif")) 
 # Rename layers 
 names(firstloss8320) <- paste0("firstloss_glassgfc.",seq(1983, 2020, 1))
 
