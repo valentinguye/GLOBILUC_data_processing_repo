@@ -40,6 +40,18 @@ years_oi <- seq(1983, 2020, 1)
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
+#### FAOSTAT ####
+
+fao <- read.csv(file = here("input_data", "price_data", "FAOSTAT_data_6-11-2021.csv"))
+
+coffee <- dplyr::filter(fao, grepl("coffee", fao$Item, ignore.case = TRUE))
+
+unique(coffee$Item)
+
+unique(coffee$Area)
+
+# apparently already deflated, they don't mention the problem in metadata
+# a vérifier empiriquement. 
 
 #### PINK SHEET DATA (WORLD BANK) ####
 # "Annual Prices" link at: https://www.worldbank.org/en/research/commodity-markets (in April 2021)
