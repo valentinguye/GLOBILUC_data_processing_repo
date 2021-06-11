@@ -53,7 +53,7 @@ names(ps)[1] <- "year"
 ps <- as.data.frame(ps)
 
 
-# Convert $/kg in $/mt (the warnigns are for columns that have some NAs)
+# Convert $/kg in $/mt (the warnings are for columns that have some NAs)
 ps[-1,] <- ps[-1,] %>% mutate(across(.cols = colnames(ps[,ps[1,]=="($/kg)" & !is.na(ps[1,])]),
                            .fns = function(c){as.numeric(c)*1000}))
                                                
@@ -71,6 +71,7 @@ ps_commo <- c("Banana, US",
               "Cocoa", 
               "Coconut oil", 
               "Coffee, Arabica",
+              # "Coffee, Robusta", 
               "Cotton, A Index",
               "Rice, Thai 5%",
               "Groundnuts", 
@@ -94,6 +95,10 @@ ps2 <- ps[, c("year", ps_commo)]
 
 # Convert to numeric
 ps2 <- summarise(ps2, across(.fns = as.numeric))
+
+# Average prices of the two coffee types arabica and robusta. No actually, it makes sense to differentiate them and analyze Arabica alone.
+# ps2 <-  dplyr::mutate(ps2, Coffee = rowMeans(across(.cols = all_of(c("Coffee, Arabica", "Coffee, Robusta")))))
+# ps2 <- dplyr::select(ps2, -'Coffee, Arabica', - 'Coffee, Robusta')
 
 # Change (simplify) some names
 names(ps2)[names(ps2) == "Banana, US"] <- "Banana"
@@ -129,6 +134,7 @@ needed_imf_col <- c("year",
                     colnames(imf)[grepl(pattern = "olive", x = imf[1,], ignore.case = TRUE)], 
                     colnames(imf)[grepl(pattern = "rapeseed", x = imf[1,], ignore.case = TRUE)], 
                     colnames(imf)[grepl(pattern = "sunflower", x = imf[1,], ignore.case = TRUE)],
+                    # colnames(imf)[grepl(pattern = "arabica", x = imf[1,], ignore.case = TRUE)],
                     colnames(imf)[grepl(pattern = "pork", x = imf[1,], ignore.case = TRUE)])
     
 imf <- imf[, needed_imf_col]
@@ -139,13 +145,16 @@ imf <- imf[-c(1,2,3),]
 imf <- as.data.frame(imf)
 
 # Rename
-names(imf) <- c("year", "Oat", "Olive_oil", "Rapeseed_oil", "Sunflower_oil", "Pork")
+names(imf) <- c("year", "Oat", "Olive_oil", "Rapeseed_oil", "Sunflower_oil",  "Pork")#"Coffee",
 
 # Convert in $/mt 
 # Oat is in USD/bushel (ratio from https://www.sagis.org.za/conversion_table.html)
 imf[,"Oat"] <- as.numeric(imf[,"Oat"]) / 0.014515 
 # Pork is in USD cents / pound (ratio from https://www.rapidtables.com/convert/weight/pound-to-kg.html?x=1&x2=&x3=)
 imf[,"Pork"] <- as.numeric(imf[,"Pork"])*0.01/0.000453592 
+
+# imf[,"Coffee"] <- as.numeric(imf[,"Coffee"])*0.01/0.000453592 
+
 
 # Convert in 2010 real value (instead of 2016), using MUV index from Pink Sheet
 muv_index_2016 <- ps[ps$year == 2016, "MUV Index"] %>% as.numeric()/100
@@ -154,6 +163,7 @@ imf <- mutate(imf, Oat = as.numeric(Oat)/muv_index_2016,
               Olive_oil = as.numeric(Olive_oil)/muv_index_2016, 
               Rapeseed_oil = as.numeric(Rapeseed_oil)/muv_index_2016, 
               Sunflower_oil = as.numeric(Sunflower_oil)/muv_index_2016,
+              # Coffee = as.numeric(Coffee)/muv_index_2016,
               Pork = as.numeric(Pork)/muv_index_2016)
 class(imf[,2])
 
@@ -165,6 +175,7 @@ annual_imf <- ddply(imf, "year", summarise,
                     Olive_oil = mean(Olive_oil), 
                     Rapeseed_oil = mean(Rapeseed_oil), 
                     Sunflower_oil = mean(Sunflower_oil), 
+                    # Coffee = mean(Coffee), 
                     Pork = mean(Pork))
 
  
