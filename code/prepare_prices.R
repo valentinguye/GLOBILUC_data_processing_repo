@@ -3,6 +3,7 @@
 
 # These are the packages needed in this particular script. 
 neededPackages = c("plyr", "dplyr", "readxl", "foreign", "here", 
+                   "sf",
                    "DataCombine") 
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
@@ -39,64 +40,7 @@ years_oi <- seq(1983, 2020, 1)
 
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-
-#### FAOSTAT ####
-
-# fao <- read.csv(file = here("input_data", "price_data", "FAOSTAT_data_6-11-2021.csv"))
-
-fao <- read.csv(file = here("input_data", "price_data", "FAOSTAT_producerprice_slc_6-14-2021.csv"))
-fao <- fao %>% dplyr::arrange(Area, Year, Item)
-
-# Deflate PP-SLC from nominal values to real, base 2014-2016, values.
-idx <- read.csv(file = here("input_data", "price_data", "FAOSTAT_producerprice_index_6-14-2021.csv"))
-idx <- idx %>% dplyr::arrange(Area, Year, Item)
-unique(idx$Flag.Description)
-idx <- dplyr::select(idx, Area, Year, Item, Value)
-
-fao <- inner_join(fao, idx, by = c("Area", "Year", "Item"), suffix = c("_SLC", "_idx"))
-
-fao <- dplyr::mutate(fao, Value_SLC = Value_SLC/(Value_idx/100))
-
-rm(idx)
-
-
-# change (simplify) some commodity names
-unique(fao$Item)
-# http://www.fao.org/faostat/en/#data/PP définitions and standards > Items for more detail
-
-fao$Item[fao$Item == "Bananas"] <- "Banana" 
-fao$Item[fao$Item == "Cocoa, beans"] <- "Cocoa" 
-fao$Item[fao$Item == "Coconuts"] <- "Coconut" # the commodity is the coconutS, not the derived oil.
-fao$Item[fao$Item == "Coffee, green"] <- "Coffee" # Raw, arabica, robusta, liberica
-fao$Item[fao$Item == "Cotton lint"] <- "Cotton"
-fao$Item[fao$Item == "Milk, whole fresh cow"] <- "Milk"
-fao$Item[fao$Item == "Meat live weight, cattle"] <- "Beef"
-fao$Item[fao$Item == "Meat live weight, pig"] <- "Pork"
-fao$Item[fao$Item == "Meat live weight, chicken"] <- "Chicken"
-fao$Item[fao$Item == "Meat live weight, sheep"] <- "Sheep"
-fao$Item[fao$Item == "Oats"] <- "Oat"
-fao$Item[fao$Item == "Olives"] <- "Olive" # the commodity is oliveS, incl. those for oil, not the derived oil.
-fao$Item[fao$Item == "Oil, palm"] <- "Palm_oil" # the oil, not the fruits (likely crude, although not explicit)
-fao$Item[fao$Item == "Oil palm fruit"] <- "FFB"
-fao$Item[fao$Item == "Oranges"] <- "Orange" 
-fao$Item[fao$Item == "Rice, paddy"] <- "Rice"
-fao$Item[fao$Item == "Palm kernels"] <- "Palm_kernel"
-fao$Item[fao$Item == "Rubber, natural"] <- "Rubber"
-fao$Item[fao$Item == "Soybeans"] <- "Soybean"# the beans, not the oil
-fao$Item[fao$Item == "Sugar cane"] <- "Sugarcane"
-fao$Item[fao$Item == "Sugar beet"] <- "Sugarbeet"
-fao$Item[fao$Item == "Sunflower seed"] <- "Sunflower" # the seeds, not the oil, although mostly values for its oil.
-fao$Item[fao$Item == "Groundnuts, with shell"] <- "Groundnut"
-fao$Item[fao$Item == "Tobacco, unmanufactured"] <- "Tobacco"
-
-unique(fao$Item)
-
-
-
-countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
-
-
-
+# PREPARE INTERNATIONAL PRICE TIME SERIES 
 
 #### PINK SHEET DATA (WORLD BANK) ####
 # "Annual Prices" link at: https://www.worldbank.org/en/research/commodity-markets (in April 2021)
@@ -271,46 +215,135 @@ imf[imf$year < 1992,] <- mutate(imf[imf$year < 1992,], Oat = as.numeric(Oat)/(MU
 
 class(imf[,2])
 
-# # Restrict to years of interest
-# annual_imf <- dplyr::filter(annual_imf, annual_imf$year %in% years_oi)
 
 
-
-#### Consolidate price annual time series data frame #### 
+#### Consolidate international price annual time series data frame #### 
 # keep all years from each sources
-prices <- full_join(x = ps2, y = annual_imf, by = "year") 
+ip <- full_join(x = ps2, y = imf, by = "year") 
 
+ip <- ip %>% dplyr::select(-MUV_index, -FPI, -MUV_index_10, - MUV_index_2014_16)
 
 #### PREPARE ADDITIONAL PRICE VARIABLES #### 
 
-### Group prices
-prices <- prices %>% rowwise() %>% mutate(cereal_crops = mean(c(Barley, Maize, Sorghum, Wheat, Oat), na.rm = T), # excluding rice as not comparable enough
-                                        oil_crops = mean(c(Palm_oil, Rapeseed_oil, Soybean_oil, Sunflower_oil), na.rm = T), # using only "unflavored" oils
+### Group some commodity prices (but not used currently)
+ip <- ip %>% rowwise() %>% mutate(cereal_crops = mean(c(Barley, Maize, Sorghum, Wheat, Oat), na.rm = T), # excluding rice as not comparable enough
+                                  oil_crops = mean(c(Palm_oil, Rapeseed_oil, Soybean_oil, Sunflower_oil), na.rm = T), # using only "unflavored" oils
 ) %>% as.data.frame() # other commodities are not comparable enough to be grouped.
 
-head(prices)
+head(ip)
 
 
-# unique(prices$year) %>% length()
+# unique(ip$year) %>% length()
 
-### Lags 
-variables <- names(prices)[names(prices) != "year"]
 
-for(voi in variables){
+
+
+
+
+#### FAOSTAT ####
+
+# fao <- read.csv(file = here("input_data", "price_data", "FAOSTAT_data_6-11-2021.csv"))
+
+fao <- read.csv(file = here("input_data", "price_data", "FAOSTAT_producerprice_slc_6-14-2021.csv"))
+fao <- fao %>% dplyr::arrange(Area, Year, Item)
+names(fao)[names(fao)=="Value"] <- "ppslc"
+
+# Deflate PP-SLC from nominal values to real, base 2014-2016, values.
+idx <- read.csv(file = here("input_data", "price_data", "FAOSTAT_producerprice_index_6-14-2021.csv"))
+idx <- idx %>% dplyr::arrange(Area, Year, Item)
+names(idx)[names(idx)=="Value"] <- "ppi"
+
+unique(idx$Flag.Description)
+idx <- dplyr::select(idx, Area, Year, Item, ppi)
+
+fao <- inner_join(fao, idx, by = c("Area", "Year", "Item"))
+
+fao <- dplyr::mutate(fao, ppslc = ppslc/(ppi/100))
+
+rm(idx)
+
+
+# change (simplify) some commodity names
+unique(fao$Item)
+# http://www.fao.org/faostat/en/#data/PP définitions and standards > Items for more detail
+
+fao$Item[fao$Item == "Bananas"] <- "Banana" 
+fao$Item[fao$Item == "Cocoa, beans"] <- "Cocoa" 
+fao$Item[fao$Item == "Coconuts"] <- "Coconut" # the commodity is the coconutS, not the derived oil.
+fao$Item[fao$Item == "Coffee, green"] <- "Coffee" # Raw, arabica, robusta, liberica
+fao$Item[fao$Item == "Cotton lint"] <- "Cotton"
+fao$Item[fao$Item == "Milk, whole fresh cow"] <- "Milk"
+fao$Item[fao$Item == "Meat live weight, cattle"] <- "Beef"
+fao$Item[fao$Item == "Meat live weight, pig"] <- "Pork"
+fao$Item[fao$Item == "Meat live weight, chicken"] <- "Chicken"
+fao$Item[fao$Item == "Meat live weight, sheep"] <- "Sheep"
+fao$Item[fao$Item == "Oats"] <- "Oat"
+fao$Item[fao$Item == "Olives"] <- "Olive" # the commodity is oliveS, incl. those for oil, not the derived oil.
+fao$Item[fao$Item == "Oil, palm"] <- "Palm_oil" # the oil, not the fruits (likely crude, although not explicit)
+fao$Item[fao$Item == "Oil palm fruit"] <- "FFB"
+fao$Item[fao$Item == "Oranges"] <- "Orange" 
+fao$Item[fao$Item == "Rice, paddy"] <- "Rice"
+fao$Item[fao$Item == "Palm kernels"] <- "Palm_kernel"
+fao$Item[fao$Item == "Rubber, natural"] <- "Rubber"
+fao$Item[fao$Item == "Soybeans"] <- "Soybean"# the beans, not the oil
+fao$Item[fao$Item == "Sugar cane"] <- "Sugarcane"
+fao$Item[fao$Item == "Sugar beet"] <- "Sugarbeet"
+fao$Item[fao$Item == "Sunflower seed"] <- "Sunflower" # the seeds, not the oil, although mostly values for its oil.
+fao$Item[fao$Item == "Groundnuts, with shell"] <- "Groundnut"
+fao$Item[fao$Item == "Tobacco, unmanufactured"] <- "Tobacco"
+
+unique(fao$Item)
+
+### Reshape commodities from long to wide 
+fao <- dplyr::select(fao, Area, Item, Year, ppslc)
+fao <- stats::reshape(data = fao, 
+                       direction = "wide", 
+                       v.names = "ppslc", # names of variables in the long format that correspond to multiple variables in the wide format
+                       timevar = "Item", # the variable in long format that differentiates multiple records from the same group or individual
+                       idvar = c("Area", "Year")) 
+
+### Attribute exchange rates to be able to convert international prices 
+exr <- read.csv(file = here("input_data", "price_data", "FAOSTAT_exchangerate_6-14-2021.csv"))
+names(exr)[names(exr)=="Value"] <- "exr"
+fao <- full_join(fao, exr[,c("Area", "Year", "exr")], by = c("Area", "Year"))
+fao <- dplyr::arrange(fao, Area, Year)
+rm(exr)
+
+fao[fao$exr==0 & !is.na(fao$exr),"exr"] <- NA
+
+### Merge international prices 
+names(fao)[names(fao) == "Year"] <- "year"
+names(fao)[names(fao) == "Area"] <- "country"
+names(ip)[names(ip) != "year"] <- paste0("ip_", names(ip)[names(ip) != "year"])
+prices <- left_join(fao, ip, by = "year")
+
+
+
+### Convert international prices in USD to local currency units
+prices <- dplyr::mutate(prices, across(.cols = contains("ip_"),#
+                                       .fns = ~.*exr)) # exr is standard local currency units per USD
+
+
+### Lags
+
+## Lag international prices over whole period 
+ip_variables <- names(prices)[grepl(pattern = "ip_", x = names(prices))]
+
+for(voi in ip_variables){
   
   ## short to long lags
   for(lag in c(1:5)){
     prices <- dplyr::arrange(prices, year)
     prices <- DataCombine::slide(prices,
-                                  Var = voi, 
-                                  TimeVar = "year",
-                                  NewVar = paste0(voi,"_lag",lag),
-                                  slideBy = -lag, 
-                                  keepInvalid = FALSE)
+                             Var = voi, 
+                             TimeVar = "year",
+                             NewVar = paste0(voi,"_lag",lag),
+                             slideBy = -lag, 
+                             keepInvalid = FALSE)
     prices <- dplyr::arrange(prices, year)
     
   }
-
+  
   for(py in c(2:5)){
     ## Past-year averages (2, 3 and 4 years)  
     # note that we DON'T add voi column (not lagged) in the row mean
@@ -323,32 +356,80 @@ for(voi in variables){
 # remove some variables that were only temporarily necessary
 # (we want to keep lag1)
 vars_torm <- names(prices)[(grepl(pattern = "_lag2", x = names(prices)) |
-                                 grepl(pattern = "_lag3", x = names(prices)) |
-                                 grepl(pattern = "_lag4", x = names(prices)) |
-                                 grepl(pattern = "_lag5", x = names(prices)))]
+                          grepl(pattern = "_lag3", x = names(prices)) |
+                          grepl(pattern = "_lag4", x = names(prices)) |
+                          grepl(pattern = "_lag5", x = names(prices)))]
 
 prices <- prices[,!(names(prices) %in% vars_torm)]
 
 
-variables <- names(prices)[grepl(pattern = "ln_", x = names(prices))]
+## Lag ppslc prices over period with available data --> first year non missing is 1992 (with lag1 only) 
+ppslc_variables <- names(prices)[grepl(pattern = "ppslc.", x = names(prices))]
+
+for(voi in ppslc_variables){
+  
+  ## short to long lags
+  for(lag in c(1:5)){
+    prices <- dplyr::arrange(prices, year)
+    prices <- DataCombine::slide(prices,
+                                 Var = voi, 
+                                 TimeVar = "year",
+                                 NewVar = paste0(voi,"_lag",lag),
+                                 slideBy = -lag, 
+                                 keepInvalid = FALSE)
+    prices <- dplyr::arrange(prices, year)
+    
+  }
+  
+  for(py in c(2:5)){
+    ## Past-year averages (2, 3 and 4 years)  
+    # note that we DON'T add voi column (not lagged) in the row mean
+    prices$newv <- rowMeans(x = prices[,paste0(voi,"_lag",c(1:py))], na.rm = FALSE)
+    prices[is.nan(prices$newv),"newv"] <- NA
+    colnames(prices)[colnames(prices)=="newv"] <- paste0(voi,"_",py,"pya")
+  }
+}
+
+# remove some variables that were only temporarily necessary
+# (we want to keep lag1)
+vars_torm <- names(prices)[(grepl(pattern = "_lag2", x = names(prices)) |
+                              grepl(pattern = "_lag3", x = names(prices)) |
+                              grepl(pattern = "_lag4", x = names(prices)) |
+                              grepl(pattern = "_lag5", x = names(prices)))]
+
+prices <- prices[,!(names(prices) %in% vars_torm)]
+
+
+### For each lag type, replace missing values from starting year to corresponding year. 
+## For lag1
+
+## For 2pya
+
+## For 3pya
+
+## For 4pya
+
+
+## For 5pya
+
+
 
 ### Make logarithms
-logs <- mutate(prices[,names(prices)[names(prices) != "year"]], 
+logs <- mutate(ip[,names(ip)[names(ip) != "year"]], 
                across(.fns = log))
 
 names(logs) <- paste0("ln_", names(logs))
 
-prices <- cbind(prices, logs)
-head(prices)
+ip <- cbind(ip, logs)
+head(ip)
 
-# View(prices[,c("Banana", "Banana_lag1", "Banana_2pya", "Banana_3pya", "Banana_4pya")])
+# View(ip[,c("Banana", "Banana_lag1", "Banana_2pya", "Banana_3pya", "Banana_4pya")])
 
-saveRDS(prices, here("temp_data", "prepared_prices.Rdata"))
+saveRDS(ip, here("temp_data", "prepared_prices.Rdata"))
 
 
 
-rm(annual_imf, imf, logs, prices, ps, ps2, muv_index_2016, ps_commo, needed_imf_col, years_oi, lag, voi, variables, vars_torm)
-
+rm(imf, logs, ip, ps, ps2, muv_index_2016, ps_commo, needed_imf_col, years_oi, lag, voi, variables, vars_torm)
 
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
