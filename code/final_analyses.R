@@ -82,9 +82,10 @@ mapmat_data <- c(
 "Coconut_oil", "Coconut",
 "Coffee", "Coffee",
 "Cotton", "fibre_crops",
-"Groundnuts", "Groundnut",
+"Groundnut", "Groundnut",
 "Maize", "Maize",
 "Oat", "Oat",
+"Orange", "Citrus", # Citrus sinensis in both
 "Olive_oil", "Olive",
 "Palm_oil", "Oilpalm",
 "Rapeseed_oil", "Rapeseed",
@@ -140,7 +141,7 @@ prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
 #              "Coconut_oil", "Soybeans","Sugar", "Maize")
 # # c( "Sugar", "Maize") 
 # # "Barley",  "Chicken", "Sheep", "Banana", "Beef", "Olive_oil",
-# #               "Orange",  "Cotton",  "Groundnuts",  "Rubber", "Sorghum","Cocoa",  "Coffee",
+# #               "Orange",  "Cotton",  "Groundnut",  "Rubber", "Sorghum","Cocoa",  "Coffee",
 # #                "Rice",   "Wheat",  "Palm_oil", ), 
 # #                "Tea", "Tobacco",  "Oat",  
 # #               , "Pork")
@@ -155,7 +156,7 @@ prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
 # output = "coef_table"
 
 # "Banana", "Barley", "Beef", 
-# "Orange", "Cocoa", "Coconut_oil", "Coffee", "Cotton", "Rice", "Groundnuts", 
+# "Orange", "Cocoa", "Coconut_oil", "Coffee", "Cotton", "Rice", "Groundnut", 
 # "Maize", "Palm_oil", "Rubber", "Sorghum", "Soybean_oil", 
 # "Sugar", "Tea", "Tobacco", "Wheat", "Oat", "Olive_oil", "Rapeseed_oil", 
 # "Sunflower_oil"
@@ -713,7 +714,7 @@ make_table_mat <- function(df_res,
 # Across crops, these quantities differ in the forest loss measure, and (the time and) space it is aggregated to. 
 
 # For acay we need to compute the revenue here. This helper function does it
-make_rj <- function(data, crops, qj = "continuous", price_info){
+make_rj <- function(data, crops, qj = "continuous", price_info = "4pya"){
   ## Revenue variable names
   # To determine land use, only the potential revenue of soybeans is considered (for simplicity) 
   all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & mapmat[,"Prices"]!="Soybean_meal" ,"Prices"]
@@ -753,7 +754,7 @@ make_rj <- function(data, crops, qj = "continuous", price_info){
   if(qj == "max"){
   # Construct the max of all revenues
     data <- rowwise(data, all_of(c("grid_id", "year"))) %>% 
-    dplyr::mutate(Ri_max = max(c_across(cols = starts_with("R_", ignore.case = FALSE)), na.rm = TRUE)) %>% as.data.frame()
+    data <- dplyr::mutate(Ri_max = max(c_across(cols = starts_with("R_", ignore.case = FALSE)), na.rm = TRUE)) %>% as.data.frame()
   }
   
   # Construct qj for all crops needed 
@@ -930,7 +931,7 @@ d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_acay_lon
 d <- make_rj(data = d, 
              crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee"), 
              qj = "continuous", 
-             price_info = "lag1")
+             price_info = "4pya")
 
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
                    R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)

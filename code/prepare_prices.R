@@ -42,16 +42,61 @@ years_oi <- seq(1983, 2020, 1)
 
 #### FAOSTAT ####
 
-fao <- read.csv(file = here("input_data", "price_data", "FAOSTAT_data_6-11-2021.csv"))
+# fao <- read.csv(file = here("input_data", "price_data", "FAOSTAT_data_6-11-2021.csv"))
 
-coffee <- dplyr::filter(fao, grepl("coffee", fao$Item, ignore.case = TRUE))
+fao <- read.csv(file = here("input_data", "price_data", "FAOSTAT_producerprice_slc_6-14-2021.csv"))
+fao <- fao %>% dplyr::arrange(Area, Year, Item)
 
-unique(coffee$Item)
+# Deflate PP-SLC from nominal values to real, base 2014-2016, values.
+idx <- read.csv(file = here("input_data", "price_data", "FAOSTAT_producerprice_index_6-14-2021.csv"))
+idx <- idx %>% dplyr::arrange(Area, Year, Item)
+unique(idx$Flag.Description)
+idx <- dplyr::select(idx, Area, Year, Item, Value)
 
-unique(coffee$Area)
+fao <- inner_join(fao, idx, by = c("Area", "Year", "Item"), suffix = c("_SLC", "_idx"))
 
-# apparently already deflated, they don't mention the problem in metadata
-# a vérifier empiriquement. 
+fao <- dplyr::mutate(fao, Value_SLC = Value_SLC/(Value_idx/100))
+
+rm(idx)
+
+
+# change (simplify) some commodity names
+unique(fao$Item)
+# http://www.fao.org/faostat/en/#data/PP définitions and standards > Items for more detail
+
+fao$Item[fao$Item == "Bananas"] <- "Banana" 
+fao$Item[fao$Item == "Cocoa, beans"] <- "Cocoa" 
+fao$Item[fao$Item == "Coconuts"] <- "Coconut" # the commodity is the coconutS, not the derived oil.
+fao$Item[fao$Item == "Coffee, green"] <- "Coffee" # Raw, arabica, robusta, liberica
+fao$Item[fao$Item == "Cotton lint"] <- "Cotton"
+fao$Item[fao$Item == "Milk, whole fresh cow"] <- "Milk"
+fao$Item[fao$Item == "Meat live weight, cattle"] <- "Beef"
+fao$Item[fao$Item == "Meat live weight, pig"] <- "Pork"
+fao$Item[fao$Item == "Meat live weight, chicken"] <- "Chicken"
+fao$Item[fao$Item == "Meat live weight, sheep"] <- "Sheep"
+fao$Item[fao$Item == "Oats"] <- "Oat"
+fao$Item[fao$Item == "Olives"] <- "Olive" # the commodity is oliveS, incl. those for oil, not the derived oil.
+fao$Item[fao$Item == "Oil, palm"] <- "Palm_oil" # the oil, not the fruits (likely crude, although not explicit)
+fao$Item[fao$Item == "Oil palm fruit"] <- "FFB"
+fao$Item[fao$Item == "Oranges"] <- "Orange" 
+fao$Item[fao$Item == "Rice, paddy"] <- "Rice"
+fao$Item[fao$Item == "Palm kernels"] <- "Palm_kernel"
+fao$Item[fao$Item == "Rubber, natural"] <- "Rubber"
+fao$Item[fao$Item == "Soybeans"] <- "Soybean"# the beans, not the oil
+fao$Item[fao$Item == "Sugar cane"] <- "Sugarcane"
+fao$Item[fao$Item == "Sugar beet"] <- "Sugarbeet"
+fao$Item[fao$Item == "Sunflower seed"] <- "Sunflower" # the seeds, not the oil, although mostly values for its oil.
+fao$Item[fao$Item == "Groundnuts, with shell"] <- "Groundnut"
+fao$Item[fao$Item == "Tobacco, unmanufactured"] <- "Tobacco"
+
+unique(fao$Item)
+
+
+
+countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
+
+
+
 
 #### PINK SHEET DATA (WORLD BANK) ####
 # "Annual Prices" link at: https://www.worldbank.org/en/research/commodity-markets (in April 2021)
@@ -64,15 +109,17 @@ names(ps)[1] <- "year"
 
 ps <- as.data.frame(ps)
 
-
 # Convert $/kg in $/mt (the warnings are for columns that have some NAs)
 ps[-1,] <- ps[-1,] %>% mutate(across(.cols = colnames(ps[,ps[1,]=="($/kg)" & !is.na(ps[1,])]),
                            .fns = function(c){as.numeric(c)*1000}))
                                                
 # drop first row (price unit) for manipulation convenience. 
 ps <- ps[-1,]
+# Convert to numeric
+ps <- summarise(ps, across(.fns = as.numeric))
 
-# Select commodities of interest 
+
+# Select commodities of interest - actually we don't want prices of commodities that are not exactly the same as in FAOSTAT
 ps_commo <- c("Banana, US", 
               "Barley",
               "Beef", 
@@ -83,7 +130,7 @@ ps_commo <- c("Banana, US",
               "Cocoa", 
               "Coconut oil", 
               "Coffee, Arabica",
-              # "Coffee, Robusta", 
+              "Coffee, Robusta", 
               "Cotton, A Index",
               "Rice, Thai 5%",
               "Groundnuts", 
@@ -99,18 +146,15 @@ ps_commo <- c("Banana, US",
               "Tobacco, US import u.v.", 
               "Wheat, US HRW")
 
-ps2 <- ps[, c("year", ps_commo)] 
+ps2 <- ps[, c("year", ps_commo, "MUV Index")] 
 
 # # Select years of interest 
 # ps2 <- dplyr::filter(ps2, ps2$year %in% years_oi)
 
 
-# Convert to numeric
-ps2 <- summarise(ps2, across(.fns = as.numeric))
-
-# Average prices of the two coffee types arabica and robusta. No actually, it makes sense to differentiate them and analyze Arabica alone.
-# ps2 <-  dplyr::mutate(ps2, Coffee = rowMeans(across(.cols = all_of(c("Coffee, Arabica", "Coffee, Robusta")))))
-# ps2 <- dplyr::select(ps2, -'Coffee, Arabica', - 'Coffee, Robusta')
+# Average prices of the two coffee types arabica and robusta, to better match coffee price from FAOSTAT
+ps2 <-  dplyr::mutate(ps2, Coffee = rowMeans(across(.cols = all_of(c("Coffee, Arabica", "Coffee, Robusta")))))
+ps2 <- dplyr::select(ps2, -'Coffee, Arabica', - 'Coffee, Robusta')
 
 # Change (simplify) some names
 names(ps2)[names(ps2) == "Banana, US"] <- "Banana"
@@ -118,11 +162,13 @@ names(ps2)[names(ps2) == "Coconut oil"] <- "Coconut_oil"
 names(ps2)[names(ps2) == "Coffee, Arabica"] <- "Coffee"
 names(ps2)[names(ps2) == "Cotton, A Index"] <- "Cotton"
 names(ps2)[names(ps2) == "Crude oil, average"] <- "Crude_oil"
+names(ps2)[names(ps2) == "Groundnuts"] <- "Groundnut"
 names(ps2)[names(ps2) == "Meat, chicken"] <- "Chicken"
 names(ps2)[names(ps2) == "Meat, sheep"] <- "Sheep"
 names(ps2)[names(ps2) == "Rice, Thai 5%"] <- "Rice"
 names(ps2)[names(ps2) == "Palm oil"] <- "Palm_oil"
 names(ps2)[names(ps2) == "Rubber, SGP/MYS"] <- "Rubber"
+names(ps2)[names(ps2) == "Soybeans"] <- "Soybean"
 names(ps2)[names(ps2) == "Soybean oil"] <- "Soybean_oil"
 names(ps2)[names(ps2) == "Soybean meal"] <- "Soybean_meal"
 names(ps2)[names(ps2) == "Sugar, world"] <- "Sugar"
@@ -130,7 +176,20 @@ names(ps2)[names(ps2) == "Tea, avg 3 auctions"] <- "Tea"
 names(ps2)[names(ps2) == "Tobacco, US import u.v."] <- "Tobacco"
 names(ps2)[names(ps2) == "Wheat, US HRW"] <- "Wheat"
 
+names(ps2)[names(ps2) == "MUV Index"] <- "MUV_index"
+
 head(ps2)
+
+# Convert from base 2010 to base 2014-2016
+# First construct index for 2014-2016, to match the FAOSTAT index
+# So this is the MUV index for 2014-2016 in base 2010=100
+muv_index_2014_16 <- mean(c(as.numeric(ps2[ps2$year >= 2014 & ps2$year <= 2016, "MUV_index"])))
+
+# Important to notmodify MUV_index, we will need it again as such
+ps2 <- dplyr::mutate(ps2, across(.cols = (!contains("year") & !contains("MUV_index")), 
+                                 .fns = ~.*muv_index_2014_16/100)) 
+
+
 
 
 #### IMF DATA #### 
@@ -147,7 +206,8 @@ needed_imf_col <- c("year",
                     colnames(imf)[grepl(pattern = "rapeseed", x = imf[1,], ignore.case = TRUE)], 
                     colnames(imf)[grepl(pattern = "sunflower", x = imf[1,], ignore.case = TRUE)],
                     # colnames(imf)[grepl(pattern = "arabica", x = imf[1,], ignore.case = TRUE)],
-                    colnames(imf)[grepl(pattern = "pork", x = imf[1,], ignore.case = TRUE)])
+                    colnames(imf)[grepl(pattern = "pork", x = imf[1,], ignore.case = TRUE)],
+                    colnames(imf)[grepl(pattern = "Food Price Index", x = imf[1,], ignore.case = TRUE)])
     
 imf <- imf[, needed_imf_col]
 
@@ -157,7 +217,7 @@ imf <- imf[-c(1,2,3),]
 imf <- as.data.frame(imf)
 
 # Rename
-names(imf) <- c("year", "Oat", "Olive_oil", "Rapeseed_oil", "Sunflower_oil",  "Pork")#"Coffee",
+names(imf) <- c("year", "Oat", "Olive_oil", "Rapeseed_oil", "Sunflower_oil",  "Pork", "FPI")#"Coffee",
 
 # Convert in $/mt 
 # Oat is in USD/bushel (ratio from https://www.sagis.org.za/conversion_table.html)
@@ -167,30 +227,50 @@ imf[,"Pork"] <- as.numeric(imf[,"Pork"])*0.01/0.000453592
 
 # imf[,"Coffee"] <- as.numeric(imf[,"Coffee"])*0.01/0.000453592 
 
-
-# Convert in 2010 real value (instead of 2016), using MUV index from Pink Sheet
-muv_index_2016 <- ps[ps$year == 2016, "MUV Index"] %>% as.numeric()/100
-
-imf <- mutate(imf, Oat = as.numeric(Oat)/muv_index_2016, 
-              Olive_oil = as.numeric(Olive_oil)/muv_index_2016, 
-              Rapeseed_oil = as.numeric(Rapeseed_oil)/muv_index_2016, 
-              Sunflower_oil = as.numeric(Sunflower_oil)/muv_index_2016,
-              # Coffee = as.numeric(Coffee)/muv_index_2016,
-              Pork = as.numeric(Pork)/muv_index_2016)
-class(imf[,2])
-
 # Average monthly prices to annual 
 imf$year <- gsub("M.*", "", imf$year) %>% as.numeric()
 
-annual_imf <- ddply(imf, "year", summarise, 
-                    Oat = mean(Oat), 
-                    Olive_oil = mean(Olive_oil), 
-                    Rapeseed_oil = mean(Rapeseed_oil), 
-                    Sunflower_oil = mean(Sunflower_oil), 
-                    # Coffee = mean(Coffee), 
-                    Pork = mean(Pork))
 
- 
+imf <- ddply(imf, "year", summarise, 
+                    Oat = Oat %>% as.numeric() %>% mean(), 
+                    Olive_oil = Olive_oil %>% as.numeric() %>% mean(), 
+                    Rapeseed_oil = Rapeseed_oil %>% as.numeric() %>% mean(), 
+                    Sunflower_oil = Sunflower_oil %>% as.numeric() %>% mean(), 
+                    # Coffee = mean(Coffee), 
+                    Pork = Pork %>% as.numeric() %>% mean(), 
+                    FPI = FPI %>% as.numeric() %>% mean())
+
+# From 1992 on, use the Food price index (FPI) from the IMF, in base 2016=100, to deflate the nominal time series.
+imf[imf$year >=1992,] <- mutate(imf[imf$year >=1992,], Oat = as.numeric(Oat)/(FPI/100), 
+                                                       Olive_oil = as.numeric(Olive_oil)/(FPI/100), 
+                                                       Rapeseed_oil = as.numeric(Rapeseed_oil)/(FPI/100), 
+                                                       Sunflower_oil = as.numeric(Sunflower_oil)/(FPI/100),
+                                                       # Coffee = as.numeric(Coffee)/muv_index_2016,
+                                                       Pork = as.numeric(Pork)/(FPI/100))
+
+# Then change the base from 2016 to 2014-2016, to match FAOSTAT
+fpi_2014_16 <- mean(c(as.numeric(imf[imf$year >= 2014 & imf$year <= 2016, "FPI"])))
+
+imf <- dplyr::mutate(imf, across(.cols = (!contains("year")), 
+                                 .fns = ~.*fpi_2014_16/100)) 
+
+# For years prior 1992, we deflate with the MUV index base 2014-2016 from the Pink Sheet
+imf$MUV_index_10 <- NA
+imf$MUV_index_10[imf$year<1992] <- ps2$MUV_index[ps2$year >= min(imf$year) & ps2$year < 1992]
+
+imf$MUV_index_2014_16 <- NA
+imf$MUV_index_2014_16 <- imf$MUV_index_10/(muv_index_2014_16/100)
+
+imf[imf$year < 1992,] <- mutate(imf[imf$year < 1992,], Oat = as.numeric(Oat)/(MUV_index_2014_16/100), 
+                                Olive_oil = as.numeric(Olive_oil)/(MUV_index_2014_16/100), 
+                                Rapeseed_oil = as.numeric(Rapeseed_oil)/(MUV_index_2014_16/100), 
+                                Sunflower_oil = as.numeric(Sunflower_oil)/(MUV_index_2014_16/100),
+                                # Coffee = as.numeric(Coffee)/(MUV_index_2014_16/100),
+                                Pork = as.numeric(Pork)/(MUV_index_2014_16/100))
+
+
+class(imf[,2])
+
 # # Restrict to years of interest
 # annual_imf <- dplyr::filter(annual_imf, annual_imf$year %in% years_oi)
 
