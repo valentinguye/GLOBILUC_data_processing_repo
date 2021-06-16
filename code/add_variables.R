@@ -56,6 +56,10 @@ dataset_names <- c("glass_aesi_long",
 countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
 length(unique(countries$COUNTRY_NA)) == nrow(countries)
 
+# #load prices to make country names match
+# prices <- readRDS(here("temp_data", "prepared_producer_prices.Rdata"))
+# fao_names <- unique(prices$country_name)
+
 # name = dataset_names[1]
 # 
 # c1 <- countries[1,]
@@ -118,6 +122,60 @@ for(name in dataset_names){
   # # df <- left_join(df, df_cs[,c("grid_id", "country_id", "country_name")], by = "grid_id")
 
   
+  ### Match country names to those from FAOSTAT 
+  # Necessary to match national producer prices 
+  # c_names <- unique(df_country$country_name)
+  # c_names[!c_names%in%fao_names]
+  
+  df_cs$country_name[df_cs$country_name=="United States"] <- "United States of America"
+  df_cs$country_name[df_cs$country_name=="Iran"] <- "Iran (Islamic Republic of)"
+  df_cs$country_name[df_cs$country_name=="Spain [Canary Is]"] <- "Spain"
+  df_cs$country_name[df_cs$country_name=="Burma"] <- "Myanmar"
+  df_cs$country_name[df_cs$country_name=="Bahamas, The"] <- "Bahamas"
+  # df_cs$country_name[df_cs$country_name=="Taiwan"] 
+  df_cs$country_name[df_cs$country_name=="Vietnam"] <- "Viet Nam"
+  df_cs$country_name[df_cs$country_name=="Hong Kong (Ch)"] <- "China, Hong Kong SAR"
+  df_cs$country_name[df_cs$country_name=="Macau (Ch)"] <- "China, Macao SAR"
+  df_cs$country_name[df_cs$country_name=="Turks & Caicos Is (UK)"] <- "United Kingdom of Great Britain and Northern Ireland"
+  df_cs$country_name[df_cs$country_name=="Laos"] <- "Lao People's Democratic Republic"
+  df_cs$country_name[df_cs$country_name=="Cayman Is (UK)"] <- "United Kingdom of Great Britain and Northern Ireland"
+  df_cs$country_name[df_cs$country_name=="Northern Mariana Is (US)"] <- "United States of America"
+  df_cs$country_name[df_cs$country_name=="Puerto Rico (US)"] <- "United States of America"
+  df_cs$country_name[df_cs$country_name=="Br Virgin Is (UK)"] <- "United Kingdom of Great Britain and Northern Ireland"
+  df_cs$country_name[df_cs$country_name=="US Virgin Is (US)"] <- "United States of America"
+  df_cs$country_name[df_cs$country_name=="Antigua & Barbuda"] <- "Antigua and Barbuda"
+  df_cs$country_name[df_cs$country_name=="St Kitts & Nevis"] <- "Saint Kitts and Nevis"
+  df_cs$country_name[df_cs$country_name=="Montserrat (UK)"] <- "United Kingdom of Great Britain and Northern Ireland"
+  df_cs$country_name[df_cs$country_name=="Guadeloupe (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="Martinique (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="St Lucia"] <- "Saint Lucia"
+  df_cs$country_name[df_cs$country_name=="Guam (US)"] <- "United States of America"
+  df_cs$country_name[df_cs$country_name=="St Vincent & the Grenadines"] <- "Saint Vincent and the Grenadines"
+  df_cs$country_name[df_cs$country_name=="Venezuela"] <- "Venezuela (Bolivarian Republic of)"
+  df_cs$country_name[df_cs$country_name=="Trinidad & Tobago"] <- "Trinidad and Tobago"
+  df_cs$country_name[df_cs$country_name=="Cote d'Ivoire"] <- "Côte d'Ivoire"
+  df_cs$country_name[df_cs$country_name=="Central African Rep"] <- "Central African Republic"
+  # df_cs$country_name[df_cs$country_name=="Micronesia, Fed States of"]
+  df_cs$country_name[df_cs$country_name=="French Guiana (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="Congo, Dem Rep of the"] <- "Democratic Republic of the Congo"
+  df_cs$country_name[df_cs$country_name=="Brunei"] <- "Brunei Darussalam"
+  df_cs$country_name[df_cs$country_name=="Congo, Rep of the"] <- "Congo"
+  df_cs$country_name[df_cs$country_name=="Sao Tome & Principe"] <- "Sao Tome and Principe"
+  df_cs$country_name[df_cs$country_name=="Tanzania"] <- "United Republic of Tanzania"
+  df_cs$country_name[df_cs$country_name=="Solomon Is"] <- "Solomon Islands"
+  df_cs$country_name[df_cs$country_name=="French Polynesia (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="Bolivia"] <- "Bolivia (Plurinational State of)"
+  df_cs$country_name[df_cs$country_name=="Christmas I (Aus)"] <- "Australia"
+  df_cs$country_name[df_cs$country_name=="Mayotte (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="Wallis & Futuna (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="American Samoa (US)"] <- "United States of America"
+  df_cs$country_name[df_cs$country_name=="Niue (NZ)"] <- "New Zealand"
+  df_cs$country_name[df_cs$country_name=="New Caledonia (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="Reunion (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="Pitcairn Is (UK)"] <- "United Kingdom of Great Britain and Northern Ireland"
+  df_cs$country_name[df_cs$country_name=="Swaziland"] <- "Eswatini"
+  
+  
   # saveRDS(df_cs, path)
   saveRDS(df_cs, paste0(here(origindir, name), "_country_nf.Rdata"))
   rm(df_cs)
@@ -162,7 +220,7 @@ for(name in dataset_names){
   # Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
   df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
                                           oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
-                                          sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
+                                          sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
                                            fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
                                            fibre_crops = max(c(Cotton, Flax)),
                                            stimulant_crops = max(c(Coffee, Tea, Tobacco)),
@@ -223,8 +281,7 @@ for(name in dataset_names){
   
   rm(final)
 }
-### Repeat it for the heavier phtf loss data set, with a slight difference: we do not 
-# append to the non standardized suitability indexes (which are only useful for robustness checks)
+
 
 
 
@@ -262,7 +319,7 @@ for(name in dataset_names){
   # Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
   df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
                                           oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
-                                          sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
+                                          sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
                                           fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
                                           fibre_crops = max(c(Cotton, Flax)),
                                           stimulant_crops = max(c(Coffee, Tea, Tobacco)),

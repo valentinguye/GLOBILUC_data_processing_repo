@@ -3,7 +3,6 @@
 
 # These are the packages needed in this particular script. 
 neededPackages = c("plyr", "dplyr", "readxl", "foreign", "here", 
-                   "sf",
                    "DataCombine") 
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
@@ -36,7 +35,6 @@ lapply(neededPackages, library, character.only = TRUE)
 # 
 # 
 
-years_oi <- seq(1983, 2020, 1) 
 
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
@@ -92,8 +90,6 @@ ps_commo <- c("Banana, US",
 
 ps2 <- ps[, c("year", ps_commo, "MUV Index")] 
 
-# # Select years of interest 
-# ps2 <- dplyr::filter(ps2, ps2$year %in% years_oi)
 
 
 # Average prices of the two coffee types arabica and robusta, to better match coffee price from FAOSTAT
@@ -313,7 +309,7 @@ fao[fao$exr==0 & !is.na(fao$exr),"exr"] <- NA
 
 ### Merge international prices 
 names(fao)[names(fao) == "Year"] <- "year"
-names(fao)[names(fao) == "Area"] <- "country"
+names(fao)[names(fao) == "Area"] <- "country_name"
 names(ip)[names(ip) != "year"] <- paste0("ip_", names(ip)[names(ip) != "year"])
 prices <- left_join(fao, ip, by = "year")
 
@@ -400,36 +396,53 @@ vars_torm <- names(prices)[(grepl(pattern = "_lag2", x = names(prices)) |
 prices <- prices[,!(names(prices) %in% vars_torm)]
 
 
-### For each lag type, replace missing values from starting year to corresponding year. 
-## For lag1
+### For each lag type and commodity, replace missing values from starting year to corresponding year. 
+# FAOSTAT crops
+crops <- sub(pattern = ".*ppslc.", x = names(fao)[grepl("ppslc.", names(fao))], replacement = "")
 
-## For 2pya
+# FAOSTAT producer price time series starts in 1991. Therefore: 
+# lag1 variables are avalaible only as of 1992, 2pya as of 1993, 3pya as of 1994, etc. 
+lag_types <- c("", "_lag1", "_2pya", "_3pya", "_4pya", "_5pya")
+maxyear <- 1991
+for(type in lag_types){
+  period <- prices$year < maxyear 
+  variables <- paste0(crops, type)
+  for(voi in variables){
+    ip_var <- paste0("ip_", voi)
+    ppslc_var <- paste0("ppslc.",voi)
+    if(ip_var %in% names(prices)){
+      prices[period, ppslc_var] <- prices[period, ip_var] 
+    }
+  }
+  # do the same thing for slightly different commodities:
+  prices[period, paste0("ppslc.Rapeseed", type)] <- prices[period, paste0("ip_Rapeseed_oil", type)] 
+  prices[period, paste0("ppslc.Sunflower", type)] <- prices[period, paste0("ip_Sunflower_oil", type)] 
+  prices[period, paste0("ppslc.Coconut", type)] <- prices[period, paste0("ip_Coconut_oil", type)] 
+  prices[period, paste0("ppslc.Olive", type)] <- prices[period, paste0("ip_Olive_oil", type)] 
+  prices[period, paste0("ppslc.Sugarbeet", type)] <- prices[period, paste0("ip_Sugar", type)] 
+  prices[period, paste0("ppslc.Sugarcane", type)] <- prices[period, paste0("ip_Sugar", type)] 
+  
+  maxyear <- maxyear + 1
+}
 
-## For 3pya
+# remove ip variables
+prices <- dplyr::select(prices, !contains("ip_"))
+prices <- dplyr::select(prices, -exr)
 
-## For 4pya
-
-
-## For 5pya
-
-
+names(prices) <- sub(pattern = ".*ppslc.", x = names(prices), replacement = "")
 
 ### Make logarithms
-logs <- mutate(ip[,names(ip)[names(ip) != "year"]], 
-               across(.fns = log))
-
-names(logs) <- paste0("ln_", names(logs))
-
-ip <- cbind(ip, logs)
-head(ip)
+prices <- dplyr::mutate(prices, across(.cols = !c("country_name", "year"),
+                                       .fns = log,
+                                       .names = paste0("ln_", "{.col}")))
 
 # View(ip[,c("Banana", "Banana_lag1", "Banana_2pya", "Banana_3pya", "Banana_4pya")])
 
-saveRDS(ip, here("temp_data", "prepared_prices.Rdata"))
+saveRDS(prices, here("temp_data", "prepared_producer_prices.Rdata"))
 
 
 
-rm(imf, logs, ip, ps, ps2, muv_index_2016, ps_commo, needed_imf_col, years_oi, lag, voi, variables, vars_torm)
+rm(prices, fao, imf, ip, ps, ps2, crops, fpi_2014_16, muv_index_2014_16, period, ppslc_var, ppslc_variables, py, ip_var, ip_variables, lag_types, type, maxyear, ps_commo, needed_imf_col, lag, voi, variables, vars_torm)
 
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 

@@ -17,7 +17,8 @@ neededPackages = c("plyr", "dplyr", "here", #"tibble", "data.table",
                    "DataCombine",
                    "knitr", "kableExtra",
                    "fixest", #,"msm", "car",  "sandwich", "lmtest", "boot", "multcomp",
-                   "ggplot2", "dotwhisker"# "leaflet", "htmltools"
+                   "ggplot2", "dotwhisker",# "leaflet", "htmltools"
+                   "foreach"
                    )
 # "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
 
@@ -79,27 +80,28 @@ mapmat_data <- c(
 "Beef", "fodder_crops", 
 "Orange", "Citrus",
 "Cocoa", "Cocoa",
-"Coconut_oil", "Coconut",
+"Coconut", "Coconut",
 "Coffee", "Coffee",
 "Cotton", "fibre_crops",
 "Groundnut", "Groundnut",
 "Maize", "Maize",
 "Oat", "Oat",
-"Orange", "Citrus", # Citrus sinensis in both
-"Olive_oil", "Olive",
+"Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
+"Olive", "Olive",
 "Palm_oil", "Oilpalm",
-"Rapeseed_oil", "Rapeseed",
+"Rapeseed", "Rapeseed",
 "Rice", "rice_crops",
 "Sorghum", "Sorghum",
-"Soybeans", "Soybean",
-"Soybean_oil", "Soybean",
-"Soybean_meal", "Soybean",
-"Sugar", "sugar_crops",
-"Sunflower_oil", "Sunflower",
+"Soybean", "Soybean",
+# "Soybean_oil", "Soybean",
+# "Soybean_meal", "Soybean",
+# "Sugar", "sugar_crops",
+"Sugarbeet", "Sugarbeet",
+"Sugarcane", "Sugarcane",
+"Sunflower", "Sunflower",
 "Tea", "Tea",
 "Tobacco", "Tobacco",
-"Wheat", "Wheat",
-"cereal_crops", "cereal_crops")
+"Wheat", "Wheat")
 
 mapmat <- matrix(data = mapmat_data, 
                  nrow = length(mapmat_data)/2,
@@ -123,7 +125,7 @@ colnames(mapmat) <- c("Prices", "Crops")
 
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))
 
-prices <- readRDS(here("temp_data", "prepared_prices.Rdata"))
+prices <- readRDS(here("temp_data", "prepared_producer_prices.Rdata"))
 # 
 # rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, SjPj, SkPk, fe, distribution, output, se, cluster, 
 #    controls, regressors, outcome_variable)
@@ -246,7 +248,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   ### PREPARE rj, the standardized achievable revenues
   
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", prices_4_revenue)], by = "year")
+  d <- left_join(d, prices[,c("country_name", "year", prices_4_revenue)], by = c("country_name", "year"))
   
   # Agro-climatic achievable yield data from GAEZ are in t/ha (as shown by the Map tool on the platform)
   # Prices have been converted to $/t in prepare_prices.R
@@ -297,7 +299,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   d <- dplyr::filter(d, !!as.symbol(revenue_j_std) > 0)
   
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", price_all)], by = "year")
+  d <- left_join(d, prices[,c("country_name", "year", price_all)], by = c("country_name", "year"))
   
   # Main regressors
   regressors <- c()
@@ -522,7 +524,7 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
   d <- dplyr::filter(d, !!as.symbol(suitability_j_std) > 0)
 
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", price_all)], by = "year")
+  d <- left_join(d, prices[,c("country_name", "year", price_all)], by = c("country_name", "year"))
   
   
   # Main regressors
@@ -713,6 +715,11 @@ make_table_mat <- function(df_res,
 # For each crop j, we produce two quantities, for aesi and acay. 
 # Across crops, these quantities differ in the forest loss measure, and (the time and) space it is aggregated to. 
 
+# data = d
+# crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee") 
+# qj = "continuous" 
+# price_info = "4pya"
+
 # For acay we need to compute the revenue here. This helper function does it
 make_rj <- function(data, crops, qj = "continuous", price_info = "4pya"){
   ## Revenue variable names
@@ -727,7 +734,7 @@ make_rj <- function(data, crops, qj = "continuous", price_info = "4pya"){
   ### PREPARE rj, the standardized achievable revenues
   
   # Merge only the prices needed, not the whole price dataframe
-  data <- left_join(data, prices[,c("year", prices_4_revenue)], by = "year")
+  data <- left_join(data, prices[,c("country_name", "year", prices_4_revenue)], by = c("country_name", "year"))
   
   # Agro-climatic achievable yield data from GAEZ are in t/ha (as shown by the Map tool on the platform)
   # Prices have been converted to $/t in prepare_prices.R
@@ -824,7 +831,7 @@ if(!file.exists(here("temp_data", "glass_sgbp_southam")) |
   d_cs <- st_as_sf(d_cs, coords=c("lon", "lat"), crs = 4326)
   d_cs <- st_transform(d_cs, crs_southam) 
   
-  sgbp_southam <- st_within(d_cs, southam)
+  sgbp_southam <- st_within(d_cs, southam) # rather fast thanks to simplifying
   sgbp_brazil <- st_within(d_cs, brazil) # takes ~1:30 hour
   
   saveRDS(sgbp_southam, here("temp_data", "glass_sgbp_southam"))
@@ -848,52 +855,63 @@ if(!file.exists(here("temp_data", "glass_sgbp_southam")) |
 }
 
 ### AESI ###
+
+### For soy and pasture, we use data prepared for the whole South American continent, not only its tropical region. 
 d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aesi_long_final.Rdata"))
+
+# Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
                    Soybean_std, fodder_crops_std, Oilpalm_std, Cocoa_std, Coffee_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*Soybean_std, 
-                      Y_pasture = first_loss*fodder_crops_std,
-                      Y_oilpalm = first_loss*Oilpalm_std,
-                      Y_cocoa = first_loss*Cocoa_std,
-                      Y_coffee = first_loss*Coffee_std)
-d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
-d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+                      Y_pasture = first_loss*fodder_crops_std)
 
 # add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
 accu_0115 <- ddply(d_0115, "grid_id", summarise, 
                    accu_soy_defo = sum(Y_soybean, na.rm = TRUE),
                    accu_pasture_defo = sum(Y_pasture, na.rm = TRUE),
-                   accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
-                   accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
-                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
+                   .parallel = TRUE)
 
+# add up annual soy deforestation over the period 2006-2015
+d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybean, na.rm = TRUE))
 
 ## SOY ##
 # Restrict to cells in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
-
 # Store total
 defo_table["Soybean", "AESI estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
-
-# add up annual soy deforestation over the period 2006-2015
-accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybean, na.rm = TRUE))
 # Restrict to cells in Brazil 
 accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 
 
-
 ## PASTURE ##
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
-
 # Store total
 defo_table["Pasture", "AESI estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
 
+### For the following commodities, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
+
+# Build Y_j
+d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
+                   Soybean_std, fodder_crops_std, Oilpalm_std, Cocoa_std, Coffee_std)
+d <- dplyr::mutate(d, Y_oilpalm = first_loss*Oilpalm_std,
+                     Y_cocoa = first_loss*Cocoa_std,
+                     Y_coffee = first_loss*Coffee_std)
+
+# add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
+accu_0115 <- ddply(d_0115, "grid_id", summarise, 
+                   accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
+                   accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
+                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
+
 ## OIL PALM ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Oil palm", "AESI estimate"] <- round(sum(accu_0115$accu_oilpalm_defo)/1e6,digits=2) 
 
 # And over Indonesia, for phtf loss data
@@ -903,7 +921,6 @@ phtfl <- dplyr::mutate(phtfl, Y_oilpalm = phtf_loss*Oilpalm_std)
 phtfl_0116 <- dplyr::filter(phtfl, year >= 2001 & year <= 2016)
 phtfl_accu_0116 <- ddply(phtfl_0116, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
 phtfl_accu_0116_indonesia <- phtfl_accu_0116[lengths(sgbp_indonesia)>0,]
-
 # plot(st_geometry(phtfl_accu_0115_indonesia))
 round(sum(phtfl_accu_0116_indonesia$accu_oilpalm_defo)/1e6,digits=2)
 
@@ -913,18 +930,18 @@ phtfl_accu_08 <- ddply(phtfl_08, "grid_id", summarise, accu_phtfl = sum(phtf_los
 
 
 ## COCOA ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Cocoa", "AESI estimate"] <- round(sum(accu_0115$accu_cocoa_defo)/1e6,digits=2) 
 
 
 ## COFFEE ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Coffee", "AESI estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1e6,digits=2) 
 
 rm(d, d_0115, d_0615, accu_0115, accu_0115_brazil, accu_0115_southam, accu_soy_0615, accu_soy_0615_brazil)
 
 
 ### ACAY ###
+
+### For soy and pasture, we use data prepared for the whole South American continent (i.e. southam_aoi dataset), not only its tropical region. 
 d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_acay_long_final.Rdata"))
 
 # here we need to construct rj with function make_rj
@@ -933,34 +950,28 @@ d <- make_rj(data = d,
              qj = "continuous", 
              price_info = "4pya")
 
+# Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
                    R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*R_Soybean_std, 
-                   Y_pasture = first_loss*R_fodder_crops_std,
-                   Y_oilpalm = first_loss*R_Oilpalm_std,
-                   Y_cocoa = first_loss*R_Cocoa_std,
-                   Y_coffee = first_loss*R_Coffee_std)
-d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
-d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+                   Y_pasture = first_loss*R_fodder_crops_std)
 
 # add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
 accu_0115 <- ddply(d_0115, "grid_id", summarise, 
                    accu_soy_defo = sum(Y_soybean, na.rm = TRUE),
-                   accu_pasture_defo = sum(Y_pasture, na.rm = TRUE),
-                   accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
-                   accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
-                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
+                   accu_pasture_defo = sum(Y_pasture, na.rm = TRUE))
 
+
+# add up annual soy deforestation over the period 2006-2015
+d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybean, na.rm = TRUE))
 
 ## SOY ##
 # Restrict to cells in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
-
 # Store total
 defo_table["Soybean", "ACAY estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
-
-# add up annual soy deforestation over the period 2006-2015
-accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybean, na.rm = TRUE))
 # Restrict to cells in Brazil 
 accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
@@ -970,14 +981,34 @@ round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 ## PASTURE ##
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
-
 # Store total
 defo_table["Pasture", "ACAY estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
+### For the following commodities, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
+
+# here we need to construct rj with function make_rj
+d <- make_rj(data = d, 
+             crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee"), 
+             qj = "continuous", 
+             price_info = "4pya")
+
+# Build Y_j
+d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
+                   R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
+d <- dplyr::mutate(d, Y_oilpalm = first_loss*R_Oilpalm_std,
+                   Y_cocoa = first_loss*R_Cocoa_std,
+                   Y_coffee = first_loss*R_Coffee_std)
+
+# add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
+accu_0115 <- ddply(d_0115, "grid_id", summarise, 
+                   accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
+                   accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
+                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
 
 ## OIL PALM ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Oil palm", "ACAY estimate"] <- round(sum(accu_0115$accu_oilpalm_defo)/1e6,digits=2) 
 
 # And over Indonesia, for phtf loss data
@@ -991,59 +1022,51 @@ phtfl <- dplyr::mutate(phtfl, Y_oilpalm = phtf_loss*R_Oilpalm_std)
 phtfl_0115 <- dplyr::filter(phtfl, year >= 2001 & year <= 2016)
 phtfl_accu_0115 <- ddply(phtfl_0115, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
 phtfl_accu_0115_indonesia <- phtfl_accu_0115[lengths(sgbp_indonesia)>0,]
-
 # plot(st_geometry(phtfl_accu_0115_indonesia))
 round(sum(phtfl_accu_0115_indonesia$accu_oilpalm_defo)/1e6,digits=2)
 
 
 ## COCOA ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Cocoa", "ACAY estimate"] <- round(sum(accu_0115$accu_cocoa_defo)/1e6,digits=2) 
 
 
 ## COFFEE ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Coffee", "ACAY estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1e6,digits=2) 
 
 
 ### ACAY MAX ###
+### For soy and pasture, we use data prepared for the whole South American continent (i.e. southam_aoi dataset), not only its tropical region. 
 d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_acay_long_final.Rdata"))
 
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
              crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee"), 
-             qj = "max", 
+             qj = "max", # this is the important line
              price_info = "lag1")
-
+# Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
                    R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*R_Soybean_std, 
-                   Y_pasture = first_loss*R_fodder_crops_std,
-                   Y_oilpalm = first_loss*R_Oilpalm_std,
-                   Y_cocoa = first_loss*R_Cocoa_std,
-                   Y_coffee = first_loss*R_Coffee_std)
-d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
-d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+                   Y_pasture = first_loss*R_fodder_crops_std)
 
 # add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
 accu_0115 <- ddply(d_0115, "grid_id", summarise, 
                    accu_soy_defo = sum(Y_soybean, na.rm = TRUE),
-                   accu_pasture_defo = sum(Y_pasture, na.rm = TRUE),
-                   accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
-                   accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
-                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
+                   accu_pasture_defo = sum(Y_pasture, na.rm = TRUE))
+
+
+# add up annual soy deforestation over the period 2006-2015
+d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybean, na.rm = TRUE))
 
 
 ## SOY ##
 # Restrict to cells in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
-
 # Store total
 defo_table["Soybean", "ACAYmax estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
-
-# add up annual soy deforestation over the period 2006-2015
-accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybean, na.rm = TRUE))
-# Restrict to cells in Brazil 
+# Restrict to cells in Brazil in 2006-2015
 accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 
@@ -1052,14 +1075,32 @@ round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 ## PASTURE ##
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
-
 # Store total
 defo_table["Pasture", "ACAYmax estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
+### For the following commodities, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
+# here we need to construct rj with function make_rj
+d <- make_rj(data = d, 
+             crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee"), 
+             qj = "max", # this is the important line
+             price_info = "lag1")
+# Build Y_j
+d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
+                   R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
+d <- dplyr::mutate(d, Y_oilpalm = first_loss*R_Oilpalm_std,
+                   Y_cocoa = first_loss*R_Cocoa_std,
+                   Y_coffee = first_loss*R_Coffee_std)
+
+# add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
+accu_0115 <- ddply(d_0115, "grid_id", summarise, 
+                   accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
+                   accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
+                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
 
 ## OIL PALM ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Oil palm", "ACAYmax estimate"] <- round(sum(accu_0115$accu_oilpalm_defo)/1e6,digits=2) 
 
 # And over Indonesia, for phtf loss data
@@ -1069,24 +1110,20 @@ phtfl <- make_rj(data = phtfl,
                  crops = c("Oilpalm"),
                  qj = "max",
                  price_info = "lag1")
-
 phtfl <- dplyr::select(phtfl, grid_id, year, lon, lat, phtf_loss, R_Oilpalm_std)
 phtfl <- dplyr::mutate(phtfl, Y_oilpalm = phtf_loss*R_Oilpalm_std)
 phtfl_0115 <- dplyr::filter(phtfl, year >= 2001 & year <= 2016)
 phtfl_accu_0115 <- ddply(phtfl_0115, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
 phtfl_accu_0115_indonesia <- phtfl_accu_0115[lengths(sgbp_indonesia)>0,]
-
 # plot(st_geometry(phtfl_accu_0115_indonesia))
 round(sum(phtfl_accu_0115_indonesia$accu_oilpalm_defo)/1e6,digits=2)
 
 
 ## COCOA ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Cocoa", "ACAYmax estimate"] <- round(sum(accu_0115$accu_cocoa_defo)/1e6,digits=2) 
 
 
 ## COFFEE ## 
-# Here we aggregate over the whole tropics (i.e. whole dataset)
 defo_table["Coffee", "ACAYmax estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1e6,digits=2) 
 
 
@@ -1111,8 +1148,6 @@ first_loss <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass
 # select 2001-2015 period 
 first_loss <- dplyr::filter(first_loss, year >= 2001 & year <= 2015)
 
-# Add up annual aggregated LUCFP (result is a single layer with cell values = the sum of annual cell values over the selected time period)
-accu_firstloss <- calc(first_loss, fun = sum, na.rm = TRUE)
 
 ## Extract in Brazil and in all South America
 

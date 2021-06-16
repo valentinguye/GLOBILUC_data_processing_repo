@@ -538,7 +538,65 @@ rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first
 
 
 #### ADD VARIABLES #### 
-# Here we do not do the country workflow. 
+origindir <- here("temp_data", "merged_datasets", "southam_aoi")
+
+dataset_names <- c("glass_aesi_long",
+                   "firstloss8320_aesi_long", 
+                   "phtfloss_aesi_long")
+### COUNTRIES ### 
+for(name in dataset_names){
+  
+  path <- paste0(here(origindir, name), ".Rdata")
+  df <- readRDS(path)
+  
+  # Remove gaez variables
+  df <- dplyr::select(df,-all_of(gaez_crops))
+  
+  # Use cross section only
+  df_cs <- df[!duplicated(df$grid_id),]
+  
+  rm(df)
+  
+  # Spatial
+  df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+  
+  
+  # This is much much faster (like 5 minutes vs. 6h).
+  # df_cs <- st_join(x = countries[,c("OBJECTID", "COUNTRY_NA")],
+  #                  y = df_cs,
+  #                  join = st_contains,
+  #                  prepared = TRUE,
+  #                  left = FALSE)# performs inner join so returns only records that spatially match.
+  #
+  
+  # However, we use st_nearest_feature so that all points match a country
+  df_cs <- st_join(x = df_cs,
+                   y = countries,
+                   join = st_nearest_feature,
+                   left = TRUE)
+  
+  # names(df_cs)[names(df_cs) == "OBJECTID"] <- "country_id"
+  names(df_cs)[names(df_cs) == "COUNTRY_NA"] <- "country_name"
+  
+  df_cs <- st_drop_geometry(df_cs)
+  
+  # Keep only new variable and id
+  df_cs <- df_cs[,c("grid_id", "country_name")]
+  
+  df_cs$country_name[df_cs$country_name=="American Samoa (US)"] <- "United States of America"
+  df_cs$country_name[df_cs$country_name=="Niue (NZ)"] <- "New Zealand"
+  df_cs$country_name[df_cs$country_name=="New Caledonia (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="Reunion (Fr)"] <- "France"
+  df_cs$country_name[df_cs$country_name=="Pitcairn Is (UK)"] <- "United Kingdom of Great Britain and Northern Ireland"
+  df_cs$country_name[df_cs$country_name=="Swaziland"] <- "Eswatini"
+  
+  
+  # # We save the cross section, not the panel, as it is not necessary 
+  # saveRDS(df_cs, path)
+  saveRDS(df_cs, paste0(here(origindir, name), "_country_nf.Rdata"))
+  rm(df_cs)
+} 
+
 
 ### Define GAEZ AESI variables
 gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input"), 
