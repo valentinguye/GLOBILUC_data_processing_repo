@@ -721,7 +721,7 @@ make_table_mat <- function(df_res,
 # price_info = "4pya"
 
 # For acay we need to compute the revenue here. This helper function does it
-make_rj <- function(data, crops, qj = "continuous", price_info = "4pya"){
+make_rj <- function(data, crops, qj = "continuous", price_info = "lag1"){
   ## Revenue variable names
   # To determine land use, only the potential revenue of soybeans is considered (for simplicity) 
   all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & mapmat[,"Prices"]!="Soybean_meal" ,"Prices"]
@@ -756,12 +756,13 @@ make_rj <- function(data, crops, qj = "continuous", price_info = "4pya"){
   ## Standardize the revenue variable(s) needed here -> stream dj = Rj/sumRi 
   
   # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
-  data <- dplyr::mutate(data, Ri_sum = rowSums(across(.cols = starts_with("R_", ignore.case = FALSE))))
+  data <- dplyr::mutate(data, Ri_sum = rowSums(across(.cols = starts_with("R_", ignore.case = FALSE)), na.rm = TRUE))
   
   if(qj == "max"){
   # Construct the max of all revenues
     data <- rowwise(data, all_of(c("grid_id", "year"))) %>% 
-    data <- dplyr::mutate(Ri_max = max(c_across(cols = starts_with("R_", ignore.case = FALSE)), na.rm = TRUE)) %>% as.data.frame()
+              dplyr::mutate(Ri_max = max(c_across(cols = starts_with("R_", ignore.case = FALSE)), na.rm = TRUE)) %>% 
+              as.data.frame()
   }
   
   # Construct qj for all crops needed 
@@ -854,14 +855,14 @@ if(!file.exists(here("temp_data", "glass_sgbp_southam")) |
   sgbp_indonesia <- readRDS(here("temp_data", "phtfloss_sgbp_indonesia"))
 }
 
-### AESI ###
+### AESI ####
 
 ### For soy and pasture, we use data prepared for the whole South American continent, not only its tropical region. 
 d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aesi_long_final.Rdata"))
 
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   Soybean_std, fodder_crops_std, Oilpalm_std, Cocoa_std, Coffee_std)
+                   Soybean_std, fodder_crops_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*Soybean_std, 
                       Y_pasture = first_loss*fodder_crops_std)
 
@@ -894,12 +895,12 @@ defo_table["Pasture", "AESI estimate"] <- round(sum(accu_0115_brazil$accu_pastur
 
 
 
-### For the following commodities, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
+### For palm oil, cocoa and sugar, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
 d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
 
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   Soybean_std, fodder_crops_std, Oilpalm_std, Cocoa_std, Coffee_std)
+                   Oilpalm_std, Cocoa_std, Coffee_std)
 d <- dplyr::mutate(d, Y_oilpalm = first_loss*Oilpalm_std,
                      Y_cocoa = first_loss*Cocoa_std,
                      Y_coffee = first_loss*Coffee_std)
@@ -917,16 +918,17 @@ defo_table["Oil palm", "AESI estimate"] <- round(sum(accu_0115$accu_oilpalm_defo
 # And over Indonesia, for phtf loss data
 phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
 phtfl <- dplyr::select(phtfl, grid_id, year, lon, lat, phtf_loss, Oilpalm_std)
-phtfl <- dplyr::mutate(phtfl, Y_oilpalm = phtf_loss*Oilpalm_std)
-phtfl_0116 <- dplyr::filter(phtfl, year >= 2001 & year <= 2016)
-phtfl_accu_0116 <- ddply(phtfl_0116, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
-phtfl_accu_0116_indonesia <- phtfl_accu_0116[lengths(sgbp_indonesia)>0,]
-# plot(st_geometry(phtfl_accu_0115_indonesia))
-round(sum(phtfl_accu_0116_indonesia$accu_oilpalm_defo)/1e6,digits=2)
+phtfl_idn <- dplyr::filter(phtfl, country_name == "Indonesia")
+phtfl_idn <- dplyr::mutate(phtfl_idn, Y_oilpalm = phtf_loss*Oilpalm_std)
+phtfl_idn_0116 <- dplyr::filter(phtfl_idn, year >= 2001 & year <= 2016)
+phtfl_idn_accu_0116 <- ddply(phtfl_idn_0116, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
+# plot(st_geometry(phtfl_idn_accu_0116))
+round(sum(phtfl_idn_accu_0116$accu_oilpalm_defo)/1e6,digits=2)
 
 # And compute total phtf loss in 2008, to compare with Margono et al. and with Turubanova et al. (they both find 5000 km2)
 phtfl_08 <- dplyr::filter(phtfl, year == 2008)
-phtfl_accu_08 <- ddply(phtfl_08, "grid_id", summarise, accu_phtfl = sum(phtf_loss, na.rm = TRUE))
+ddply(phtfl_08, "grid_id", summarise, accu_phtfl = sum(phtf_loss, na.rm = TRUE))
+rm(phtfl, phtfl_08)
 
 
 ## COCOA ## 
@@ -939,20 +941,19 @@ defo_table["Coffee", "AESI estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1
 rm(d, d_0115, d_0615, accu_0115, accu_0115_brazil, accu_0115_southam, accu_soy_0615, accu_soy_0615_brazil)
 
 
-### ACAY ###
+### ACAY ####
 
 ### For soy and pasture, we use data prepared for the whole South American continent (i.e. southam_aoi dataset), not only its tropical region. 
 d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_acay_long_final.Rdata"))
 
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
-             crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee"), 
-             qj = "continuous", 
-             price_info = "4pya")
+             crops = c("Soybean", "fodder_crops"), 
+             qj = "continuous")
 
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
+                   R_Soybean_std, R_fodder_crops_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*R_Soybean_std, 
                    Y_pasture = first_loss*R_fodder_crops_std)
 
@@ -977,7 +978,6 @@ accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 
 
-
 ## PASTURE ##
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
@@ -985,18 +985,19 @@ accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
 defo_table["Pasture", "ACAY estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
+
 ### For the following commodities, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
-d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))
 
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
-             crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee"), 
-             qj = "continuous", 
-             price_info = "4pya")
+             crops = c("Oilpalm", "Cocoa", "Coffee"), 
+             qj = "continuous")
+
 
 # Build Y_j
-d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
+d <- dplyr::select(d, grid_id, year, lon, lat, first_loss,
+                   R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
 d <- dplyr::mutate(d, Y_oilpalm = first_loss*R_Oilpalm_std,
                    Y_cocoa = first_loss*R_Cocoa_std,
                    Y_coffee = first_loss*R_Coffee_std)
@@ -1013,17 +1014,16 @@ defo_table["Oil palm", "ACAY estimate"] <- round(sum(accu_0115$accu_oilpalm_defo
 
 # And over Indonesia, for phtf loss data
 phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))
+phtfl_idn <- dplyr::filter(phtfl, country_name == "Indonesia")
 # here we need to construct rj with function make_rj
-phtfl <- make_rj(data = phtfl, 
+phtfl_idn <- make_rj(data = phtfl_idn, 
              crops = c("Oilpalm"), 
-             price_info = "lag1")
-phtfl <- dplyr::select(phtfl, grid_id, year, lon, lat, phtf_loss, R_Oilpalm_std)
-phtfl <- dplyr::mutate(phtfl, Y_oilpalm = phtf_loss*R_Oilpalm_std)
-phtfl_0115 <- dplyr::filter(phtfl, year >= 2001 & year <= 2016)
-phtfl_accu_0115 <- ddply(phtfl_0115, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
-phtfl_accu_0115_indonesia <- phtfl_accu_0115[lengths(sgbp_indonesia)>0,]
-# plot(st_geometry(phtfl_accu_0115_indonesia))
-round(sum(phtfl_accu_0115_indonesia$accu_oilpalm_defo)/1e6,digits=2)
+             qj = "continuous")
+phtfl_idn <- dplyr::select(phtfl_idn, grid_id, year, lon, lat, phtf_loss, R_Oilpalm_std)
+phtfl_idn <- dplyr::mutate(phtfl_idn, Y_oilpalm = phtf_loss*R_Oilpalm_std)
+phtfl_idn_0115 <- dplyr::filter(phtfl_idn, year >= 2001 & year <= 2016)
+phtfl_idn_accu_0115 <- ddply(phtfl_idn_0115, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
+round(sum(phtfl_idn_accu_0115$accu_oilpalm_defo)/1e6,digits=2)
 
 
 ## COCOA ## 
@@ -1040,12 +1040,12 @@ d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_acay_lon
 
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
-             crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee"), 
-             qj = "max", # this is the important line
-             price_info = "lag1")
+             crops = c("Soybean", "fodder_crops"), 
+             qj = "max") # this is the important line
+
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
+                   R_Soybean_std, R_fodder_crops_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*R_Soybean_std, 
                    Y_pasture = first_loss*R_fodder_crops_std)
 
@@ -1071,7 +1071,6 @@ accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 
 
-
 ## PASTURE ##
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
@@ -1079,16 +1078,16 @@ accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
 defo_table["Pasture", "ACAYmax estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
+
 ### For the following commodities, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
-d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
-             crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee"), 
-             qj = "max", # this is the important line
-             price_info = "lag1")
+             crops = c("Oilpalm", "Cocoa", "Coffee"), 
+             qj = "max") # this is the important line
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   R_Soybean_std, R_fodder_crops_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
+                   R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
 d <- dplyr::mutate(d, Y_oilpalm = first_loss*R_Oilpalm_std,
                    Y_cocoa = first_loss*R_Cocoa_std,
                    Y_coffee = first_loss*R_Coffee_std)
@@ -1105,18 +1104,16 @@ defo_table["Oil palm", "ACAYmax estimate"] <- round(sum(accu_0115$accu_oilpalm_d
 
 # And over Indonesia, for phtf loss data
 phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))
+phtfl_idn <- dplyr::filter(phtfl, country_name == "Indonesia")
 # here we need to construct rj with function make_rj
-phtfl <- make_rj(data = phtfl, 
-                 crops = c("Oilpalm"),
-                 qj = "max",
-                 price_info = "lag1")
-phtfl <- dplyr::select(phtfl, grid_id, year, lon, lat, phtf_loss, R_Oilpalm_std)
-phtfl <- dplyr::mutate(phtfl, Y_oilpalm = phtf_loss*R_Oilpalm_std)
-phtfl_0115 <- dplyr::filter(phtfl, year >= 2001 & year <= 2016)
-phtfl_accu_0115 <- ddply(phtfl_0115, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
-phtfl_accu_0115_indonesia <- phtfl_accu_0115[lengths(sgbp_indonesia)>0,]
-# plot(st_geometry(phtfl_accu_0115_indonesia))
-round(sum(phtfl_accu_0115_indonesia$accu_oilpalm_defo)/1e6,digits=2)
+phtfl_idn <- make_rj(data = phtfl_idn, 
+                     crops = c("Oilpalm"), 
+                     qj = "max")
+phtfl_idn <- dplyr::select(phtfl_idn, grid_id, year, lon, lat, phtf_loss, R_Oilpalm_std)
+phtfl_idn <- dplyr::mutate(phtfl_idn, Y_oilpalm = phtf_loss*R_Oilpalm_std)
+phtfl_idn_0115 <- dplyr::filter(phtfl_idn, year >= 2001 & year <= 2016)
+phtfl_idn_accu_0115 <- ddply(phtfl_idn_0115, "grid_id", summarise, accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE))
+round(sum(phtfl_idn_accu_0115$accu_oilpalm_defo)/1e6,digits=2)
 
 
 ## COCOA ## 

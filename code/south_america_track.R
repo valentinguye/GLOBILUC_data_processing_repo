@@ -58,6 +58,9 @@ lapply(neededPackages, library, character.only = TRUE)
 ### THIS IS THE IMPORTANT LINE DEFINING THIS WHOLE SCRIPT: 
 ext <- extent(c(-95, -25, -57, 15))
 
+
+
+
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 #### PREPARE GAEZ #### 
 
@@ -537,78 +540,93 @@ rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first
 # glass <- readRDS(here(targetdir, "glass_acay_long.Rdata"))
 
 
-#### ADD VARIABLES #### 
-origindir <- here("temp_data", "merged_datasets", "southam_aoi")
+#### ADD VARIABLES AESI #### 
 
-dataset_names <- c("glass_aesi_long",
-                   "firstloss8320_aesi_long", 
-                   "phtfloss_aesi_long")
-### COUNTRIES ### 
-for(name in dataset_names){
-  
-  path <- paste0(here(origindir, name), ".Rdata")
-  df <- readRDS(path)
-  
-  # Remove gaez variables
-  df <- dplyr::select(df,-all_of(gaez_crops))
-  
-  # Use cross section only
-  df_cs <- df[!duplicated(df$grid_id),]
-  
-  rm(df)
-  
-  # Spatial
-  df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
-  
-  
-  # This is much much faster (like 5 minutes vs. 6h).
-  # df_cs <- st_join(x = countries[,c("OBJECTID", "COUNTRY_NA")],
-  #                  y = df_cs,
-  #                  join = st_contains,
-  #                  prepared = TRUE,
-  #                  left = FALSE)# performs inner join so returns only records that spatially match.
-  #
-  
-  # However, we use st_nearest_feature so that all points match a country
-  df_cs <- st_join(x = df_cs,
-                   y = countries,
-                   join = st_nearest_feature,
-                   left = TRUE)
-  
-  # names(df_cs)[names(df_cs) == "OBJECTID"] <- "country_id"
-  names(df_cs)[names(df_cs) == "COUNTRY_NA"] <- "country_name"
-  
-  df_cs <- st_drop_geometry(df_cs)
-  
-  # Keep only new variable and id
-  df_cs <- df_cs[,c("grid_id", "country_name")]
-  
-  df_cs$country_name[df_cs$country_name=="American Samoa (US)"] <- "United States of America"
-  df_cs$country_name[df_cs$country_name=="Niue (NZ)"] <- "New Zealand"
-  df_cs$country_name[df_cs$country_name=="New Caledonia (Fr)"] <- "France"
-  df_cs$country_name[df_cs$country_name=="Reunion (Fr)"] <- "France"
-  df_cs$country_name[df_cs$country_name=="Pitcairn Is (UK)"] <- "United Kingdom of Great Britain and Northern Ireland"
-  df_cs$country_name[df_cs$country_name=="Swaziland"] <- "Eswatini"
-  
-  
-  # # We save the cross section, not the panel, as it is not necessary 
-  # saveRDS(df_cs, path)
-  saveRDS(df_cs, paste0(here(origindir, name), "_country_nf.Rdata"))
-  rm(df_cs)
-} 
-
-
-### Define GAEZ AESI variables
+# Define GAEZ AESI variables 
 gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
-
-origindir <- here("temp_data", "merged_datasets", "southam_aoi")
-
 # Contrary to what is done in the main add_variables.R script, here we execute code only for first_loss.
+origindir <- here("temp_data", "merged_datasets", "southam_aoi")
 name <- "glass_aesi_long"
+
+### COUNTRIES ### 
+
+countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
+
+# Data need to be projected 
+crs_southam <- 31970
+
+southam <- countries[countries$COUNTRY_NA=="Argentina" |
+                       countries$COUNTRY_NA=="Bolivia" |
+                       countries$COUNTRY_NA=="Brazil" | countries$COUNTRY_NA=="Isla Brasilera (disp)" | 
+                       countries$COUNTRY_NA=="Chile" |   
+                       countries$COUNTRY_NA=="Colombia" | 
+                       countries$COUNTRY_NA=="Ecuador" | 
+                       countries$COUNTRY_NA=="French Guiana (Fr)" |
+                       countries$COUNTRY_NA=="Guyana" |
+                       countries$COUNTRY_NA=="Panama" |
+                       countries$COUNTRY_NA=="Paraguay" | 
+                       countries$COUNTRY_NA=="Peru" | 
+                       countries$COUNTRY_NA=="Suriname" | 
+                       countries$COUNTRY_NA=="Trinidad & Tobago" | 
+                       countries$COUNTRY_NA=="Uruguay" | 
+                       countries$COUNTRY_NA=="Venezuela"  ,] %>% st_transform(crs_southam)
+southam <- southam[,c("COUNTRY_NA", "geometry")]
+
+
+path <- paste0(here(origindir, name), ".Rdata")
+df <- readRDS(path)
+
+# Remove gaez variables
+df <- dplyr::select(df,-all_of(gaez_crops))
+
+# Use cross section only
+df_cs <- df[!duplicated(df$grid_id),]
+
+rm(df)
+
+# Spatial
+df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+df_cs <- st_transform(df_cs, crs= crs_southam)
+
+# This is much much faster (like 5 minutes vs. 6h).
+# df_cs <- st_join(x = countries[,c("OBJECTID", "COUNTRY_NA")],
+#                  y = df_cs,
+#                  join = st_contains,
+#                  prepared = TRUE,
+#                  left = FALSE)# performs inner join so returns only records that spatially match.
+#
+
+# However, we use st_nearest_feature so that all points match a country
+df_cs <- st_join(x = df_cs,
+                 y = southam,
+                 join = st_nearest_feature,
+                 left = TRUE)
+
+# names(df_cs)[names(df_cs) == "OBJECTID"] <- "country_id"
+names(df_cs)[names(df_cs) == "COUNTRY_NA"] <- "country_name"
+
+df_cs <- st_drop_geometry(df_cs)
+
+# Keep only new variable and id
+df_cs <- df_cs[,c("grid_id", "country_name")]
+
+df_cs$country_name[df_cs$country_name=="Isla Brasilera (disp)"] <- "Brazil"
+df_cs$country_name[df_cs$country_name=="Bolivia"] <- "Bolivia (Plurinational State of)"
+df_cs$country_name[df_cs$country_name=="Venezuela"] <- "Venezuela (Bolivarian Republic of)"
+df_cs$country_name[df_cs$country_name=="French Guiana (Fr)"] <- "France"
+df_cs$country_name[df_cs$country_name=="Trinidad & Tobago"] <- "Trinidad and Tobago"
+
+# # We save the cross section, not the panel, as it is not necessary 
+# saveRDS(df_cs, path)
+saveRDS(df_cs, paste0(here(origindir, name), "_country_nf.Rdata"))
+rm(df_cs)
+
+
+### STANDARDIZE AND AGGREGATE ### 
 
 path <- paste0(here(origindir, name), ".Rdata")
 df <- readRDS(path)
@@ -657,7 +675,7 @@ saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))
 rm(df_cs, path)
 
 
-### MERGE AESI DATASETS WITH ADDED VARIABLES
+### MERGE AESI DATASETS WITH ADDED VARIABLES ### 
 
 # Base dataset (including outcome variable(s))
 base_path <- paste0(here(origindir, name), ".Rdata")
@@ -666,21 +684,32 @@ df_base <- readRDS(base_path)
 # Remove non-standardized suitability indexes
 df_base <- dplyr::select(df_base,-all_of(gaez_crops))
 
+# Country variable
+country_path <- paste0(here(origindir, name), "_country_nf.Rdata")
+df_country <- readRDS(country_path)
+
+# Merge them and remove to save memory 
+final <- left_join(df_base, df_country, by = "grid_id")
+rm(df_base, df_country)
+
 # Standardized and aggregated suitability indexes
 stdsi_path <- paste0(here(origindir, name), "_stdsi.Rdata")
 df_stdsi <- readRDS(stdsi_path)  
 
-final <- left_join(df_base, df_stdsi, by = "grid_id")
-rm(df_stdsi, df_base)
+final <- left_join(final, df_stdsi, by = "grid_id")
+rm(df_stdsi)
 
+# Create country trends variable
+final <- mutate(final, country_year = paste0(country_name, "_", year))
 
 saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
 
 rm(final)
 
 
+#### ADD VARIABLES ACAY #### 
 
-### Define GAEZ ACAY variables 
+# Define GAEZ ACAY variables 
 gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
@@ -688,10 +717,9 @@ gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
 
 origindir <- here("temp_data", "merged_datasets", "southam_aoi")
-
 name <- "glass_acay_long"
 
-### GROUP ACAY CROPS
+### GROUP ACAY CROPS ### 
 path <- paste0(here(origindir, name), ".Rdata")
 df <- readRDS(path)
 # Use cross section only
@@ -729,16 +757,29 @@ rm(df_cs, path)
 
 
 ### MERGE ACAY DATASETS WITH ADDED VARIABLES
+
 # Base dataset (including outcome variable(s))
 base_path <- paste0(here(origindir, name), ".Rdata")
 df_base <- readRDS(base_path)
+
+# Country variable
+# do that because we did not run the spatial join with countries for acay dataset
+country_path <- paste0(here(origindir, "glass_aesi_long"), "_country_nf.Rdata")
+df_country <- readRDS(country_path)
+
+# Merge them and remove to save memory 
+final <- left_join(df_base, df_country, by = "grid_id")
+rm(df_base, df_country)
 
 # Grouped crops
 grouped_path <- paste0(here(origindir, name), "_groupedcrops.Rdata")
 df_grouped <- readRDS(grouped_path)  
 
-final <- left_join(df_base, df_grouped, by = "grid_id")
-rm(df_grouped, df_base)
+final <- left_join(final, df_grouped, by = "grid_id")
+rm(df_grouped)
+
+# Create country trends variable
+final <- mutate(final, country_year = paste0(country_name, "_", year))
 
 saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
 
