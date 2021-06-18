@@ -61,7 +61,7 @@ ps <- ps[-1,]
 ps <- summarise(ps, across(.fns = as.numeric))
 
 
-# Select commodities of interest - actually we don't want prices of commodities that are not exactly the same as in FAOSTAT
+# Select commodities of interest 
 ps_commo <- c("Banana, US", 
               "Barley",
               "Beef", 
@@ -92,9 +92,9 @@ ps2 <- ps[, c("year", ps_commo, "MUV Index")]
 
 
 
-# Average prices of the two coffee types arabica and robusta, to better match coffee price from FAOSTAT
-ps2 <-  dplyr::mutate(ps2, Coffee = rowMeans(across(.cols = all_of(c("Coffee, Arabica", "Coffee, Robusta")))))
-ps2 <- dplyr::select(ps2, -'Coffee, Arabica', - 'Coffee, Robusta')
+# # Average prices of the two coffee types arabica and robusta, to better match coffee price from FAOSTAT
+# ps2 <-  dplyr::mutate(ps2, Coffee = rowMeans(across(.cols = all_of(c("Coffee, Arabica", "Coffee, Robusta")))))
+# ps2 <- dplyr::select(ps2, -'Coffee, Arabica', - 'Coffee, Robusta')
 
 # Change (simplify) some names
 names(ps2)[names(ps2) == "Banana, US"] <- "Banana"
@@ -125,7 +125,7 @@ head(ps2)
 # So this is the MUV index for 2014-2016 in base 2010=100
 muv_index_2014_16 <- mean(c(as.numeric(ps2[ps2$year >= 2014 & ps2$year <= 2016, "MUV_index"])))
 
-# Important to notmodify MUV_index, we will need it again as such
+# Important to not modify MUV_index, we will need it again as such
 ps2 <- dplyr::mutate(ps2, across(.cols = (!contains("year") & !contains("MUV_index")), 
                                  .fns = ~.*muv_index_2014_16/100)) 
 
@@ -219,17 +219,65 @@ ip <- full_join(x = ps2, y = imf, by = "year")
 
 ip <- ip %>% dplyr::select(-MUV_index, -FPI, -MUV_index_10, - MUV_index_2014_16)
 
-#### PREPARE ADDITIONAL PRICE VARIABLES #### 
+### PREPARE ADDITIONAL INTERNATIONAL PRICE VARIABLES #### 
 
-### Group some commodity prices (but not used currently)
-ip <- ip %>% rowwise() %>% mutate(cereal_crops = mean(c(Barley, Maize, Sorghum, Wheat, Oat), na.rm = T), # excluding rice as not comparable enough
-                                  oil_crops = mean(c(Palm_oil, Rapeseed_oil, Soybean_oil, Sunflower_oil), na.rm = T), # using only "unflavored" oils
-) %>% as.data.frame() # other commodities are not comparable enough to be grouped.
-
-head(ip)
+# ### Group some commodity prices (but not used currently)
+# ip <- ip %>% rowwise() %>% mutate(cereal_crops = mean(c(Barley, Maize, Sorghum, Wheat, Oat), na.rm = T), # excluding rice as not comparable enough
+#                                   oil_crops = mean(c(Palm_oil, Rapeseed_oil, Soybean_oil, Sunflower_oil), na.rm = T), # using only "unflavored" oils
+# ) %>% as.data.frame() # other commodities are not comparable enough to be grouped.
+# 
+# head(ip)
 
 
 # unique(ip$year) %>% length()
+
+### Lags 
+# Lagging here is made in preparation of USD international price time series for final use in analysis, not for merging with FAOSTAT. 
+inter_prices <- ip
+## Lag international prices over whole period 
+ip_variables <- names(inter_prices)[names(inter_prices)!="year"]
+
+for(voi in ip_variables){
+  
+  ## short to long lags
+  for(lag in c(1:5)){
+    inter_prices <- dplyr::arrange(inter_prices, year)
+    inter_prices <- DataCombine::slide(inter_prices,
+                                 Var = voi, 
+                                 TimeVar = "year",
+                                 NewVar = paste0(voi,"_lag",lag),
+                                 slideBy = -lag, 
+                                 keepInvalid = FALSE)
+    inter_prices <- dplyr::arrange(inter_prices, year)
+    
+  }
+  
+  for(py in c(2:5)){
+    ## Past-year averages (2, 3 and 4 years)  
+    # note that we DON'T add voi column (not lagged) in the row mean
+    inter_prices$newv <- rowMeans(x = inter_prices[,paste0(voi,"_lag",c(1:py))], na.rm = FALSE)
+    inter_prices[is.nan(inter_prices$newv),"newv"] <- NA
+    colnames(inter_prices)[colnames(inter_prices)=="newv"] <- paste0(voi,"_",py,"pya")
+  }
+}
+
+# remove some variables that were only temporarily necessary
+# (we want to keep lag1)
+vars_torm <- names(inter_prices)[(grepl(pattern = "_lag2", x = names(inter_prices)) |
+                              grepl(pattern = "_lag3", x = names(inter_prices)) |
+                              grepl(pattern = "_lag4", x = names(inter_prices)) |
+                              grepl(pattern = "_lag5", x = names(inter_prices)))]
+
+inter_prices <- inter_prices[,!(names(inter_prices) %in% vars_torm)]
+
+### Make logarithms
+inter_prices <- dplyr::mutate(inter_prices, across(.cols = !c("year"),
+                                       .fns = log,
+                                       .names = paste0("ln_", "{.col}")))
+
+saveRDS(inter_prices, here("temp_data", "prepared_international_prices.Rdata"))
+
+rm(inter_prices)
 
 
 

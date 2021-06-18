@@ -124,7 +124,7 @@ for(name in dataset_names){
   
   ### Match country names to those from FAOSTAT 
   # Necessary to match national producer prices 
-  # c_names <- unique(df_country$country_name)
+  # c_names <- unique(df_cs$country_name)
   # c_names[!c_names%in%fao_names]
   
   df_cs$country_name[df_cs$country_name=="United States"] <- "United States of America"
