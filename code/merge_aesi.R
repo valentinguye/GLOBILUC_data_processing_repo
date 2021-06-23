@@ -69,7 +69,7 @@ targetdir <- here("temp_data", "merged_datasets", "tropical_aoi")
 ### READ IN AND RENAME GAEZ DATA ### 
 
 ## SUITABILITY INDICES 
-gaez_dir <- here("temp_data", "GAEZ", "AES_index_value", "Rain-fed")
+gaez_dir <- here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed")
 gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
 # Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
@@ -123,10 +123,10 @@ mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -218,10 +218,10 @@ mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "firstloss8320_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "firstloss8320_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "firstloss8320_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "firstloss8320_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -297,10 +297,10 @@ mask <- raster(here("temp_data", "processed_phtfloss", "tropical_aoi", "always_z
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "phtfloss_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "phtfloss_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "phtfloss_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "phtfloss_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 

@@ -69,7 +69,7 @@ targetdir <- here("temp_data", "merged_datasets", "tropical_aoi")
 ### READ IN AND RENAME GAEZ DATA ### 
 
 ## SUITABILITY INDICES 
-gaez_dir <- here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed")
+gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
 gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
 # Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
@@ -123,10 +123,10 @@ mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "glass_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed", "glass_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "glass_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed", "glass_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -196,12 +196,12 @@ long_df <- mutate(long_df, year = glc_sbqt_years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "glass_acay_long.Rdata"))
+saveRDS(long_df, here(targetdir, "glass_aeay_long.Rdata"))
 
 rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first_loss, sbqt_direct_lu, sbqt_mode_lu)
 
 
-# glass <- readRDS(here(targetdir, "glass_acay_long.Rdata"))
+# glass <- readRDS(here(targetdir, "glass_aeay_long.Rdata"))
 
 
 #### 2. MERGE 1983-2020 FIRST LOSS AND SUITABILITY INDICES #### 
@@ -218,10 +218,10 @@ mask <- raster(here("temp_data", "processed_glass-glc", "tropical_aoi", "always_
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "firstloss8320_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed", "firstloss8320_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "firstloss8320_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed", "firstloss8320_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -277,7 +277,7 @@ long_df <- mutate(long_df, year = years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "firstloss8320_acay_long.Rdata"))
+saveRDS(long_df, here(targetdir, "firstloss8320_aeay_long.Rdata"))
 
 rm(years, long_df, varying_vars, firstloss_gaez, gaez_m, mask, firstloss8320)
 
@@ -297,10 +297,10 @@ mask <- raster(here("temp_data", "processed_phtfloss", "tropical_aoi", "always_z
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "phtfloss_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed", "phtfloss_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "phtfloss_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed", "phtfloss_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -356,7 +356,7 @@ long_df <- mutate(long_df, year = years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "phtfloss_acay_long.Rdata"))
+saveRDS(long_df, here(targetdir, "phtfloss_aeay_long.Rdata"))
 
 rm(long_df, varying_vars, phtfloss_gaez, gaez_m, mask, phtfloss)
 rm(gaez)

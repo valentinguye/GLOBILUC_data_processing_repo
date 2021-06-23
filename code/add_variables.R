@@ -39,7 +39,7 @@ lapply(neededPackages, library, character.only = TRUE)
 
 
 #### Define GAEZ AESI variables ####
-gaez_crops <- list.files(path = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input"), 
+gaez_crops <- list.files(path = here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
@@ -207,30 +207,39 @@ for(name in dataset_names){
   rm(df)
   
   ### Standardize suitability indexes
-  # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
-  df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = Alfalfa:Yam)))
-  
-  # df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum))
-  # that adds the 47 new variables, with new names.
-  df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
+  # # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
+  # df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = all_of(gaez_crops))))
+  # 
+  # # df_cs <- dplyr::mutate(df_cs, across(.cols = all_of(gaez_crops), .fns = ~./si_sum))
+  # # that adds the new variables, with new names.
+  # df_cs <- dplyr::mutate(df_cs, across(.cols = all_of(gaez_crops), .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
   
   ### Aggregate suitability indexes of similar crops
   # The grouping here corresponds to the categories by GAEZ-IIASA 
   # sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
   # Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
-  df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
-                                          oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
+  df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Drylandrice, Foxtailmillet, Maizegrain, Oat, Pearlmillet, Rye, Sorghum, Wetlandrice, Wheat)), 
+                                          roots_crops = max(c(Cassava, Sweetpotatoe, Whitepotatoe, Yam)),
                                           sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
-                                           fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
-                                           fibre_crops = max(c(Cotton, Flax)),
-                                           stimulant_crops = max(c(Coffee, Tea, Tobacco)),
-                                           fodder_crops = max(c(Alfalfa)), # To adjust once we have Grass as a GAEZ crop  
-                                           bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass)), 
-                                          rice_crops = max(c(Dryland_rice, Wetland_rice)) # (this one is not a GAEZ group)
+                                          pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolusbean, Pigeonpea)),
+                                          oil_crops = max(c(Groundnut, Jatropha, Olive, Rapeseed, Sunflower)), # Oilpalm and Soybean, directly responsible for deforestation, are not mixed with these.
+                                          vegetables_crops = max(c(Cabbage, Carrot, Onion, Tomatoe)),
+                                          fruits_crops = max(c(Banana, Citrus, Coconut)),
+                                          industrial_crops = max(c(Cotton, Flax)), # Rubber, directly responsible for deforestation, are not mixed with these.
+                                          narcotics_crops = max(c(Tea, Tobacco)), # Cocoa and Coffee, directly responsible for deforestation, are not mixed with these.
+                                          # fibre_crops = max(c(Cotton, Flax)),
+                                          # rice_crops = max(c(Dryland_rice, Wetland_rice)
+                                          fodder_crops = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop  
+                                          bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Sorghumbiomass, Switchgrass))
   ) %>% as.data.frame()
   
+  
   # standardize crop groups
-  df_cs <- dplyr::mutate(df_cs, across(.cols = contains("_crops"), .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
+  
+  # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
+  df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = contains("_crops") | any_of(Oilpalm, Soy, Cocoa, Coffee, Rubber))))
+
+  df_cs <- dplyr::mutate(df_cs, across(.cols = contains("_crops") | any_of(Oilpalm, Soy, Cocoa, Coffee, Rubber), .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
 
   # Select only newly constructed variables, and id
   var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs)) | grepl(pattern = "_crops", x = names(df_cs))]
