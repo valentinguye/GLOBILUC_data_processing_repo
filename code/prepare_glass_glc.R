@@ -293,7 +293,7 @@ aggregate(sbqt_direct_lu,
 
 aggr_sbqt_direct_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_sbqt_direct_lu.tif"))
 
-# and now align precisely to GAEZ 
+# and now aligne precisely to GAEZ 
 
 beginCluster() # this uses by default detectCores() - 1
 

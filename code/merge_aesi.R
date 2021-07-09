@@ -83,7 +83,7 @@ names(gaez) <- gaez_crops
 
 
 
-#### 1. MERGE GLASS-GLC AND SUITABILITY INDICES #### 
+#### 1. MERGE GLASS-GLC AND GAEZ #### 
 
 ## Read in GLASS-GLC data 
 first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_first_loss.tif"))

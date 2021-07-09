@@ -212,7 +212,8 @@ for(name in dataset_names){
   df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
                                           Fodder = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop  
                                           Rice = max(c(Drylandrice, Wetlandrice)),
-                                          bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Sorghumbiomass, Switchgrass)),
+                                          Sorghum2 = max(c(Sorghum, Sorghumbiomass)),
+                                          bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Switchgrass)),
                                           cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye)),
                                           pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea)),
                                           roots_crops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
@@ -227,9 +228,9 @@ for(name in dataset_names){
   # sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
 
   ## Standardize crops that can be matched with a price and crop groups
-  indivcrops_to_std <- c("Banana", "Barley", "Cocoa", "Citrus", "Coconut", "Coffee", "Cotton", "Fodder", 
+  indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder", 
                          "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber", 
-                         "Sorghum", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
+                         "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
   
   # To understand these lines, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
   df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = (contains("_crops") | any_of(indivcrops_to_std)))))
@@ -239,7 +240,8 @@ for(name in dataset_names){
                                        .names = paste0("{.col}", "_std")))
 
   # Select only newly constructed variables, and id
-  var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs)) | names(df_cs) %in% c("Fodder", "Rice", "Sugar")] # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs))
+  var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs))] # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs))
+  # and this is if we want the new variables in non std format too | names(df_cs) %in% c("Fodder", "Rice", "Sugar")
   df_cs <- df_cs[,c("grid_id", var_names)]
   
   saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))  
@@ -276,7 +278,7 @@ for(name in dataset_names){
 
   # Create country trends variable
   final <- mutate(final, country_year = paste0(country_name, "_", year))
-
+  
   saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
   
   rm(final)
@@ -286,7 +288,7 @@ for(name in dataset_names){
 
 
 
-#### Define GAEZ ACAY variables ####
+#### Define GAEZ AEAY variables ####
 gaez_crops <- list.files(path = here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
@@ -295,13 +297,11 @@ gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
 origindir <- here("temp_data", "merged_datasets", "tropical_aoi")
 
-dataset_names <- c("glass_acay_long",
-                   "firstloss8320_acay_long", 
-                   "phtfloss_acay_long")
+dataset_names <- c("glass_aeay_long",
+                   "firstloss8320_aeay_long", 
+                   "phtfloss_aeay_long")
 
-#### GROUP ACAY CROPS #### 
-
-
+#### GROUP AEAY CROPS #### 
 # name = dataset_names[1]
 
 for(name in dataset_names){
@@ -315,8 +315,9 @@ for(name in dataset_names){
   
   ## Aggregate suitability indexes to match price data
   df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
-                                          Fodder = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop  
-                                          Rice = max(c(Drylandrice, Wetlandrice))#,
+                                          Fodder = max(c(Alfalfa, Napiergrass)),   
+                                          Rice = max(c(Drylandrice, Wetlandrice)),
+                                          Sorghum2 = max(c(Sorghum, Sorghumbiomass))
                                           # We surely wont need these in the AEAY workflow, as we need to interact these variables with a price and there is no price for those. 
                                           # bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Sorghumbiomass, Switchgrass)),
                                           # cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye)),
@@ -330,7 +331,7 @@ for(name in dataset_names){
   ) %>% as.data.frame()
   
   # Select only newly constructed variables, and id
-  df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar")]
+  df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2")]
   
   # # merge back to panel - NOPE, not anymore
   # df <- left_join(df, df_cs, by = "grid_id")
@@ -345,7 +346,7 @@ for(name in dataset_names){
 
 
 
-#### MERGE ACAY DATASETS WITH ADDED VARIABLES #### 
+#### MERGE AEAY DATASETS WITH ADDED VARIABLES #### 
 for(name in dataset_names){
   
   # Base dataset (including outcome variable(s))
@@ -353,10 +354,10 @@ for(name in dataset_names){
   df_base <- readRDS(base_path)
   
   # Country variable
-  # do that because we did not run the spatial join with countries for acay dataset
-  if(name=="glass_acay_long"){country_path <- paste0(here(origindir, "glass_aesi_long"), "_country_nf.Rdata")}
-  if(name=="firstloss8320_acay_long"){country_path <- paste0(here(origindir, "firstloss8320_aesi_long"), "_country_nf.Rdata")}
-  if(name=="phtfloss_acay_long"){country_path <- paste0(here(origindir, "phtfloss_aesi_long"), "_country_nf.Rdata")}
+  # do that because we did not run the spatial join with countries for aeay dataset
+  if(name=="glass_aeay_long"){country_path <- paste0(here(origindir, "glass_aesi_long"), "_country_nf.Rdata")}
+  if(name=="firstloss8320_aeay_long"){country_path <- paste0(here(origindir, "firstloss8320_aesi_long"), "_country_nf.Rdata")}
+  if(name=="phtfloss_aeay_long"){country_path <- paste0(here(origindir, "phtfloss_aesi_long"), "_country_nf.Rdata")}
   
   df_country <- readRDS(country_path)
   

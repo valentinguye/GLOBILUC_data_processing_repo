@@ -77,12 +77,12 @@ setFixest_dict(c(grid_id = "grid cell",
 mapmat_data <- c(
 "Banana","Banana",
 "Barley", "Barley",
-"Beef", "fodder_crops", 
+"Beef", "Fodder", 
 "Orange", "Citrus",
 "Cocoa", "Cocoa",
 "Coconut", "Coconut",
 "Coffee", "Coffee",
-"Cotton", "fibre_crops",
+"Cotton", "Cotton",
 "Groundnut", "Groundnut",
 "Maize", "Maize",
 "Oat", "Oat",
@@ -90,7 +90,8 @@ mapmat_data <- c(
 "Olive", "Olive",
 "Palm_oil", "Oilpalm",
 "Rapeseed", "Rapeseed",
-"Rice", "rice_crops",
+"Rice", "Rice",
+"Rubber", "Rubber",
 "Sorghum", "Sorghum",
 "Soybean", "Soybean",
 # "Soybean_oil", "Soybean",
@@ -119,11 +120,11 @@ colnames(mapmat) <- c("Prices", "Crops")
 
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
 
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aeay_long_final.Rdata"))
 
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_acay_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aeay_long_final.Rdata"))
 
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aeay_long_final.Rdata"))
 
 prices <- readRDS(here("temp_data", "prepared_producer_prices.Rdata"))
 # 
@@ -203,9 +204,18 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   price_k <- paste0("ln_", price_k)
   
   ## Revenue variable names
+  # Identify only Prices and Crops that can be matched 
+  # See below, in conversion part, why we exclude coconut and cotton. 
   # To determine land use, only the potential revenue of soybeans is considered (for simplicity) 
-  all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & mapmat[,"Prices"]!="Soybean_meal" ,"Prices"]
-  all_crop_acay <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & mapmat[,"Prices"]!="Soybean_meal" ,"Crops"]
+
+  all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
+                            mapmat[,"Prices"]!="Soybean_meal" & 
+                            mapmat[,"Prices"]!="Coconut" &
+                            mapmat[,"Prices"]!="Cotton", "Prices"]
+  all_crop_acay <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
+                          mapmat[,"Prices"]!="Soybean_meal" & 
+                          mapmat[,"Prices"]!="Coconut" &
+                          mapmat[,"Prices"]!="Cotton", "Crops"]
   
   # We will construct expected revenues for all crops - not just those in price_k or crop_j.
   # Thus we take the first lag or the X past year average of the prices, but not the log.
@@ -223,9 +233,9 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
 
   #### MAKE THE VARIABLES NEEDED IN THE DATA
   #d <- main_data
-  if(outcome_variable == "first_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))}
-  if(outcome_variable == "firstloss_glassgfc"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_acay_long_final.Rdata"))}
-  if(outcome_variable == "phtf_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))}
+  if(outcome_variable == "first_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aeay_long_final.Rdata"))}
+  if(outcome_variable == "firstloss_glassgfc"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aeay_long_final.Rdata"))}
+  if(outcome_variable == "phtf_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aeay_long_final.Rdata"))}
   
   # # restrict the outcome variable to evidence of further LU
   # d <- dplyr::mutate(d, lu_evidence = TRUE)
@@ -247,7 +257,36 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   
   ### PREPARE rj, the standardized achievable revenues
   
-  # Merge only the prices needed, not the whole price dataframe
+  # First, convert aeay quantities into TON/ha. Note that:
+  # "For most crops the agro-climatic potential yield is given as kg dry weight per hectare. 
+  # For alfalfa, miscanthus, switchgrass, reed canary grass, napier grass, pasture legumes and grasses the yield is given in 10 kg dry weight per hectare. 
+  # For sugar beet and sugarcane yields are in kg sugar per hectare, 
+  # and for oil palm and olives in kg oil per hectare. Cotton yield is given as kg lint per hectare." 
+  # https://gaez.fao.org/pages/theme-details-theme-3
+  names(d)
+  # Convert those in kg/ha into ton/ha
+  d <- dplyr::mutate(d, across(.cols = all_of(all_crop_acay),
+                               .fns = ~./1000)) 
+  
+  d <- dplyr::mutate(d, across(.cols = all_of("Fodder"),
+                               .fns = ~.*10)) 
+  
+  # Those in different commodity format in GAEZ AEAY and in prices. 
+  
+  # We do not convert cotton from lint to kg, because we do not use cotton, as it is a crop appart.
+  
+  # For rapeseed and sunflower, the extraction rate seem very close to 1 
+  # as per the crude fat to DM ratios at:
+  # https://feedtables.com/content/rapeseed-oil
+  # https://feedtables.com/content/sunflower-oil
+  
+  # Coconut cannot be converted to coconut oil, as it is made of only a by product of coconut; 
+  # We would not correctly estimate the value of coconut if we counted the whole coconut yield as the copra byproduct;   
+
+  # Olive and Oilpalm are expressed in oil already, as in the price data. Hence nothing to do. 
+  
+  
+  ## Merge only the prices needed, not the whole price dataframe
   d <- left_join(d, prices[,c("country_name", "year", prices_4_revenue)], by = c("country_name", "year"))
   
   # Agro-climatic achievable yield data from GAEZ are in t/ha (as shown by the Map tool on the platform)
