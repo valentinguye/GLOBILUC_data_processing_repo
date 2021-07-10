@@ -84,7 +84,7 @@ mapmat_data <- c(
 "Coffee", "Coffee",
 "Cotton", "Cotton",
 "Groundnut", "Groundnut",
-"Maize", "Maize",
+"Maize", "Maizegrain",
 "Oat", "Oat",
 "Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
 "Olive", "Olive",
@@ -92,7 +92,7 @@ mapmat_data <- c(
 "Rapeseed", "Rapeseed",
 "Rice", "Rice",
 "Rubber", "Rubber",
-"Sorghum", "Sorghum",
+"Sorghum", "Sorghum2",
 "Soybean", "Soybean",
 # "Soybean_oil", "Soybean",
 # "Soybean_meal", "Soybean",
@@ -131,7 +131,7 @@ prices <- readRDS(here("temp_data", "prepared_producer_prices.Rdata"))
 # rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, SjPj, SkPk, fe, distribution, output, se, cluster, 
 #    controls, regressors, outcome_variable)
 # 
-# outcome_variable = "first_loss" # "first_loss", "firstloss_glassgfc", "phtf_loss"
+outcome_variable = "first_loss" # "first_loss", "firstloss_glassgfc", "phtf_loss"
 # start_year = 2002
 # end_year = 2020
 # price_info = "lag1"
@@ -254,7 +254,11 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   #   }
   # }
   
-  
+  ### Keep only variables needed
+  # typically removes only aeay of crops that we do not use anyway because they match no price. 
+  # and in glass, the sbqt_lu variables. 
+  var2keep <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", outcome_variable, all_crop_acay)
+  d <- dplyr::select(d, all_of(var2keep))
   ### PREPARE rj, the standardized achievable revenues
   
   # First, convert aeay quantities into TON/ha. Note that:
@@ -267,7 +271,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   # Convert those in kg/ha into ton/ha
   d <- dplyr::mutate(d, across(.cols = all_of(all_crop_acay),
                                .fns = ~./1000)) 
-  
+  # Convert Nappier grass and alfalfa (components of Fodder) from now 10 tons to tons. 
   d <- dplyr::mutate(d, across(.cols = all_of("Fodder"),
                                .fns = ~.*10)) 
   
@@ -284,7 +288,6 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   # We would not correctly estimate the value of coconut if we counted the whole coconut yield as the copra byproduct;   
 
   # Olive and Oilpalm are expressed in oil already, as in the price data. Hence nothing to do. 
-  
   
   ## Merge only the prices needed, not the whole price dataframe
   d <- left_join(d, prices[,c("country_name", "year", prices_4_revenue)], by = c("country_name", "year"))
