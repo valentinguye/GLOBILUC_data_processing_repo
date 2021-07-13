@@ -61,6 +61,70 @@ ext <- extent(c(-95, -25, -57, 15))
 
 
 
+# Renaming layers with the following name mapping matrix
+mapmat_data <- c("alf", "Alfalfa", 
+                 "ban", "Banana",
+                 "bck", "Buckwheat", 
+                 "brl", "Barley",
+                 "bsg", "Sorghumbiomass", 
+                 "cab", "Cabbage",
+                 "car", "Carrot", 
+                 "chk", "Chickpea",
+                 "cit", "Citrus", 
+                 "coc", "Cocoa",
+                 "cof", "Coffee", 
+                 "con", "Coconut",
+                 "cot", "Cotton", 
+                 "cow", "Cowpea",
+                 "csv", "Cassava", 
+                 "flx", "Flax",
+                 "fml", "Foxtailmillet", 
+                 "grd", "Groundnut",
+                 "grm", "Gram", 
+                 "jtr", "Jatropha",
+                 "mis", "Miscanthus", 
+                 "mlt", "Millet",
+                 "mze", "Maizegrain",
+                 "mzs", "Maizesilage",
+                 "nap", "Napiergrass" ,
+                 "oat", "Oat",
+                 "olp", "Oilpalm" ,
+                 "olv", "Olive",
+                 "oni", "Onion" ,
+                 "pea", "Drypea",
+                 "phb", "Phaseolousbean" ,
+                 "pig", "Pigeonpea",
+                 "pml", "Pearlmillet" ,
+                 "pst", "Pasture",
+                 "rcd", "Drylandrice",
+                 "rcg", "Reedcanarygrass",
+                 "rcw", "Wetlandrice" ,
+                 "rsd", "Rapeseed",
+                 "rub", "Rubber" ,
+                 "rye", "Rye",
+                 "sfl", "Sunflower" ,
+                 "soy", "Soybean",
+                 "spo", "Sweetpotato" ,
+                 "srg", "Sorghum",
+                 "sub", "Sugarbeet" ,
+                 "suc", "Sugarcane",
+                 "swg", "Switchgrass" ,
+                 "tea", "Tea",
+                 "tob", "Tobacco" ,
+                 "tom", "Tomato",
+                 "whe", "Wheat" ,
+                 "wpo", "Whitepotato",
+                 "yam", "Yam")
+
+# 3 of these are not in the data downloaded (but that does matter): Millet, Maizesilage, and Pasture
+mapmat <- matrix(data = mapmat_data, 
+                 nrow = length(mapmat_data)/2,
+                 ncol = 2, 
+                 byrow = TRUE)
+
+colnames(mapmat) <- c("abrev", "Names")
+
+
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 #### PREPARE GAEZ #### 
 
@@ -68,9 +132,10 @@ ext <- extent(c(-95, -25, -57, 15))
 # dir.create(here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input"), recursive = TRUE) 
 # dir.create(here("temp_data", "GAEZ", "South_America", "AES_index_value_current", "Rain-fed", "High-input"), recursive = TRUE) 
 
-datadir <- here("input_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input")
-targetdir <- here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input")
+datadir <- here("input_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "High-input")
+targetdir <- here("temp_data", "GAEZ", "South_America", "v4", "AES_index_value", "Rain-fed", "High-input")
 tmpdir <- here("temp_data", "tmp")
+
 
 if (!dir.exists(tmpdir)) dir.create(tmpdir, recursive = TRUE)
 if (dir.exists(targetdir)) {
@@ -80,8 +145,11 @@ if (dir.exists(targetdir)) {
 
 
 
-files <- list.files(path = datadir, pattern = ".zip")
-crops <- unlist(strsplit(files, split = ".zip"))
+files <- list.files(path = datadir, pattern = ".tif")
+crops <- unlist(strsplit(files, split = ".tif"))
+for(crop in crops){
+  crops[grepl(crop, crops)] <- mapmat[grepl(crop, paste0("sxHr_", mapmat[,"abrev"])),"Names"]
+}
 
 
 ## Import most crops
@@ -91,7 +159,7 @@ for (j in 1:length(files)) {
   unzip(zipfile = here(datadir, files[j]), exdir = tmpdir)
   dt <- raster(paste0(tmpdir, "/data.asc"))
   
-  # crop to tropical AOI
+  # crop to south america AOI
   dt_trop <- crop(dt, ext)
   
   # A few points are -0.09 with no apparent reason. 
@@ -120,18 +188,18 @@ rasterlist_gaez <- list.files(path = targetdir,
                               full.names = TRUE) %>% as.list()
 gaez_all <- brick(rasterlist_gaez)
 
-writeRaster(gaez_all, here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "high_input_all.tif"), 
+writeRaster(gaez_all, here("temp_data", "GAEZ", "South_America", "v4", "AES_index_value", "Rain-fed", "high_input_all.tif"), 
             overwrite = TRUE)
 
 rm(rasterlist_gaez, gaez_all)
 
 
-### PREPARE POTENTIAL YIELDS 
+### PREPARE ATTAINABLE YIELDS
 # dir.create(here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input"), recursive = TRUE) 
 # dir.create(here("temp_data", "GAEZ", "South_America", "AES_index_value_current", "Rain-fed", "High-input"), recursive = TRUE) 
 
-datadir <- here("input_data", "GAEZ", "Agro_climatically_attainable_yield", "Rain-fed", "High-input")
-targetdir <- here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "High-input")
+datadir <- here("input_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "High-input")
+targetdir <- here("temp_data", "GAEZ", "South_America", "v4", "AEAY_out_density", "Rain-fed", "High-input")
 tmpdir <- here("temp_data", "tmp")
 
 if (!dir.exists(tmpdir)) dir.create(tmpdir, recursive = TRUE)
@@ -142,8 +210,12 @@ if (dir.exists(targetdir)) {
 
 
 
-files <- list.files(path = datadir, pattern = ".zip")
-crops <- unlist(strsplit(files, split = ".zip"))
+files <- list.files(path = datadir, pattern = ".tif")
+crops <- unlist(strsplit(files, split = ".tif"))
+for(crop in crops){
+  # note the difference here, we match *yl*Hr and not sxHr
+  crops[grepl(crop, crops)] <- mapmat[grepl(crop, paste0("ylHr_", mapmat[,"abrev"])),"Names"]
+}
 
 ## Import most crops
 for (j in 1:length(files)) {
@@ -173,7 +245,7 @@ rasterlist_gaez <- list.files(path = targetdir,
                               full.names = TRUE) %>% as.list()
 gaez_all <- brick(rasterlist_gaez)
 
-writeRaster(gaez_all, here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "high_input_all.tif"), 
+writeRaster(gaez_all, here("temp_data", "GAEZ", "South_America", "v4", "AEAY_out_density", "Rain-fed", "high_input_all.tif"), 
             overwrite = TRUE)
 
 
@@ -249,7 +321,7 @@ aggregate(first_loss,
 
 aggr_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"))
 
-gaez <- raster(here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input", "Banana.tif"))
+gaez <- raster(here("temp_data", "GAEZ", "South_America", "v4", "AES_index_value", "Rain-fed", "High-input", "Banana.tif"))
 
 beginCluster() # this uses by default detectCores() - 1
 
@@ -317,7 +389,7 @@ targetdir <- here("temp_data", "merged_datasets", "southam_aoi")
 ### READ IN AND RENAME GAEZ DATA ### 
 
 ## SUITABILITY INDICES 
-gaez_dir <- here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed")
+gaez_dir <- here("temp_data", "GAEZ", "South_America", "v4", "AES_index_value", "Rain-fed")
 gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
 # Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
@@ -347,10 +419,10 @@ mask <- raster(here("temp_data", "processed_glass-glc", "southam_aoi", "always_z
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "South_America", "v4", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "South_America", "v4", "AES_index_value", "Rain-fed", "glass_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -412,7 +484,7 @@ rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first
 
 
 
-#### MERGE ACAY #### 
+#### MERGE AEAY #### 
 
 ### NEW FOLDERS USED IN THIS SCRIPT 
 dir.create(here("temp_data", "merged_datasets", "southam_aoi"), recursive = TRUE)
@@ -429,7 +501,7 @@ targetdir <- here("temp_data", "merged_datasets", "southam_aoi")
 ### READ IN AND RENAME GAEZ DATA ### 
 
 ## SUITABILITY INDICES 
-gaez_dir <- here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed")
+gaez_dir <- here("temp_data", "GAEZ", "South_America", "v4", "AEAY_out_density", "Rain-fed")
 gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
 # Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
@@ -461,10 +533,10 @@ mask <- raster(here("temp_data", "processed_glass-glc", "southam_aoi", "always_z
 
 mask(x = gaez, 
      mask = mask, 
-     filename = here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "glass_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "South_America", "v4", "AEAY_out_density", "Rain-fed", "glass_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "glass_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "South_America", "v4", "AEAY_out_density", "Rain-fed", "glass_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -532,18 +604,18 @@ long_df <- mutate(long_df, year = glc_sbqt_years[year])
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 
-saveRDS(long_df, here(targetdir, "glass_acay_long.Rdata"))
+saveRDS(long_df, here(targetdir, "glass_aeay_long.Rdata"))
 
 rm(long_df, varying_vars, glass_gaez, gaez_m, mask, glass, glc_sbqt_years, first_loss)
 
 
-# glass <- readRDS(here(targetdir, "glass_acay_long.Rdata"))
+# glass <- readRDS(here(targetdir, "glass_aeay_long.Rdata"))
 
 
 #### ADD VARIABLES AESI #### 
 
 # Define GAEZ AESI variables 
-gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "AES_index_value", "Rain-fed", "High-input"), 
+gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "v4", "AES_index_value", "Rain-fed", "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
@@ -635,41 +707,41 @@ df_cs <- df[!duplicated(df$grid_id),]
 
 rm(df)
 
-### Standardize suitability indexes
-# To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
-df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = Alfalfa:Yam)))
-
-# df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum))
-# that adds the 47 new variables, with new names.
-df_cs <- dplyr::mutate(df_cs, across(.cols = Alfalfa:Yam, .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
-
-### Aggregate suitability indexes of similar crops
-# The grouping here corresponds to the categories by GAEZ-IIASA 
-# sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
-# Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
-df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
-                                        oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
-                                        sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
-                                        fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
-                                        fibre_crops = max(c(Cotton, Flax)),
-                                        stimulant_crops = max(c(Coffee, Tea, Tobacco)),
-                                        fodder_crops = max(c(Alfalfa)), # To adjust once we have Grass as a GAEZ crop  
-                                        bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass)), 
-                                        rice_crops = max(c(Dryland_rice, Wetland_rice)) # (this one is not a GAEZ group)
+## Aggregate suitability indexes to match price data
+df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
+                                        Fodder = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop  
+                                        Rice = max(c(Drylandrice, Wetlandrice)),
+                                        Sorghum2 = max(c(Sorghum, Sorghumbiomass)),
+                                        bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Switchgrass)),
+                                        cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye)),
+                                        pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea)),
+                                        roots_crops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
+                                        # oil_crops = max(c(Groundnut, Jatropha, Olive, Rapeseed, Sunflower)), # we have prices for all of them
+                                        vegetables_crops = max(c(Cabbage, Carrot, Onion, Tomato)),
+                                        # fruits_crops = max(c(Banana, Citrus, Coconut)), # For coconut we have price only for the oil but it does not matter because it's the AESI workstream anyway 
+                                        industrial_crops = max(c(Flax)) # Rubber, directly responsible for deforestation, are not mixed with these.
+                                        # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
+                                        
 ) %>% as.data.frame()
 
-# standardize crop groups
-df_cs <- dplyr::mutate(df_cs, across(.cols = contains("_crops"), .fns = ~./si_sum, .names = paste0("{.col}", "_std")))
+# sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
+
+## Standardize crops that can be matched with a price and crop groups
+indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder", 
+                       "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber", 
+                       "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
+
+# To understand these lines, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
+df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = (contains("_crops") | any_of(indivcrops_to_std)))))
+
+df_cs <- dplyr::mutate(df_cs, across(.cols = (contains("_crops") | any_of(indivcrops_to_std)),
+                                     .fns = ~./si_sum, 
+                                     .names = paste0("{.col}", "_std")))
 
 # Select only newly constructed variables, and id
-var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs)) | grepl(pattern = "_crops", x = names(df_cs))]
+var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs))] # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs))
+# and this is if we want the new variables in non std format too | names(df_cs) %in% c("Fodder", "Rice", "Sugar")
 df_cs <- df_cs[,c("grid_id", var_names)]
-
-# # merge back to panel - NOPE, not anymore
-# df <- left_join(df, df_cs, by = "grid_id")
-
-# Keep only new variables and id
-# df_cs <- df_cs[,(names(df_cs)=="grid_id" | grepl(pattern = "_std", x = names(df_cs)))]
 
 saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))  
 rm(df_cs, path)
@@ -707,19 +779,19 @@ saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
 rm(final)
 
 
-#### ADD VARIABLES ACAY #### 
+#### ADD VARIABLES AEAY #### 
 
-# Define GAEZ ACAY variables 
-gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "Agro_climatically_attainable_yield", "Rain-fed", "High-input"), 
+# Define GAEZ AEAY variables 
+gaez_crops <- list.files(path = here("temp_data", "GAEZ", "South_America", "v4", "AEAY_out_density", "Rain-fed", "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
 
 origindir <- here("temp_data", "merged_datasets", "southam_aoi")
-name <- "glass_acay_long"
+name <- "glass_aeay_long"
 
-### GROUP ACAY CROPS ### 
+### GROUP AEAY CROPS ### 
 path <- paste0(here(origindir, name), ".Rdata")
 df <- readRDS(path)
 # Use cross section only
@@ -727,24 +799,25 @@ df_cs <- df[!duplicated(df$grid_id),]
 
 rm(df)
 
-### Aggregate achievable yields of similar crops
-# The grouping here corresponds to the categories by GAEZ-IIASA 
-# sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
-# Moreover, we take the maxima of non-standardized SIs as well, for robustness checks that would imply these. 
-df_cs <- df_cs %>% rowwise() %>% mutate(cereal_crops = max(c(Barley, Buckwheat, Dryland_rice, Foxtailmillet, Maize, Oat, Pearlmillet, Rye, Sorghum, Wetland_rice, Wheat)), 
-                                        oil_crops = max(c(Groundnut, Jatropha, Oilpalm, Olive, Rapeseed, Soybean, Sunflower)),
-                                        sugar_crops = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the price of sugar
-                                        fruit_crops = max(c(Banana, Citrus, Cocoa, Coconut)), 
-                                        fibre_crops = max(c(Cotton, Flax)),
-                                        stimulant_crops = max(c(Coffee, Tea, Tobacco)),
-                                        fodder_crops = max(c(Alfalfa, Pasture_legume, Grass)), # To adjust once we have Grass as a GAEZ crop  
-                                        bioenergy_crops = max(c(Miscanthus, Reedcanarygrass, Switchgrass)), 
-                                        rice_crops = max(c(Dryland_rice, Wetland_rice)) # (this one is not a GAEZ group)
+## Aggregate suitability indexes to match price data
+df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
+                                        Fodder = max(c(Alfalfa, Napiergrass)),   
+                                        Rice = max(c(Drylandrice, Wetlandrice)),
+                                        Sorghum2 = max(c(Sorghum, Sorghumbiomass))
+                                        # We surely wont need these in the AEAY workflow, as we need to interact these variables with a price and there is no price for those. 
+                                        # bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Sorghumbiomass, Switchgrass)),
+                                        # cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye)),
+                                        # pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea)),
+                                        # roots_crops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
+                                        # # oil_crops = max(c(Groundnut, Jatropha, Olive, Rapeseed, Sunflower)), # we have prices for all of them
+                                        # vegetables_crops = max(c(Cabbage, Carrot, Onion, Tomato)),
+                                        # # fruits_crops = max(c(Banana, Citrus, Coconut)), # For coconut we have price only for the oil but it does not matter because it's the AESI workstream anyway 
+                                        # industrial_crops = max(c(Flax)) # Rubber, directly responsible for deforestation, are not mixed with these.
+                                        # # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
 ) %>% as.data.frame()
 
 # Select only newly constructed variables, and id
-var_names <- names(df_cs)[grepl(pattern = "_crops", x = names(df_cs))]
-df_cs <- df_cs[,c("grid_id", var_names)]
+df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2")]
 
 # # merge back to panel - NOPE, not anymore
 # df <- left_join(df, df_cs, by = "grid_id")
@@ -756,14 +829,14 @@ saveRDS(df_cs, paste0(here(origindir, name), "_groupedcrops.Rdata"))
 rm(df_cs, path)
 
 
-### MERGE ACAY DATASETS WITH ADDED VARIABLES
+### MERGE AEAY DATASETS WITH ADDED VARIABLES
 
 # Base dataset (including outcome variable(s))
 base_path <- paste0(here(origindir, name), ".Rdata")
 df_base <- readRDS(base_path)
 
 # Country variable
-# do that because we did not run the spatial join with countries for acay dataset
+# do that because we did not run the spatial join with countries for aeay dataset
 country_path <- paste0(here(origindir, "glass_aesi_long"), "_country_nf.Rdata")
 df_country <- readRDS(country_path)
 

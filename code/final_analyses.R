@@ -80,26 +80,26 @@ mapmat_data <- c(
 "Beef", "Fodder", 
 "Orange", "Citrus",
 "Cocoa", "Cocoa",
-"Coconut", "Coconut",
+"Coconut_oil", "Coconut",
 "Coffee", "Coffee",
 "Cotton", "Cotton",
 "Groundnut", "Groundnut",
 "Maize", "Maizegrain",
 "Oat", "Oat",
 "Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
-"Olive", "Olive",
+"Olive_oil", "Olive",
 "Palm_oil", "Oilpalm",
-"Rapeseed", "Rapeseed",
+"Rapeseed_oil", "Rapeseed",
 "Rice", "Rice",
 "Rubber", "Rubber",
 "Sorghum", "Sorghum2",
 "Soybean", "Soybean",
 # "Soybean_oil", "Soybean",
 # "Soybean_meal", "Soybean",
-# "Sugar", "sugar_crops",
-"Sugarbeet", "Sugarbeet",
-"Sugarcane", "Sugarcane",
-"Sunflower", "Sunflower",
+"Sugar", "Sugar",
+# "Sugarbeet", "Sugarbeet",
+# "Sugarcane", "Sugarcane",
+"Sunflower_oil", "Sunflower",
 "Tea", "Tea",
 "Tobacco", "Tobacco",
 "Wheat", "Wheat")
@@ -126,51 +126,51 @@ colnames(mapmat) <- c("Prices", "Crops")
 
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aeay_long_final.Rdata"))
 
-prices <- readRDS(here("temp_data", "prepared_producer_prices.Rdata"))
+prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 # 
 # rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, SjPj, SkPk, fe, distribution, output, se, cluster, 
 #    controls, regressors, outcome_variable)
 # 
 outcome_variable = "first_loss" # "first_loss", "firstloss_glassgfc", "phtf_loss"
-# start_year = 2002
-# end_year = 2020
-# price_info = "lag1"
-# further_lu_evidence = "none"
-# crop_j = "Oilpalm"
-# j_soy = "Soybean_oil"
-# # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter. 
-# # but maybe not with skPk controls. 
-# price_k <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", 
-#              "Coconut_oil", "Soybeans","Sugar", "Maize")
-# # c( "Sugar", "Maize") 
-# # "Barley",  "Chicken", "Sheep", "Banana", "Beef", "Olive_oil",
-# #               "Orange",  "Cotton",  "Groundnut",  "Rubber", "Sorghum","Cocoa",  "Coffee",
-# #                "Rice",   "Wheat",  "Palm_oil", ), 
-# #                "Tea", "Tobacco",  "Oat",  
-# #               , "Pork")
-# extra_price_k = c() # , "Sheep", "Pork", "Chicken"
-# SjPj = TRUE
-# SkPk = TRUE
-# fe = "grid_id + country_year"
-# distribution = "quasipoisson"
-# se = "cluster"
-# cluster ="grid_id"
-# coefstat = "confint"
-# output = "coef_table"
+start_year = 2002
+end_year = 2020
+price_info = "lag1"
+further_lu_evidence = "none"
+crop_j = "Oilpalm"
+j_soy = "Soybean"
+# for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
+# but maybe not with skPk controls.
+price_k <- c("Soybean", "Rapeseed_oil", "Sunflower_oil",
+             "Sugar", "Maize")
+# c( "Sugar", "Maize")
+# "Barley",  "Chicken", "Sheep", "Banana", "Beef", "Olive_oil",
+#               "Orange",  "Cotton",  "Groundnut",  "Rubber", "Sorghum","Cocoa",  "Coffee",
+#                "Rice",   "Wheat",  "Palm_oil", ),
+#                "Tea", "Tobacco",  "Oat",
+#               , "Pork")
+extra_price_k = c() # , "Sheep", "Pork", "Chicken"
+SjPj = TRUE
+SkPk = TRUE
+fe = "grid_id + country_year"
+distribution = "quasipoisson"
+se = "cluster"
+cluster ="grid_id"
+coefstat = "confint"
+output = "coef_table"
 
-# "Banana", "Barley", "Beef", 
-# "Orange", "Cocoa", "Coconut_oil", "Coffee", "Cotton", "Rice", "Groundnut", 
-# "Maize", "Palm_oil", "Rubber", "Sorghum", "Soybean_oil", 
-# "Sugar", "Tea", "Tobacco", "Wheat", "Oat", "Olive_oil", "Rapeseed_oil", 
+# "Banana", "Barley", "Beef",
+# "Orange", "Cocoa", "Coconut_oil", "Coffee", "Cotton", "Rice", "Groundnut",
+# "Maize", "Palm_oil", "Rubber", "Sorghum", "Soybean_oil",
+# "Sugar", "Tea", "Tobacco", "Wheat", "Oat", "Olive_oil", "Rapeseed_oil",
 # "Sunflower_oil"
-# rm(dataset, start_year, end_year, crop_j, j_soy, price_k, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
+rm(dataset, start_year, end_year, crop_j, j_soy, price_k, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
 
 make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2002, 
                           end_year = 2020, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
                           crop_j = "Oilpalm", # in GAEZ spelling
-                          j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
+                          j_soy = "Soybean", # in case crop_j is Soybean, which price should be used? One of "Soybean", "Soybean_oil", "Soybean_meal".
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
                           price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
@@ -210,11 +210,11 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
 
   all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
                             mapmat[,"Prices"]!="Soybean_meal" & 
-                            mapmat[,"Prices"]!="Coconut" &
+                            mapmat[,"Prices"]!="Coconut_oil" &
                             mapmat[,"Prices"]!="Cotton", "Prices"]
   all_crop_acay <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
                           mapmat[,"Prices"]!="Soybean_meal" & 
-                          mapmat[,"Prices"]!="Coconut" &
+                          mapmat[,"Prices"]!="Coconut_oil" &
                           mapmat[,"Prices"]!="Cotton", "Crops"]
   
   # We will construct expected revenues for all crops - not just those in price_k or crop_j.
@@ -243,7 +243,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   #    # , cropland, or tree plantation
   #   # if it is actually forest afterwards, this means that 
   #   
-  #   if(crop_j == "fodder_crops"){
+  #   if(crop_j == "Fodder"){
   #     d <- dplyr::mutate(d, lu_evidence = (!!as.symbol(further_lu_evidence) == 30)) # either direct or mode subsequent lu are grassland
   #   }
   #   if(crop_j == "Soybean"){
@@ -259,12 +259,13 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   # and in glass, the sbqt_lu variables. 
   var2keep <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", outcome_variable, all_crop_acay)
   d <- dplyr::select(d, all_of(var2keep))
+  rm(var2keep)
   ### PREPARE rj, the standardized achievable revenues
   
   # First, convert aeay quantities into TON/ha. Note that:
   # "For most crops the agro-climatic potential yield is given as kg dry weight per hectare. 
   # For alfalfa, miscanthus, switchgrass, reed canary grass, napier grass, pasture legumes and grasses the yield is given in 10 kg dry weight per hectare. 
-  # For sugar beet and sugarcane yields are in kg sugar per hectare, 
+  # For sugar beet and sugarcane (and hence Sugar, the max of them) yields are in kg sugar per hectare, 
   # and for oil palm and olives in kg oil per hectare. Cotton yield is given as kg lint per hectare." 
   # https://gaez.fao.org/pages/theme-details-theme-3
   names(d)
@@ -289,10 +290,14 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
 
   # Olive and Oilpalm are expressed in oil already, as in the price data. Hence nothing to do. 
   
-  ## Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("country_name", "year", prices_4_revenue)], by = c("country_name", "year"))
+  # Convert fodder crop yield into beef by a feed conversion ratio. 
+  # Following Alexander et al. 2016, 25 tons of feed transform into 1 ton of beef meat (in edible weight). 
+  # Thus, every ton of feed counted in R_Fodder (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/25 ton of beef meat  
+  d <- dplyr::mutate(d, Fodder = Fodder/25)
   
-  # Agro-climatic achievable yield data from GAEZ are in t/ha (as shown by the Map tool on the platform)
+  ## Merge only the prices needed, not the whole price dataframe
+  d <- left_join(d, prices[,c("year", prices_4_revenue)], by = c("year"))
+  
   # Prices have been converted to $/t in prepare_prices.R
   for(i in 1:length(prices_4_revenue)){
     price_i <- prices_4_revenue[i]
@@ -301,12 +306,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
     d <- dplyr::mutate(d, 
                        !!as.symbol(revenue_i) := !!as.symbol(acay_i)*!!as.symbol(price_i))
   }
-  rm(price_i, revenue_i, acay_i)                   
-
-  # scale fodder crop revenues by a feed conversion ratio. 
-  # Following Alexander et al. 2016, 25 tons of feed transform into 1 ton of beef meat (in edible weight). 
-  # Thus, every ton of feed counted in R_fodder_crops (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/25 ton of beef meat  
-  d <- dplyr::mutate(d, R_fodder_crops = R_fodder_crops/25)
+  rm(price_i, revenue_i, acay_i)                  
   
   
   ## Standardize the revenue variable(s) needed here -> stream dj = Rj/sumRi 
@@ -333,7 +333,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   vars <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", outcome_variable, 
               names(d)[grepl(pattern ="_std", x= names(d))])
   d <- dplyr::select(d, all_of(vars))
-
+  rm(vars)
 
   ### MAKE FINAL REGRESSION VARIABLES 
   
@@ -341,7 +341,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   d <- dplyr::filter(d, !!as.symbol(revenue_j_std) > 0)
   
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("country_name", "year", price_all)], by = c("country_name", "year"))
+  d <- left_join(d, prices[,c("year", price_all)], by = c("year"))
   
   # Main regressors
   regressors <- c()
@@ -353,7 +353,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   }
   rm(varname)
   
-  # Remove the first of the regressors if we do not control for SjPj. The first is necessart SjPj because of the construction of price_all that has price_j first. 
+  # Remove the first of the regressors if we do not control for SjPj. The first is necessary SjPj because of the construction of price_all that has price_j first. 
   if(!SjPj){
     regressors <- regressors[-1]
   }
@@ -478,7 +478,7 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
                           end_year = 2020, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
                           crop_j = "Oilpalm", # in GAEZ spelling
-                          j_soy = "Soybean_oil", # in case crop_j is Soybean, which price should be used? One of "Soybeans", "Soybean_oil", "Soybean_meal".
+                          j_soy = "Soybean", # in case crop_j is Soybean, which price should be used? One of "Soybean", "Soybean_oil", "Soybean_meal".
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
                           price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
@@ -563,10 +563,11 @@ make_reg_aesi <- function(outcome_variable = "first_loss", # one of "first_loss"
                                suitability_j_std, suitability_k_std))) 
     
   # and keep only the cells with positive suitability for crop j 
+  # Important to do this here, in aesi case, as we divide by sj in main regressor construction
   d <- dplyr::filter(d, !!as.symbol(suitability_j_std) > 0)
 
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("country_name", "year", price_all)], by = c("country_name", "year"))
+  d <- left_join(d, prices[,c("year", price_all)], by = c("year"))
   
   
   # Main regressors
@@ -757,17 +758,59 @@ make_table_mat <- function(df_res,
 # For each crop j, we produce two quantities, for aesi and acay. 
 # Across crops, these quantities differ in the forest loss measure, and (the time and) space it is aggregated to. 
 
-# data = d
-# crops = c("Soybean", "fodder_crops", "Oilpalm", "Cocoa", "Coffee") 
-# qj = "continuous" 
-# price_info = "4pya"
+data = d
+crops = c("Soybean", "Fodder", "Oilpalm", "Cocoa", "Coffee")
+qj = "continuous"
+price_info = "4pya"
 
 # For acay we need to compute the revenue here. This helper function does it
 make_rj <- function(data, crops, qj = "continuous", price_info = "lag1"){
   ## Revenue variable names
   # To determine land use, only the potential revenue of soybeans is considered (for simplicity) 
-  all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & mapmat[,"Prices"]!="Soybean_meal" ,"Prices"]
-  all_crop_acay <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & mapmat[,"Prices"]!="Soybean_meal" ,"Crops"]
+  all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
+                              mapmat[,"Prices"]!="Soybean_meal" & 
+                              mapmat[,"Prices"]!="Coconut_oil" &
+                              mapmat[,"Prices"]!="Cotton", "Prices"]
+  all_crop_acay <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
+                            mapmat[,"Prices"]!="Soybean_meal" & 
+                            mapmat[,"Prices"]!="Coconut_oil" &
+                            mapmat[,"Prices"]!="Cotton", "Crops"]
+  
+
+  ### PREPARE rj, the standardized achievable revenues
+  
+  # First, convert aeay quantities into TON/ha. Note that:
+  # "For most crops the agro-climatic potential yield is given as kg dry weight per hectare. 
+  # For alfalfa, miscanthus, switchgrass, reed canary grass, napier grass, pasture legumes and grasses the yield is given in 10 kg dry weight per hectare. 
+  # For sugar beet and sugarcane (and hence Sugar, the max of them) yields are in kg sugar per hectare, 
+  # and for oil palm and olives in kg oil per hectare. Cotton yield is given as kg lint per hectare." 
+  # https://gaez.fao.org/pages/theme-details-theme-3
+  names(data)
+  # Convert those in kg/ha into ton/ha
+  data <- dplyr::mutate(data, across(.cols = all_of(all_crop_acay),
+                               .fns = ~./1000)) 
+  # Convert Nappier grass and alfalfa (components of Fodder) from now 10 tons to tons. 
+  data <- dplyr::mutate(data, across(.cols = all_of("Fodder"),
+                               .fns = ~.*10)) 
+  
+  # Those in different commodity format in GAEZ AEAY and in prices. 
+  
+  # We do not convert cotton from lint to kg, because we do not use cotton, as it is a crop appart.
+  
+  # For rapeseed and sunflower, the extraction rate seem very close to 1 
+  # as per the crude fat to DM ratios at:
+  # https://feedtables.com/content/rapeseed-oil
+  # https://feedtables.com/content/sunflower-oil
+  
+  # Coconut cannot be converted to coconut oil, as it is made of only a by product of coconut; 
+  # We would not correctly estimate the value of coconut if we counted the whole coconut yield as the copra byproduct;   
+  
+  # Olive and Oilpalm are expressed in oil already, as in the price data. Hence nothing to do. 
+  
+  # Convert fodder crop yield into beef by a feed conversion ratio. 
+  # Following Alexander et al. 2016, 25 tons of feed transform into 1 ton of beef meat (in edible weight). 
+  # Thus, every ton of feed counted in R_Fodder (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/25 ton of beef meat  
+  data <- dplyr::mutate(data, Fodder = Fodder/25)
   
   # We will construct expected revenues for all crops - not just those in price_k or crop_j.
   # Thus we take the first lag or the X past year average of the prices, but not the log.
@@ -776,9 +819,8 @@ make_rj <- function(data, crops, qj = "continuous", price_info = "lag1"){
   ### PREPARE rj, the standardized achievable revenues
   
   # Merge only the prices needed, not the whole price dataframe
-  data <- left_join(data, prices[,c("country_name", "year", prices_4_revenue)], by = c("country_name", "year"))
+  data <- left_join(data, prices[,c("year", prices_4_revenue)], by = c("year"))
   
-  # Agro-climatic achievable yield data from GAEZ are in t/ha (as shown by the Map tool on the platform)
   # Prices have been converted to $/t in prepare_prices.R
   for(i in 1:length(prices_4_revenue)){
     price_i <- prices_4_revenue[i]
@@ -788,12 +830,7 @@ make_rj <- function(data, crops, qj = "continuous", price_info = "lag1"){
                        !!as.symbol(revenue_i) := !!as.symbol(acay_i)*!!as.symbol(price_i))
   }
   rm(price_i, revenue_i, acay_i)                   
-  
-  # scale fodder crop revenues by a feed conversion ratio. 
-  # Following Alexander et al. 2016, 25 tons of feed transform into 1 ton of beef meat (in edible weight). 
-  # Thus, every ton of feed counted in R_fodder_crops (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/25 ton of beef meat  
-  data <- dplyr::mutate(data, R_fodder_crops = R_fodder_crops/25)
-  
+
   
   ## Standardize the revenue variable(s) needed here -> stream dj = Rj/sumRi 
   
@@ -825,9 +862,9 @@ make_rj <- function(data, crops, qj = "continuous", price_info = "lag1"){
 }
 
 # Infrastructure to store results
-defo_table <- matrix(nrow = 5, ncol = 6, data = "")
-colnames(defo_table) <- c("Crop", "Region", "Goldman et al. 2020 estimate", "AESI estimate", "ACAY estimate", "ACAYmax estimate")
-row.names(defo_table) <- c("Pasture", "Oil palm", "Soybean", "Cocoa", "Coffee")
+defo_table <- matrix(nrow = 6, ncol = 6, data = "")
+colnames(defo_table) <- c("Crop", "Region", "Goldman et al. 2020 estimate", "AESI estimate", "AEAY estimate", "AEAYmax estimate")
+row.names(defo_table) <- c("Pasture", "Oil palm", "Soybean", "Cocoa", "Coffee", "Rubber")
 
 ### For soy and pasture, we use different data (prepared in south_america_track.R) and methods. 
 # This is necessary because we want to compare to a measure of deforestation to soy in Goldman et al. 2020 that aggregates the whole continent.
@@ -904,9 +941,9 @@ d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aesi_lon
 
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   Soybean_std, fodder_crops_std)
+                   Soybean_std, Fodder_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*Soybean_std, 
-                      Y_pasture = first_loss*fodder_crops_std)
+                      Y_pasture = first_loss*Fodder_std)
 
 # add up annual deforestation over the period 2001-2015
 d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
@@ -915,15 +952,15 @@ accu_0115 <- ddply(d_0115, "grid_id", summarise,
                    accu_pasture_defo = sum(Y_pasture, na.rm = TRUE),
                    .parallel = TRUE)
 
-# add up annual soy deforestation over the period 2006-2015
-d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
-accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybean, na.rm = TRUE))
-
 ## SOY ##
 # Restrict to cells in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
 # Store total
 defo_table["Soybean", "AESI estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
+
+# add up annual soy deforestation over the period 2006-2015
+d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybean, na.rm = TRUE))
 # Restrict to cells in Brazil 
 accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
@@ -942,24 +979,26 @@ d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_lo
 
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   Oilpalm_std, Cocoa_std, Coffee_std)
+                   Oilpalm_std, Cocoa_std, Coffee_std, Rubber_std)
 d <- dplyr::mutate(d, Y_oilpalm = first_loss*Oilpalm_std,
                      Y_cocoa = first_loss*Cocoa_std,
-                     Y_coffee = first_loss*Coffee_std)
+                     Y_coffee = first_loss*Coffee_std, 
+                     Y_rubber = first_loss*Rubber_std)
 
 # add up annual deforestation over the period 2001-2015
 d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
 accu_0115 <- ddply(d_0115, "grid_id", summarise, 
                    accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
                    accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
-                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
+                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE), 
+                   accu_rubber_defo = sum(Y_rubber, na.rm = TRUE))
 
 ## OIL PALM ## 
 defo_table["Oil palm", "AESI estimate"] <- round(sum(accu_0115$accu_oilpalm_defo)/1e6,digits=2) 
 
 # And over Indonesia, for phtf loss data
 phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
-phtfl <- dplyr::select(phtfl, grid_id, year, lon, lat, phtf_loss, Oilpalm_std)
+phtfl <- dplyr::select(phtfl, grid_id, year, lon, lat, country_name, phtf_loss, Oilpalm_std)
 phtfl_idn <- dplyr::filter(phtfl, country_name == "Indonesia")
 phtfl_idn <- dplyr::mutate(phtfl_idn, Y_oilpalm = phtf_loss*Oilpalm_std)
 phtfl_idn_0116 <- dplyr::filter(phtfl_idn, year >= 2001 & year <= 2016)
@@ -980,24 +1019,27 @@ defo_table["Cocoa", "AESI estimate"] <- round(sum(accu_0115$accu_cocoa_defo)/1e6
 ## COFFEE ## 
 defo_table["Coffee", "AESI estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1e6,digits=2) 
 
+## RUBBER ## 
+defo_table["Rubber", "AESI estimate"] <- round(sum(accu_0115$accu_rubber_defo)/1e6,digits=2) 
+
 rm(d, d_0115, d_0615, accu_0115, accu_0115_brazil, accu_0115_southam, accu_soy_0615, accu_soy_0615_brazil)
 
 
-### ACAY ####
+### AEAY ####
 
 ### For soy and pasture, we use data prepared for the whole South American continent (i.e. southam_aoi dataset), not only its tropical region. 
-d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_acay_long_final.Rdata"))
+d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aeay_long_final.Rdata"))
 
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
-             crops = c("Soybean", "fodder_crops"), 
+             crops = c("Soybean", "Fodder"), 
              qj = "continuous")
 
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   R_Soybean_std, R_fodder_crops_std)
+                   R_Soybean_std, R_Fodder_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*R_Soybean_std, 
-                   Y_pasture = first_loss*R_fodder_crops_std)
+                   Y_pasture = first_loss*R_Fodder_std)
 
 # add up annual deforestation over the period 2001-2015
 d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
@@ -1014,7 +1056,7 @@ accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybe
 # Restrict to cells in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
 # Store total
-defo_table["Soybean", "ACAY estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
+defo_table["Soybean", "AEAY estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
 # Restrict to cells in Brazil 
 accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
@@ -1024,16 +1066,16 @@ round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
 # Store total
-defo_table["Pasture", "ACAY estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
+defo_table["Pasture", "AEAY estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
 
 ### For the following commodities, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
-d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aeay_long_final.Rdata"))
 
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
-             crops = c("Oilpalm", "Cocoa", "Coffee"), 
+             crops = c("Oilpalm", "Cocoa", "Coffee", "Rubber"), 
              qj = "continuous")
 
 
@@ -1042,20 +1084,22 @@ d <- dplyr::select(d, grid_id, year, lon, lat, first_loss,
                    R_Oilpalm_std, R_Cocoa_std, R_Coffee_std)
 d <- dplyr::mutate(d, Y_oilpalm = first_loss*R_Oilpalm_std,
                    Y_cocoa = first_loss*R_Cocoa_std,
-                   Y_coffee = first_loss*R_Coffee_std)
+                   Y_coffee = first_loss*R_Coffee_std,
+                   Y_rubber = first_loss*R_Rubber_std)
 
 # add up annual deforestation over the period 2001-2015
 d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
 accu_0115 <- ddply(d_0115, "grid_id", summarise, 
                    accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
                    accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
-                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
+                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE),
+                   accu_rubber_defo = sum(Y_rubber, na.rm = TRUE))
 
 ## OIL PALM ## 
-defo_table["Oil palm", "ACAY estimate"] <- round(sum(accu_0115$accu_oilpalm_defo)/1e6,digits=2) 
+defo_table["Oil palm", "AEAY estimate"] <- round(sum(accu_0115$accu_oilpalm_defo)/1e6,digits=2) 
 
 # And over Indonesia, for phtf loss data
-phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))
+phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aeay_long_final.Rdata"))
 phtfl_idn <- dplyr::filter(phtfl, country_name == "Indonesia")
 # here we need to construct rj with function make_rj
 phtfl_idn <- make_rj(data = phtfl_idn, 
@@ -1069,27 +1113,30 @@ round(sum(phtfl_idn_accu_0115$accu_oilpalm_defo)/1e6,digits=2)
 
 
 ## COCOA ## 
-defo_table["Cocoa", "ACAY estimate"] <- round(sum(accu_0115$accu_cocoa_defo)/1e6,digits=2) 
+defo_table["Cocoa", "AEAY estimate"] <- round(sum(accu_0115$accu_cocoa_defo)/1e6,digits=2) 
 
 
 ## COFFEE ## 
-defo_table["Coffee", "ACAY estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1e6,digits=2) 
+defo_table["Coffee", "AEAY estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1e6,digits=2) 
+
+## RUBBER ## 
+defo_table["Rubber", "AEAY estimate"] <- round(sum(accu_0115$accu_rubber_defo)/1e6,digits=2) 
 
 
-### ACAY MAX ###
+### AEAY MAX ###
 ### For soy and pasture, we use data prepared for the whole South American continent (i.e. southam_aoi dataset), not only its tropical region. 
-d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_acay_long_final.Rdata"))
+d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aeay_long_final.Rdata"))
 
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
-             crops = c("Soybean", "fodder_crops"), 
+             crops = c("Soybean", "Fodder"), 
              qj = "max") # this is the important line
 
 # Build Y_j
 d <- dplyr::select(d, grid_id, year, lon, lat, first_loss, 
-                   R_Soybean_std, R_fodder_crops_std)
+                   R_Soybean_std, R_Fodder_std)
 d <- dplyr::mutate(d, Y_soybean = first_loss*R_Soybean_std, 
-                   Y_pasture = first_loss*R_fodder_crops_std)
+                   Y_pasture = first_loss*R_Fodder_std)
 
 # add up annual deforestation over the period 2001-2015
 d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
@@ -1107,7 +1154,7 @@ accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybe
 # Restrict to cells in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
 # Store total
-defo_table["Soybean", "ACAYmax estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
+defo_table["Soybean", "AEAYmax estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
 # Restrict to cells in Brazil in 2006-2015
 accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
@@ -1117,12 +1164,12 @@ round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
 # Store total
-defo_table["Pasture", "ACAYmax estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
+defo_table["Pasture", "AEAYmax estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
 
 ### For the following commodities, we aggregate over the whole tropics (i.e. on tropical_aoi dataset, and without restricting to specific countries)
-d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_acay_long_final.Rdata"))
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aeay_long_final.Rdata"))
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
              crops = c("Oilpalm", "Cocoa", "Coffee"), 
@@ -1142,10 +1189,10 @@ accu_0115 <- ddply(d_0115, "grid_id", summarise,
                    accu_coffee_defo = sum(Y_coffee, na.rm = TRUE))
 
 ## OIL PALM ## 
-defo_table["Oil palm", "ACAYmax estimate"] <- round(sum(accu_0115$accu_oilpalm_defo)/1e6,digits=2) 
+defo_table["Oil palm", "AEAYmax estimate"] <- round(sum(accu_0115$accu_oilpalm_defo)/1e6,digits=2) 
 
 # And over Indonesia, for phtf loss data
-phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))
+phtfl <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aeay_long_final.Rdata"))
 phtfl_idn <- dplyr::filter(phtfl, country_name == "Indonesia")
 # here we need to construct rj with function make_rj
 phtfl_idn <- make_rj(data = phtfl_idn, 
@@ -1159,11 +1206,11 @@ round(sum(phtfl_idn_accu_0115$accu_oilpalm_defo)/1e6,digits=2)
 
 
 ## COCOA ## 
-defo_table["Cocoa", "ACAYmax estimate"] <- round(sum(accu_0115$accu_cocoa_defo)/1e6,digits=2) 
+defo_table["Cocoa", "AEAYmax estimate"] <- round(sum(accu_0115$accu_cocoa_defo)/1e6,digits=2) 
 
 
 ## COFFEE ## 
-defo_table["Coffee", "ACAYmax estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1e6,digits=2) 
+defo_table["Coffee", "AEAYmax estimate"] <- round(sum(accu_0115$accu_coffee_defo)/1e6,digits=2) 
 
 
 
@@ -1228,7 +1275,7 @@ firstloss_southam <- raster::extract(x = accu_firstloss,
 # These tables compare first_loss and phtf_loss, for the same period, 2002, 2020, for acay (rj) and aesi (sj) models, with and without controlling for SkPk. 
 
 ### BEEF
-K_beef <- c("Soybeans", "Soybean_meal", "Palm_oil", 
+K_beef <- c("Soybean", "Soybean_meal", "Palm_oil", 
             "cereal_crops") # in prices spelling "Barley", "Oat", "Sorghum", "Maize", "Rice"
 
 res_list_beef <- list()
@@ -1245,7 +1292,7 @@ for(OV in outcome_variableS){
   for(CTRL in control_ornot){
     res_list_beef[[elm]] <- make_reg_acay(outcome_variable = OV,
                                                start_year = 2002, end_year = 2020,
-                                               crop_j = "fodder_crops",
+                                               crop_j = "Fodder",
                                                price_k = K_beef,
                                                SkPk= CTRL,
                                                extra_price_k = c())#"Sheep", "Pork", "Chicken"
@@ -1254,7 +1301,7 @@ for(OV in outcome_variableS){
     
     res_list_beef[[elm]] <- make_reg_aesi(outcome_variable = OV,
                                                start_year = 2002, end_year = 2020,
-                                               crop_j = "fodder_crops",
+                                               crop_j = "Fodder",
                                                price_k = K_beef,
                                                SkPk= CTRL,
                                                extra_price_k = c())#"Sheep", "Pork", "Chicken"
@@ -1291,7 +1338,7 @@ kable(ape_mat, booktabs = T, align = "r",
 
 ### PALM OIL
 K_oilpalm <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
-               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybean", "Soybean_meal",
 
 
 res_list_oilpalm <- list()
@@ -1541,19 +1588,19 @@ if(OV == "firstloss_glassgfc"){main_data <- readRDS(here("temp_data", "merged_da
 if(OV == "phtf_loss"){main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_acay_long_final.Rdata"))}
 
 ### BEEF
-K_beef <- c("Soybeans", "Soybean_meal", "Palm_oil", 
+K_beef <- c("Soybean", "Soybean_meal", "Palm_oil", 
              "cereal_crops") # in prices spelling "Barley", "Oat", "Sorghum", "Maize", "Rice"
 
 beef_res <- make_reg_acay(outcome_variable = OV,
                              start_year = SY, end_year = EY,
-                             crop_j = "fodder_crops",
+                             crop_j = "Fodder",
                              price_k = K_beef,
                           SkPk= F,
                              extra_price_k = c())#"Sheep", "Pork", "Chicken"
 
 ### PALM OIL
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
-               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybean", "Soybean_meal",
 
 oilpalm_res <- make_reg_acay(outcome_variable = OV,
                              start_year = SY, end_year = EY,
@@ -1626,7 +1673,7 @@ if(DS == "phtfl"){
                          Rapeseed_oil = "Rapeseed oil", 
                          Sunflower_oil = "Sunflower oil", 
                          Coconut_oil = "Coconut oil", 
-                         Soybeans = "Soybeans", 
+                         Soybean = "Soybean", 
                          Soybean_meal = "Soybean meal", 
                          Cocoa = "Cocoa", 
                          Coffee = "Coffee", 
@@ -1655,7 +1702,7 @@ if(DS == "phtfl"){main_data <- readRDS(here("temp_data", "merged_datasets", "tro
 
 ### PALM OIL
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
-               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybean", "Soybean_meal",
 
 oilpalm_res <- make_reg_aesi(dataset = DS,
                               start_year = SY, end_year = EY,
@@ -1728,7 +1775,7 @@ if(DS == "phtfl"){
                          Rapeseed_oil = "Rapeseed oil", 
                          Sunflower_oil = "Sunflower oil", 
                          Coconut_oil = "Coconut oil", 
-                         Soybeans = "Soybeans", 
+                         Soybean = "Soybean", 
                          Soybean_meal = "Soybean meal", 
                          Cocoa = "Cocoa", 
                          Coffee = "Coffee", 
@@ -1751,7 +1798,7 @@ main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass
 
 ### PALM OIL
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
-               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybean", "Soybean_meal",
 
 oilpalm_res <- make_reg_aesi(#start_year = 1983, end_year = 2015,
   crop_j = "Oilpalm",
@@ -1814,7 +1861,7 @@ names(df)[names(df)=="Std. Error"] <- "std.error"
                          Rapeseed_oil = "Rapeseed oil", 
                          Sunflower_oil = "Sunflower oil", 
                          Coconut_oil = "Coconut oil", 
-                         Soybeans = "Soybeans", 
+                         Soybean = "Soybean", 
                          Soybean_meal = "Soybean meal", 
                          Cocoa = "Cocoa", 
                          Coffee = "Coffee", 
@@ -1854,7 +1901,7 @@ main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfl
 
 ### PALM OIL
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
-               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybeans", "Soybean_meal",
+               "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybean", "Soybean_meal",
 
 oilpalm_res <- make_reg_aesi(dataset = "phtfl",
                              start_year = 2002, end_year = 2020,
@@ -1921,7 +1968,7 @@ names(df)[names(df)=="Std. Error"] <- "std.error"
                          Rapeseed_oil = "Rapeseed oil", 
                          Sunflower_oil = "Sunflower oil", 
                          Coconut_oil = "Coconut oil", 
-                         Soybeans = "Soybeans", 
+                         Soybean = "Soybean", 
                          Soybean_meal = "Soybean meal", 
                          Cocoa = "Cocoa", 
                          Coffee = "Coffee", 
