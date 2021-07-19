@@ -87,15 +87,17 @@ names(gaez) <- gaez_crops
 
 ## Read in GLASS-GLC data 
 first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_first_loss.tif"))
+nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_nd_first_loss.tif"))
 sbqt_direct_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_direct_lu.tif"))
 sbqt_mode_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_sbqt_mode_lu.tif"))
 # Rename layers 
 glc_sbqt_years <- seq(1983, 2015, 1)
 names(first_loss) <- paste0("first_loss.",glc_sbqt_years)
+names(nd_first_loss) <- paste0("nd_first_loss.", seq(1983, 2014, 1))
 names(sbqt_direct_lu) <- paste0("sbqt_direct_lu.",glc_sbqt_years)
 names(sbqt_mode_lu) <- paste0("sbqt_mode_lu.",glc_sbqt_years)
 
-glass <- stack(first_loss, sbqt_direct_lu, sbqt_mode_lu)  
+glass <- stack(first_loss, nd_first_loss, sbqt_direct_lu, sbqt_mode_lu)  
 # # save names as they will be lost when writing the masked data 
 # glass_names <- names(glass)
 
@@ -145,8 +147,14 @@ names(gaez_m) <- gaez_crops
 # glass <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "glass_masked.tif"))
 # names(glass) <- glass_names
 
+# add a layer for year 2015 for nd_first_loss (necessary for reshape to work)
+# set its value to -1, not NA, otherwise all obs. get removed in as.data.frame below
+nd_first_loss.2015 <- raster(glass, layer = 0) 
+values(nd_first_loss.2015) <- -1
+names(nd_first_loss.2015) <- "nd_first_loss.2015"
+
 # Stack together the annual layers of GLASS-GLC data and GAEZ crop cross sections 
-glass_gaez <- stack(glass, gaez_m)
+glass_gaez <- stack(glass, nd_first_loss.2015, gaez_m) # 
 names(glass_gaez)
 
 
@@ -168,19 +176,20 @@ wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
 # So we can simply create an ID that's a sequence. 
 wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
 
+
 # the dot is, by construction of all variable names, only in the names of time varying variables. 
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
-varying_vars <- list(names(glass_gaez)[grep("first_loss.", names(glass_gaez), fixed = TRUE)],
-                     names(glass_gaez)[grep("sbqt_direct_lu.", names(glass_gaez), fixed = TRUE)],
-                     names(glass_gaez)[grep("sbqt_mode_lu.", names(glass_gaez), fixed = TRUE)])
+varying_vars <- list(paste0("first_loss.", seq(1983, 2015, 1)),
+                     paste0("nd_first_loss.", seq(1983, 2015, 1)),
+                     paste0("sbqt_direct_lu.", seq(1983, 2015, 1)),
+                     paste0("sbqt_mode_lu.", seq(1983, 2015, 1)))
                     
-
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                        varying = varying_vars,
-                       v.names = c("first_loss", "sbqt_direct_lu", "sbqt_mode_lu"),
+                       v.names = c("first_loss", "nd_first_loss", "sbqt_direct_lu", "sbqt_mode_lu"),
                        sep = ".",
                        timevar = "year",
                        idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -189,12 +198,15 @@ long_df <- stats::reshape(wide_df,
                        new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
 rm(wide_df)
 names(long_df)
-# replace the indices from the raster::as.data.frame with actual years.
 
+# replace the indices from the raster::as.data.frame with actual years.
 long_df <- mutate(long_df, year = glc_sbqt_years[year])
 
-long_df <- dplyr::arrange(long_df, grid_id, year)
+# replace the -1 values in the vector of nd_first_loss in 2015 by NAs
+long_df[long_df$year == 2015, "nd_first_loss"] <- NA
 
+# rearrange
+long_df <- dplyr::arrange(long_df, grid_id, year)
 
 saveRDS(long_df, here(targetdir, "glass_aesi_long.Rdata"))
 

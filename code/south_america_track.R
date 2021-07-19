@@ -256,7 +256,7 @@ rm(rasterlist_gaez, gaez_all)
 # We reproduce the data preparation workflow applied to years 1983-2015, even if only 2001-2015 is necessary, it is safer. 
 # Read data in
 rasterlist <- list.files(path = "input_data/GLASS-GLC", 
-                         pattern = paste0("GLASS-GLC_7classes_"), 
+                         pattern = paste0("^GLASS-GLC_7classes_"), 
                          full.names = TRUE) %>% as.list()
 parcels_brick <- brick(rasterlist)
 
@@ -284,7 +284,7 @@ for(t in 1:length(previous_years)){ # goes only up to 2014, as we don't need the
 
 # this is a raster of 33 layers, giving the mean of GLC class value in 1982, 1982-83, 1982-84, ..., 1982-2014. 
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
-                         pattern = "past_mean_lu_", 
+                         pattern = "^past_mean_lu_", 
                          full.names = TRUE) %>% as.list()
 previous <- brick(rasterlist)
 
@@ -301,13 +301,31 @@ for(t in 2:length(years)){ # starts from 1983 as we need t-1 and thus t starts f
           overwrite = TRUE) 
 }
 
+# first loss no disturbance: here we count forest loss as deforestation if it is the first time forest loss AND it is not 
+# a disturbance in forest cover observation (as told by the next year being not forest cover either) 
+make_nd_first_loss <- function(previous, current, sbqt){if_else(condition = (previous == 20 & current != 20 & sbqt != 20), 
+                                                                true = 1, false = 0)}
 
+years <- seq(1982, 2014, 1) 
+for(t in 2:length(years)){ # starts from 1983 as we need t-1 and thus t starts from 2. And ends in 2014 as we need 2015 for sbqt. 
+  overlay(previous[[t-1]], southam_aoi[[t]], southam_aoi[[t+1]], fun = make_nd_first_loss, 
+          filename = here("temp_data", "processed_glass-glc", "southam_aoi", paste0("nd_first_loss_",years[t], ".tif")), # nd for no disturbance
+          datatype = "INT1U", 
+          overwrite = TRUE) 
+}
 
-
+# AGGREGATE FIRST LOSS
+# read the classic first_loss measure to ground the sbqt measures below
+# ^ ensures that only files with names starting with first_loss_ are selected, not possibly nd_first_loss, aggr_first_loss etc. 
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
-                         pattern = "first_loss_", 
+                         pattern = "^first_loss_", 
                          full.names = TRUE) %>% as.list()
 first_loss <- brick(rasterlist)
+
+processname <- here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss")
+#set temp directory
+dir.create(paste0(processname,"_Tmp"), showWarnings = FALSE)
+rasterOptions(tmpdir=processname)
 
 aggregate(first_loss, 
           fact = 2, 
@@ -332,6 +350,46 @@ resample(x = aggr_first_loss, y = gaez,
          overwrite = TRUE )
 
 endCluster()
+unlink(processname, recursive = TRUE)
+
+
+# AGGREGATE ND FIRST LOSS
+# First loss no disturbance
+rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
+                         pattern = "^nd_first_loss_", 
+                         full.names = TRUE) %>% as.list()
+nd_first_loss <- brick(rasterlist)
+
+processname <- here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_nd_first_loss")
+#set temp directory
+dir.create(paste0(processname,"_Tmp"), showWarnings = FALSE)
+rasterOptions(tmpdir=processname)
+
+aggregate(nd_first_loss, 
+          fact = 2, 
+          fun = sum, 
+          expand = FALSE, 
+          na.rm = FALSE, 
+          filename = here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_nd_first_loss.tif"),
+          datatype = "INT1U",
+          overwrite = TRUE)
+
+aggr_nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_nd_first_loss.tif"))
+
+# and now align precisely to GAEZ 
+
+beginCluster() # this uses by default detectCores() - 1
+
+resample(x = aggr_nd_first_loss, y = gaez,
+         method = "ngb",
+         filename = here("temp_data", "processed_glass-glc", "southam_aoi", "resampled_nd_first_loss.tif"),
+         datatype = "INT1U",
+         overwrite = TRUE )
+
+endCluster()
+unlink(processname, recursive = TRUE)
+
+
 
 
 ## Create the mask layer
@@ -362,6 +420,17 @@ mask(x = res_first_loss,
      datatype = "INT2U", 
      overwrite = TRUE)
 
+# NO DISTURBANCE
+res_nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "resampled_nd_first_loss.tif"))
+
+mask(x = res_nd_first_loss, 
+     mask = mask, 
+     filename = here("temp_data", "processed_glass-glc", "southam_aoi", "masked_nd_first_loss.tif"), 
+     datatype = "INT2U", 
+     overwrite = TRUE)
+
+## CONVERT TO HA 
+# FIRST LOSS 
 first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "masked_first_loss.tif"))
 
 cell_area <- area(first_loss)
@@ -374,6 +443,21 @@ make_area <- function(values, areas){
 overlay(first_loss, cell_area, 
         fun = make_area, 
         filename = here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"), 
+        overwrite = TRUE)
+
+# NO DISTURBANCE 
+nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "masked_nd_first_loss.tif"))
+
+cell_area <- area(nd_first_loss)
+
+make_area <- function(values, areas){
+  # *0.25 to transform 0:4 scale into proportion of cell. *100 to convert km2 (returned by raster::area) to hectares, to match phtfl 
+  return(values*0.25*areas*100) 
+}
+
+overlay(nd_first_loss, cell_area, 
+        fun = make_area, 
+        filename = here("temp_data", "processed_glass-glc", "southam_aoi", "ha_nd_first_loss.tif"), 
         overwrite = TRUE)
 
 
@@ -405,12 +489,14 @@ names(gaez) <- gaez_crops
 
 ## Read in GLASS-GLC data 
 first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"))
+nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "ha_nd_first_loss.tif"))
 
 # Rename layers 
 glc_sbqt_years <- seq(1983, 2015, 1)
 names(first_loss) <- paste0("first_loss.",glc_sbqt_years)
+names(nd_first_loss) <- paste0("nd_first_loss.", seq(1983, 2014, 1))
 
-glass <- first_loss
+glass <- stack(first_loss, nd_first_loss)  
 
 
 ### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
@@ -429,8 +515,14 @@ names(gaez_m) <- gaez_crops
 # (note that masking changes the summary values of gaez)
 
 
+# add a layer for year 2015 for nd_first_loss (necessary for reshape to work)
+# set its value to -1, not NA, otherwise all obs. get removed in as.data.frame below
+nd_first_loss.2015 <- raster(glass, layer = 0) 
+values(nd_first_loss.2015) <- -1
+names(nd_first_loss.2015) <- "nd_first_loss.2015"
+
 # Stack together the annual layers of GLASS-GLC data and GAEZ crop cross sections 
-glass_gaez <- stack(glass, gaez_m)
+glass_gaez <- stack(glass, nd_first_loss.2015, gaez_m) # 
 names(glass_gaez)
 
 
@@ -456,13 +548,13 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
-varying_vars <- list(names(glass_gaez)[grep("first_loss.", names(glass_gaez), fixed = TRUE)])
-
+varying_vars <- list(paste0("first_loss.", seq(1983, 2015, 1)),
+                     paste0("nd_first_loss.", seq(1983, 2015, 1)))
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
-                          v.names = c("first_loss"),
+                          v.names = c("first_loss", "nd_first_loss"),
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -474,6 +566,9 @@ names(long_df)
 # replace the indices from the raster::as.data.frame with actual years.
 
 long_df <- mutate(long_df, year = glc_sbqt_years[year])
+
+# replace the -1 values in the vector of nd_first_loss in 2015 by NAs
+long_df[long_df$year == 2015, "nd_first_loss"] <- NA
 
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
@@ -518,13 +613,15 @@ names(gaez) <- gaez_crops
 
 ## Read in GLASS-GLC data 
 first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"))
+nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "ha_nd_first_loss.tif"))
 
 # Rename layers 
 glc_sbqt_years <- seq(1983, 2015, 1)
 names(first_loss) <- paste0("first_loss.",glc_sbqt_years)
+names(nd_first_loss) <- paste0("nd_first_loss.", seq(1983, 2014, 1))
 
 
-glass <- first_loss
+glass <- stack(first_loss, nd_first_loss)  
 
 
 ### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
@@ -555,8 +652,14 @@ names(gaez_m) <- gaez_crops
 # glass <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "glass_masked.tif"))
 # names(glass) <- glass_names
 
+# add a layer for year 2015 for nd_first_loss (necessary for reshape to work)
+# set its value to -1, not NA, otherwise all obs. get removed in as.data.frame below
+nd_first_loss.2015 <- raster(glass, layer = 0) 
+values(nd_first_loss.2015) <- -1
+names(nd_first_loss.2015) <- "nd_first_loss.2015"
+
 # Stack together the annual layers of GLASS-GLC data and GAEZ crop cross sections 
-glass_gaez <- stack(glass, gaez_m)
+glass_gaez <- stack(glass, nd_first_loss.2015, gaez_m) # 
 names(glass_gaez)
 
 
@@ -582,13 +685,13 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
-varying_vars <- list(names(glass_gaez)[grep("first_loss.", names(glass_gaez), fixed = TRUE)])
-
+varying_vars <- list(paste0("first_loss.", seq(1983, 2015, 1)),
+                     paste0("nd_first_loss.", seq(1983, 2015, 1)))
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
-                          v.names = c("first_loss"),
+                          v.names = c("first_loss", "nd_first_loss"),
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -600,6 +703,9 @@ names(long_df)
 # replace the indices from the raster::as.data.frame with actual years.
 
 long_df <- mutate(long_df, year = glc_sbqt_years[year])
+
+# replace the -1 values in the vector of nd_first_loss in 2015 by NAs
+long_df[long_df$year == 2015, "nd_first_loss"] <- NA
 
 long_df <- dplyr::arrange(long_df, grid_id, year)
 

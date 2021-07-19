@@ -60,7 +60,7 @@ rasterOptions(timer = TRUE,
 
 # Read data in
 rasterlist <- list.files(path = "input_data/GLASS-GLC", 
-                         pattern = paste0("GLASS-GLC_7classes_"), 
+                         pattern = paste0("^GLASS-GLC_7classes_"), 
                          full.names = TRUE) %>% as.list()
 parcels_brick <- brick(rasterlist)
 
@@ -90,7 +90,7 @@ for(t in 1:length(previous_years)){ # goes only up to 2014, as we don't need the
 
 # this is a raster of 33 layers, giving the mean of GLC class value in 1982, 1982-83, 1982-84, ..., 1982-2014. 
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "past_mean_lu_", 
+                         pattern = "^past_mean_lu_", 
                          full.names = TRUE) %>% as.list()
 previous <- brick(rasterlist)
 
@@ -107,8 +107,24 @@ for(t in 2:length(years)){ # starts from 1983 as we need t-1 and thus t starts f
           overwrite = TRUE) 
 }
 
+# first loss no disturbance: here we count forest loss as deforestation if it is the first time forest loss AND it is not 
+# a disturbance in forest cover observation (as told by the next year being not forest cover either) 
+make_nd_first_loss <- function(previous, current, sbqt){if_else(condition = (previous == 20 & current != 20 & sbqt != 20), 
+                                                             true = 1, false = 0)}
+
+years <- seq(1982, 2014, 1) 
+for(t in 2:length(years)){ # starts from 1983 as we need t-1 and thus t starts from 2. And ends in 2014 as we need 2015 for sbqt. 
+  overlay(previous[[t-1]], tropical_aoi[[t]], tropical_aoi[[t+1]], fun = make_nd_first_loss, 
+          filename = here("temp_data", "processed_glass-glc", "tropical_aoi", paste0("nd_first_loss_",years[t], ".tif")), # nd for no disturbance
+          datatype = "INT1U", 
+          overwrite = TRUE) 
+}
+
+
+# read the classic first_loss measure to ground the sbqt measures below
+# ^ ensures that only files with names starting with first_loss_ are selected, not possibly nd_first_loss, aggr_first_loss etc. 
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "first_loss_", 
+                         pattern = "^first_loss_", 
                          full.names = TRUE) %>% as.list()
 first_loss <- brick(rasterlist)
 
@@ -130,7 +146,7 @@ for(t in 1:length(sbqt_years)){
 }
 
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "sbqt_direct_lu", 
+                         pattern = "^sbqt_direct_lu", 
                          full.names = TRUE) %>% as.list()
 sbqt_direct_lu <- brick(rasterlist)
 
@@ -154,7 +170,7 @@ for(t in 1:length(sbqt_years)){ # starts from 1983 as we need t-1 and thus t sta
 }
 # read it
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "future_mode_lu_", 
+                         pattern = "^future_mode_lu_", 
                          full.names = TRUE) %>% as.list()
 mode_lu <- brick(rasterlist)
 
@@ -176,7 +192,7 @@ for(t in 1:length(sbqt_years)){
 
 
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "sbqt_mode_lu_", 
+                         pattern = "^sbqt_mode_lu_", 
                          full.names = TRUE) %>% as.list()
 sbqt_mode_lu <- brick(rasterlist)
 
@@ -237,19 +253,25 @@ aggregate_sbqt <- function(v, na.rm = FALSE){
 ### Input our three variables of interest
 # 1. First loss
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "first_loss_", 
+                         pattern = "^first_loss_", 
                          full.names = TRUE) %>% as.list()
 first_loss <- brick(rasterlist)
 
+# First loss no disturbance
+rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
+                         pattern = "^nd_first_loss_", 
+                         full.names = TRUE) %>% as.list()
+nd_first_loss <- brick(rasterlist)
+
 # 2. Subsequent direct LU
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "sbqt_direct_lu", 
+                         pattern = "^sbqt_direct_lu_", 
                          full.names = TRUE) %>% as.list()
 sbqt_direct_lu <- brick(rasterlist)
 
 # 3. Subsequent mode LU
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "sbqt_mode_lu_", 
+                         pattern = "^sbqt_mode_lu_", 
                          full.names = TRUE) %>% as.list()
 sbqt_mode_lu <- brick(rasterlist)
 
@@ -257,7 +279,13 @@ sbqt_mode_lu <- brick(rasterlist)
 ### Input GAEZ template
 gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Banana.tif"))
 
+
 ### 1. FIRST FOREST LOSS
+processname <- here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_first_loss")
+#set temp directory
+dir.create(paste0(processname,"_Tmp"), showWarnings = FALSE)
+rasterOptions(tmpdir=processname)
+
 aggregate(first_loss, 
           fact = 2, 
           fun = sum, 
@@ -280,8 +308,44 @@ resample(x = aggr_first_loss, y = gaez,
          overwrite = TRUE )
 
 endCluster()
+unlink(processname, recursive = TRUE)
+
+# FIRST LOSS NO DISTURBANCE
+processname <- here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_nd_first_loss")
+#set temp directory
+dir.create(paste0(processname,"_Tmp"), showWarnings = FALSE)
+rasterOptions(tmpdir=processname)
+
+aggregate(nd_first_loss, 
+          fact = 2, 
+          fun = sum, 
+          expand = FALSE, 
+          na.rm = FALSE, 
+          filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_nd_first_loss.tif"),
+          datatype = "INT1U",
+          overwrite = TRUE)
+
+aggr_nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_nd_first_loss.tif"))
+
+# and now align precisely to GAEZ 
+
+beginCluster() # this uses by default detectCores() - 1
+
+resample(x = aggr_nd_first_loss, y = gaez,
+         method = "ngb",
+         filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_nd_first_loss.tif"),
+         datatype = "INT1U",
+         overwrite = TRUE )
+
+endCluster()
+unlink(processname, recursive = TRUE)
 
 ### 2. SUBSEQUENT DIRECT LU 
+processname <- here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_sbqt_direct_lu")
+#set temp directory
+dir.create(paste0(processname,"_Tmp"), showWarnings = FALSE)
+rasterOptions(tmpdir=processname)
+
 aggregate(sbqt_direct_lu, 
           fact = 2, 
           fun = aggregate_sbqt, 
@@ -304,8 +368,14 @@ resample(x = aggr_sbqt_direct_lu, y = gaez,
          overwrite = TRUE )
 
 endCluster()
+unlink(processname, recursive = TRUE)
 
 ### 3. SUBSEQUENT MODE LU
+processname <- here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_sbqt_mode_lu")
+#set temp directory
+dir.create(paste0(processname,"_Tmp"), showWarnings = FALSE)
+rasterOptions(tmpdir=processname)
+
 aggregate(sbqt_mode_lu, 
           fact = 2, 
           fun = aggregate_sbqt, 
@@ -328,6 +398,7 @@ resample(x = aggr_sbqt_mode_lu, y = gaez,
          overwrite = TRUE)
 
 endCluster()
+unlink(processname, recursive = TRUE)
 
 
 #### 83-15 TRACK: MASK ALWAYS 0 PIXELS #### 
@@ -352,7 +423,7 @@ overlay(x = res_first_loss,
 mask <- raster(mask_path)
 # plot(mask)
 
-# then use it to mask the 3 brick variables
+# then use it to mask the 4 brick variables
 
 ### 1. FIRST LOSS 
 
@@ -364,6 +435,16 @@ mask(x = res_first_loss,
 
 # masked <- brick( here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_first_loss.tif"))
 # plot(masked[[1]])
+
+
+# 1bis. FIRST LOSS NO DISTURBANCE 
+res_nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_nd_first_loss.tif"))
+
+mask(x = res_nd_first_loss, 
+     mask = mask, 
+     filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_nd_first_loss.tif"), 
+     datatype = "INT2U", 
+     overwrite = TRUE)
 
 ### 2. SUBSEQUENT DIRECT LU
 res_sbqt_direct_lu <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "resampled_sbqt_direct_lu.tif"))
@@ -433,6 +514,21 @@ overlay(first_loss, cell_area,
         filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_first_loss.tif"), 
         overwrite = TRUE)
 
+# FIRST LOSS NO DISTURBANCE
+nd_first_loss <- brick(here("temp_data", "processed_glass-glc", "tropical_aoi", "masked_nd_first_loss.tif"))
+
+cell_area <- area(nd_first_loss)
+
+make_area <- function(values, areas){
+  # *0.25 to transform 0:4 scale into proportion of cell. *100 to convert km2 (returned by raster::area) to hectares, to match phtfl 
+  return(values*0.25*areas*100) 
+}
+
+overlay(nd_first_loss, cell_area, 
+        fun = make_area, 
+        filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_nd_first_loss.tif"), 
+        overwrite = TRUE)
+
 
 
 
@@ -444,7 +540,7 @@ overlay(first_loss, cell_area,
 
 # Input first loss in Glass resolution 
 rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "tropical_aoi"), 
-                         pattern = "first_loss_", 
+                         pattern = "^first_loss_", 
                          full.names = TRUE) %>% as.list()
 first_loss <- brick(rasterlist)
 
@@ -475,7 +571,7 @@ rm(first_loss, always_zero2, mask_path)
 ### PREPARE 2016-2020 GFC DATA PREPARED IN GEE ###
 
 rasterlist <- list.files(path = here("input_data", "meanFirstLossGlass_maxP"), 
-                         pattern = "meanFirstLossGlass_maxP_", 
+                         pattern = "^meanFirstLossGlass_maxP_", 
                          full.names = TRUE) %>% as.list()
 firstloss1620 <- brick(rasterlist)
 
@@ -508,6 +604,11 @@ convert_GFC_to_GLASS <- function(geeo, na.rm = FALSE){
 # convert_GFC_to_GLASS(geeo = c(0.5987, 0.5986, 0.59, 0.598))
 
 ## Aggregate and align precisely on GAEZ 
+processname <- here("temp_data", "processed_glass-glc", "tropical_aoi", "aggr_firstloss1620")
+#set temp directory
+dir.create(paste0(processname,"_Tmp"), showWarnings = FALSE)
+rasterOptions(tmpdir=processname)
+
 aggregate(firstloss1620, 
           fact = 2, 
           fun = convert_GFC_to_GLASS, 
@@ -531,6 +632,7 @@ resample(x = aggr_firstloss1620, y = gaez,
          overwrite = TRUE )
 
 endCluster()
+unlink(processname, recursive = TRUE)
 
 
 ### BRICK WITH 1983-2015 FIRST LOSS ### 
@@ -597,133 +699,18 @@ rm(firstloss8320, cell_area)
 
 
 
+#### 01-19 TRACK: CURTIS #### 
+curtis <- raster(here("input_data", "curtis", "Goode_FinalClassification_19_05pcnt_prj", "Goode_FinalClassification_19_05pcnt_prj.tif"))
+# this one is already projected:
+curtis2 <- raster(here("input_data", "curtis", "Supplementary_Dataset_3.tif"))
 
-
-#### SOUTH AMERICA TRACK ####
-# We reproduce the data preparation workflow applied to years 1983-2015, even if only 2001-2015 is necessary, it is more safe. 
-# Read data in
-rasterlist <- list.files(path = "input_data/GLASS-GLC", 
-                         pattern = paste0("GLASS-GLC_7classes_"), 
-                         full.names = TRUE) %>% as.list()
-parcels_brick <- brick(rasterlist)
-
-# crop to ***SOUTH AMERICA*** AOI 
-ext <- extent(c(-95, -25, -57, 15))
-southam_aoi <- crop(parcels_brick, ext)
-
-# Write
-writeRaster(southam_aoi, here("temp_data", "processed_glass-glc", "southam_aoi", "brick_southam_aoi.tif"), 
-            overwrite = TRUE)
-
-
-southam_aoi <- brick( here("temp_data", "processed_glass-glc", "southam_aoi", "brick_southam_aoi.tif"))
-
-# Create annual layers of forest loss defined as: class is not 20 in a given year while it was 20 in *all the previous year*.
-# This restricts annual loss to that occurring for the first time
-
-# construct previous: a collection of annual layers, each giving the mean of the class value in the previous years. 
-previous_years <- seq(1982, 2014, 1) 
-for(t in 1:length(previous_years)){ # goes only up to 2014, as we don't need the average up to 2015.
-  calc(southam_aoi[[1:t]], fun = mean, 
-       filename = here("temp_data", "processed_glass-glc", "southam_aoi", paste0("past_mean_lu_",previous_years[t], ".tif")), 
-       datatype = "FLT4S", # necessary so that a 19.9 mean is not counted as a 20 (i.e. so far undisturbed forest pixel)
-       overwrite = TRUE)
-}
-
-# this is a raster of 33 layers, giving the mean of GLC class value in 1982, 1982-83, 1982-84, ..., 1982-2014. 
-rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
-                         pattern = "past_mean_lu_", 
-                         full.names = TRUE) %>% as.list()
-previous <- brick(rasterlist)
-
-#unique(values(previous))
-
-make_first_loss <- function(previous, current){if_else(condition = (previous == 20 & current != 20), 
-                                                       true = 1, false = 0)}
-
-years <- seq(1982, 2015, 1) 
-for(t in 2:length(years)){ # starts from 1983 as we need t-1 and thus t starts from 2
-  overlay(previous[[t-1]], southam_aoi[[t]], fun = make_first_loss, 
-          filename = here("temp_data", "processed_glass-glc", "southam_aoi", paste0("first_loss_",years[t], ".tif")), 
-          datatype = "INT1U", 
-          overwrite = TRUE) 
-}
-
-
-
-
-rasterlist <- list.files(path = here("temp_data", "processed_glass-glc", "southam_aoi"), 
-                         pattern = "first_loss_", 
-                         full.names = TRUE) %>% as.list()
-first_loss <- brick(rasterlist)
-
-aggregate(first_loss, 
-          fact = 2, 
-          fun = sum, 
-          expand = FALSE, 
-          na.rm = FALSE, 
-          filename = here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"),
-          datatype = "INT1U",
-          overwrite = TRUE)
-
-
-# We do not align on GAEZ
-# aggr_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"))
-# gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Banana.tif"))
-# 
-# beginCluster() # this uses by default detectCores() - 1
-# 
-# resample(x = aggr_first_loss, y = gaez,
-#          method = "ngb",
-#          filename = here("temp_data", "processed_glass-glc", "southam_aoi", "resampled_first_loss.tif"),
-#          datatype = "INT1U",
-#          overwrite = TRUE )
-# 
-# endCluster()
-
-
-## Create the mask layer
-# This is not useful for the descriptive statistics but it replicates the data preparation workflow more closely. 
-# Note the input of aggr_first_loss.tif and not resampled_first_loss.tif
-# Create a layer that has values either : NA if first_loss always 0 across all years, 1 otherwise
-res_first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "aggr_first_loss.tif"))
-# not using if_else here to allow NA as an output... 
-always_zero <- function(y){
-  if(sum(y) == 0){d <- NA}else{d <- 1}
-  return(d)}
-
-mask_path <- here("temp_data", "processed_glass-glc", "southam_aoi", "always_zero_mask.tif")
-
-overlay(x = res_first_loss, 
-        fun = always_zero, 
-        filename = mask_path,
-        na.rm = TRUE, # but there is no NA anyway
-        datatype = "INT2U", # INT2U to allow have NAs
-        overwrite = TRUE)  
-
-mask <- raster(mask_path)
-# plot(mask)
-
-# then use it to mask the brick 
-
-mask(x = res_first_loss, 
-     mask = mask, 
-     filename = here("temp_data", "processed_glass-glc", "southam_aoi", "masked_first_loss.tif"), 
-     datatype = "INT2U", 
-     overwrite = TRUE)
-
-first_loss <- brick(here("temp_data", "processed_glass-glc", "southam_aoi", "masked_first_loss.tif"))
-
-cell_area <- area(first_loss)
-
-make_area <- function(values, areas){
-  # *0.25 to transform 0:4 scale into proportion of cell. *100 to convert km2 (returned by raster::area) to hectares, to match phtfl 
-  return(values*0.25*areas*100) 
-}
-
-overlay(first_loss, cell_area, 
-        fun = make_area, 
-        filename = here("temp_data", "processed_glass-glc", "southam_aoi", "ha_first_loss.tif"), 
-        overwrite = TRUE)
-
-
+# both have NA, 1:5 values 
+# according code in https://www.sustainabilityconsortium.org/tsc-downloads/forest-data/?ind=1536355391488&filename=Supplementary_Dataset_1.txt&wpdmdl=24673&refresh=60f2aa214d3801626516001
+# (see "Create final classification using model output" section)
+# 1 is commodity driven class
+# 2 is shifting agriculture class
+# 3 is forestry
+# 4 is fires
+# 5 is urbanization
+# 0 is minor loss
+# NA is mask for water and <.5% loss 

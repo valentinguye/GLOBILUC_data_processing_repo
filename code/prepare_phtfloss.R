@@ -57,7 +57,7 @@ rasterOptions(timer = TRUE,
 
 # import annual layers of phtf loss (in hectares) as computed in GEE (and downloaded from Google Drive to input_data/)
 rasterlist <- list.files(path = here("input_data", "phtfLossSumGlass_maxP"), 
-                         pattern = "phtfLossSumGlass_maxP_", 
+                         pattern = "^phtfLossSumGlass_maxP_", 
                          full.names = TRUE) %>% as.list()
 phtfloss <- brick(rasterlist)
 
