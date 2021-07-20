@@ -34,7 +34,7 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
                     "knitr", "kableExtra",
                     "DataCombine", 
                     "fixest",
-                    "ggplot2", "leaflet", "dotwhisker")
+                    "ggplot2", "leaflet", "tmap", "dotwhisker")
 
 
 # Note that from ?renv::restore 
@@ -125,10 +125,11 @@ if(FALSE){
   library(haven)
   library(exactextractr)
   library(dotwhisker)
+  library(tmap)
 }
 
 # If new packages are needed along the project data processing workflow, one should: 
-new_pck <- c("dotwhisker")
+new_pck <- c("tmap")
 # 1. install the packages in the project library (the default if you are within the project)
 install.packages(new_pck)
 # devtools::install_github("julianhinz/R_glmhdfe")

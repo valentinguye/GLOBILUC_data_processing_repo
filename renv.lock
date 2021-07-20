@@ -1045,10 +1045,10 @@
     },
     "s2": {
       "Package": "s2",
-      "Version": "1.0.3",
+      "Version": "1.0.6",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "eb8b8886f8b94a510cac7d27a7daf6d8"
+      "Hash": "fb018249cc4b7ae7147d511fd33ddf82"
     },
     "sandwich": {
       "Package": "sandwich",
@@ -1073,10 +1073,10 @@
     },
     "sf": {
       "Package": "sf",
-      "Version": "0.9-6",
+      "Version": "0.9-7",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "bf0ef23231efe31576e08d69772892ef"
+      "Hash": "559b46e3609f1b0dbcf9eada54fb6ee0"
     },
     "sjlabelled": {
       "Package": "sjlabelled",

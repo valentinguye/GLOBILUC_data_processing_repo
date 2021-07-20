@@ -17,7 +17,7 @@ neededPackages = c("plyr", "dplyr", "here", #"tibble", "data.table",
                    "DataCombine",
                    "knitr", "kableExtra",
                    "fixest", #,"msm", "car",  "sandwich", "lmtest", "boot", "multcomp",
-                   "ggplot2", "dotwhisker",# "leaflet", "htmltools"
+                   "ggplot2", "dotwhisker", "tmap",# "leaflet", "htmltools"
                    "foreach"
                    )
 # "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
@@ -1233,7 +1233,7 @@ defo_table["Coffee", "AEAYmax estimate"] <- round(sum(accu_0115$accu_coffee_defo
 
 
 
-#### DESCRIPTIVE MAP ####
+#### DESCRIPTIVE MAP AESI ####
 d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
 
 # Build Y_j
@@ -1255,10 +1255,34 @@ accu_0115 <- ddply(d_0115, "grid_id", summarise,
                    accu_coffee_defo = sum(Y_coffee, na.rm = TRUE), 
                    accu_rubber_defo = sum(Y_rubber, na.rm = TRUE))
 
-# identify the main driver 
-accu_0115 <- dplyr::mutate(accu_0115, across(.cols = contains("accu_"),
-                                         .fns = max, 
-                                         .names = "accu_main_driver"))
+
+# identify the main driver and its imputed deforestation
+accu_0115 <- accu_0115 %>% rowwise() %>% 
+                        mutate(accu_main_driver = max(c(accu_pasture_defo,
+                                                        accu_soybean_defo, 
+                                                        accu_oilpalm_defo,
+                                                        accu_cocoa_defo,
+                                                        accu_coffee_defo,
+                                                        accu_rubber_defo))) %>% 
+                        as.data.frame()
+
+accu_vars <- c("accu_pasture_defo",
+               "accu_soybean_defo", 
+               "accu_oilpalm_defo",
+               "accu_cocoa_defo",
+               "accu_coffee_defo",
+               "accu_rubber_defo")
+accu_0115$main_driver <- ""
+for(i in 1:nrow(accu_0115)){
+  accu_vec <- accu_0115[i, accu_vars]
+  if(length(colnames(accu_vec)[accu_vec == accu_0115[i,"accu_main_driver"]])==1){
+    accu_0115[i,"main_driver"] <- colnames(accu_vec)[accu_vec == accu_0115[i,"accu_main_driver"]]
+  }else(accu_0115[i,"main_driver"] <- "none")
+}
+# accu_0115 <- accu_0115[!duplicated(accu_0115$grid_id),]
+# accu_0115 <- accu_0115[,-c("lon", "lat")]  
+d_cs <- d[!duplicated(d$grid_id),]
+accu_0115 <- left_join(accu_0115, d_cs[,c("grid_id", "lon", "lat")], by = "grid_id")
 
 accu_0115 <- st_as_sf(accu_0115, coords = c("lon", "lat"), crs = 4326) 
 mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
@@ -1267,8 +1291,22 @@ accu_0115 <- st_transform(accu_0115, crs = mercator_world_crs)
 accu_0115 <- st_buffer(accu_0115, dist = 4000)
 st_geometry(accu_0115) <- sapply(st_geometry(accu_0115), FUN = function(x){st_as_sfc(st_bbox(x))}) %>% st_sfc(crs = mercator_world_crs)
 
-plot(accu_0115[,"accu_main_driver"])
 
+tm_shape(accu_0115[accu_0115$main_driver!="none",]) +
+  tm_borders(alpha = 0) + 
+  tm_fill(col = "main_driver", palette = rainbow(n = 6))
+
+sum(accu_0115[accu_0115$main_driver == "accu_pasture_defo",]$accu_main_driver)
+sum(accu_0115[accu_0115$main_driver == "accu_soybean_defo",]$accu_main_driver)
+sum(accu_0115[accu_0115$main_driver == "accu_oilpalm_defo",]$accu_main_driver)
+sum(accu_0115[accu_0115$main_driver == "accu_cocoa_defo",]$accu_main_driver)
+sum(accu_0115[accu_0115$main_driver == "accu_coffee_defo",]$accu_main_driver)
+sum(accu_0115[accu_0115$main_driver == "accu_rubber_defo",]$accu_main_driver)
+
+nrow(accu_0115[accu_0115$main_driver=="none",])
+
+sum(accu_0115$accu_main_driver)
+sum(d$first_loss)
 
 
 summary(df_cs$Fodder_std)
@@ -1320,6 +1358,76 @@ sum(d0115$Y_rubber, na.rm = TRUE)/1e6
 d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aesi_long_final.Rdata"))
 d0115 <- d[d$year>=2001 & d$year <=2015,] 
 d0115[lengths(sgbp_southam)>0,]
+
+
+#### DESCRIPTIVE MAP AEAY ####
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aeay_long_final.Rdata"))
+
+# here we need to construct rj with function make_rj
+d <- make_rj(data = d, 
+             crops = c("Soybean", "Fodder", "Oilpalm", "Cocoa", "Coffee", "Rubber"), 
+             qj = "continuous")
+
+# Build Y_j
+d <- dplyr::mutate(d, 
+                   Y_pasture = first_loss*R_Fodder_std,
+                   Y_soybean = first_loss*R_Soybean_std,
+                   Y_oilpalm = first_loss*R_Oilpalm_std,
+                   Y_cocoa = first_loss*R_Cocoa_std,
+                   Y_coffee = first_loss*R_Coffee_std, 
+                   Y_rubber = first_loss*R_Rubber_std)
+
+# add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
+accu_0115 <- ddply(d_0115, "grid_id", summarise, 
+                   accu_pasture_defo = sum(Y_pasture, na.rm = TRUE), 
+                   accu_soybean_defo = sum(Y_soybean, na.rm = TRUE), 
+                   accu_oilpalm_defo = sum(Y_oilpalm, na.rm = TRUE), 
+                   accu_cocoa_defo = sum(Y_cocoa, na.rm = TRUE), 
+                   accu_coffee_defo = sum(Y_coffee, na.rm = TRUE), 
+                   accu_rubber_defo = sum(Y_rubber, na.rm = TRUE))
+
+
+# identify the main driver and its imputed deforestation
+accu_0115 <- accu_0115 %>% rowwise() %>% 
+  mutate(accu_main_driver = max(c(accu_pasture_defo,
+                                  accu_soybean_defo, 
+                                  accu_oilpalm_defo,
+                                  accu_cocoa_defo,
+                                  accu_coffee_defo,
+                                  accu_rubber_defo))) %>% 
+  as.data.frame()
+
+accu_vars <- c("accu_pasture_defo",
+               "accu_soybean_defo", 
+               "accu_oilpalm_defo",
+               "accu_cocoa_defo",
+               "accu_coffee_defo",
+               "accu_rubber_defo")
+accu_0115$main_driver <- ""
+for(i in 1:nrow(accu_0115)){
+  accu_vec <- accu_0115[i, accu_vars]
+  if(length(colnames(accu_vec)[accu_vec == accu_0115[i,"accu_main_driver"]])==1){
+    accu_0115[i,"main_driver"] <- colnames(accu_vec)[accu_vec == accu_0115[i,"accu_main_driver"]]
+  }else(accu_0115[i,"main_driver"] <- "none")
+}
+# accu_0115 <- accu_0115[!duplicated(accu_0115$grid_id),]
+# accu_0115 <- accu_0115[,-c("lon", "lat")]  
+d_cs <- d[!duplicated(d$grid_id),]
+accu_0115 <- left_join(accu_0115, d_cs[,c("grid_id", "lon", "lat")], by = "grid_id")
+
+accu_0115 <- st_as_sf(accu_0115, coords = c("lon", "lat"), crs = 4326) 
+mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
+accu_0115 <- st_transform(accu_0115, crs = mercator_world_crs)
+
+accu_0115 <- st_buffer(accu_0115, dist = 4000)
+st_geometry(accu_0115) <- sapply(st_geometry(accu_0115), FUN = function(x){st_as_sfc(st_bbox(x))}) %>% st_sfc(crs = mercator_world_crs)
+
+
+tm_shape(accu_0115[accu_0115$main_driver!="none",]) +
+  tm_borders(alpha = 0) + 
+  tm_fill(col = "main_driver", palette = rainbow(n = 6), 
+          convert2density = TRUE, area = "accu_main_driver")  
 
 
 #### CONSTRUCT SPECIFICATION COMPARATIVE TABLES ####
