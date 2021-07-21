@@ -156,13 +156,15 @@ mask(resampled,
 # Read in a GAEZ grid, because we want to align to it. 
 gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Alfalfa.tif"))
 
-aggregated <- brick(agri_lossdrivers_output_name)
+agri_lossdrivers <- brick(agri_lossdrivers_output_name)
 
-resample(x = aggregated, 
+gaez_resampled_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers.tif")
+
+resample(x = agri_lossdrivers, 
          y = gaez, 
          method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
          # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
-         filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers.tif"), 
+         filename = gaez_resampled_output_name, 
          overwrite = TRUE)
 
 # aligned <- brick(aligned_output_name)
@@ -182,7 +184,7 @@ resample(x = aggregated,
 
 ## Create the mask layer
 # Create a layer that has values either : NA if lossdrivers always 0 across all years, 1 otherwise
-lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers.tif"))
+final_lossdrivers <- brick(gaez_resampled_output_name)
 # # not using if_else here to allow NA as an output...
 # always_zero <- function(y){
 #   if(sum(y) == 0){d <- NA}else{d <- 1}
@@ -192,16 +194,16 @@ lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", 
 always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
 mask_path <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers.tif")
 
-overlay(x = lossdrivers, 
+overlay(x = final_lossdrivers, 
         fun = always_zero, 
         filename = mask_path,
         na.rm = TRUE, # but there is no NA anyway
         overwrite = TRUE)  
 
 mask <- raster(mask_path)
-plot(mask)
+# plot(mask)
 
-mask(lossdrivers, 
+mask(final_lossdrivers, 
      mask = mask, 
      maskvalue = 0, # necessary here, because the always_zero function used converted to 0 and not to NA
      updatevalue = NA, 

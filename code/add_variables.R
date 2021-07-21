@@ -48,8 +48,9 @@ gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 origindir <- here("temp_data", "merged_datasets", "tropical_aoi")
 
 dataset_names <- c("glass_aesi_long",
-                    "firstloss8320_aesi_long", 
-                     "phtfloss_aesi_long")
+                   "firstloss8320_aesi_long", 
+                   "phtfloss_aesi_long", 
+                   "driverloss_aesi_long")
 
 #### ADD COUNTRY INFORMATION #### 
 
@@ -299,7 +300,8 @@ origindir <- here("temp_data", "merged_datasets", "tropical_aoi")
 
 dataset_names <- c("glass_aeay_long",
                    "firstloss8320_aeay_long", 
-                   "phtfloss_aeay_long")
+                   "phtfloss_aeay_long", 
+                   "driverloss_aeay_long")
 
 #### GROUP AEAY CROPS #### 
 # name = dataset_names[1]
