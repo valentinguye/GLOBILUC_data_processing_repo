@@ -1,0 +1,184 @@
+var gfc = ee.Image("UMD/hansen/global_forest_change_2020_v1_8"),
+    glass = ee.Image("users/valentinguye/GLASS-GLC_7classes_1982");
+
+
+var palette = ['6a2325','152106'];
+
+// print("Hansen:", gfc);
+print(gfc.projection()); 
+
+// Canopy cover percentage (e.g. 10%).
+var cc = ee.Number(10);
+// Minimum forest area in pixels (e.g. 6 pixels, ~ 0.5 ha in this example).
+var pixels = ee.Number(6);
+// Minimum mapping area for tree loss (usually same as the minimum forest area).
+var lossPixels = ee.Number(6);
+
+
+// DEFINE TO TROPICAL AOI
+// var tropical_aoi = ee.Geometry.Rectangle([[[-180, 30],[-180, -30],[179.9167, -30],[179.9167, 30]]]);
+// requires the following order: minLng, minLat, maxLng, maxLat
+var tropical_aoi = ee.Geometry.Polygon([[[-180, 30],
+          [-180, -30],
+          [179.9167, -30],
+          [179.9167, 30], 
+          [-180, 30]]], null, false); // the false passed to the geodesic argument is necessary. 
+// Map.addLayer(tropical_aoi);
+
+// Not necessary to clip (even not recommended) since we finally export to the tropical_aoi, and GEE works on "pull" basis
+// var gfc = gfc.clip(tropical_aoi);
+// var phtf = phtf.clip(tropical_aoi);
+
+
+// COUNT FOREST LOSS IN canopy cover and contiguous area
+var canopyCover = gfc.select(['treecover2000']);
+var lossyear = gfc.select("lossyear");
+
+// Apply the minimum canopy cover percentage (e.g. greater than or equal to 10%) Necessary as we do not restrict to phtf here.
+var canopyCover10 = canopyCover.gte(cc).selfMask(); // don't selfMask, so that no masked pixel is reintroduced afterwards.
+print("canopyCover10", canopyCover10);
+// Map.addLayer(canopyCover10, {min: 0, max: 1}, "canopyCover10");
+
+// Use connectedPixelCount() to get contiguous area.
+var contArea = canopyCover10.connectedPixelCount();
+// Apply the minimum area requirement.
+var minArea = contArea.gte(pixels).selfMask();
+
+// print("lossyear", lossyear);
+// var noloss = lossyear.not();
+// var loss = noloss.not();
+// Map.addLayer(loss, {min:0, max:1}, "loss");
+// Map.addLayer(lossyear, {min:0, max:20}, "lossyear");
+// Use phtf as a mask
+// var phtfYearLoss = lossyear.updateMask(phtf);
+
+// Or without masking
+var lossyear2 = lossyear.mask(ee.Image(1)); // With this, if you point inspector in the sea (e.g.) lossyear is masked
+// but lossyear2 is 0 (and same logic for phtfYearLoss and phtfYearLoss2). 
+var minArea2 = minArea.mask(ee.Image(1)); 
+
+var th10LossYear2 = lossyear2.multiply(minArea2);
+// Map.addLayer(th10LossYear2, {min: 0, max: 21}, "th10LossYear2");
+
+print("lossyear2", lossyear2);
+print("minArea2", minArea2);
+print("th10LossYear2", th10LossYear2);
+// Map.addLayer(lossyear2, {min: 0, max: 20}, "lossyear2");
+
+
+// CREATE ONE BINARY IMAGE FOR EACH YEAR 
+var split = function(year){
+  // Prepare name
+  var yearstr = ee.String(ee.Number(year).int());
+  var name = ee.String("year_").cat(yearstr);
+  // Make image masking pixels of loss from another year than the current year. 
+  var yearMask = th10LossYear2.eq(ee.Image(ee.Number(year)));
+  // Use it to either mask or convert to 0 the pixels we want to discard this year. 
+  // var imageMasked = phtfYearLoss.updateMask(yearMask).rename([name]);
+  var imageNotMasked = th10LossYear2.multiply(yearMask).rename([name]);
+  // Convert the positive values to 1
+  // var imageFinal = imageMasked.divide(imageMasked);
+  var imageFinal = imageNotMasked.divide(ee.Image(ee.Number(year)));
+  // at this stage, imageFinal has 1 where the loss occurred in year, and 0 elsewhere.  
+
+  // Convert to integer to spare some memory
+  var imageFinalInt = imageFinal.toInt8();
+  return imageFinalInt;
+};
+
+// Going only to 19, as deforestation drivers from Curtis et al. is available only until 2019 
+var years = ee.List.sequence(1,19); 
+var multiBands = ee.ImageCollection(years.map(split)).toBands();
+print("multiBands", multiBands);
+// Necessary to rename to export to assets (can't start with a number character)
+var oldNames = multiBands.bandNames();
+var newNames = oldNames.map(function(nme){
+  return ee.String(nme).replace(".+?(_)", "");
+});
+var multiBands = multiBands.rename(newNames);
+print("renamed multiBands", multiBands);
+
+var imageScale = multiBands.projection().nominalScale();
+print("imageScale", imageScale);
+
+// This is commented out since the export is now complete (takes ~5h)
+Export.image.toAsset({
+  image: multiBands,
+  description: "intermediary_multibands_30_th10annualLoss",
+  assetId: "users/valentinguye/intermediary_multibands_30_th10annualLoss",
+  region: tropical_aoi,
+  scale: 27.829872698318393,  // as copy pasted from the imageScale print
+  maxPixels: 1e13, 
+  // pyramidingPolicy: {'.default': 'mean'} not necessary, default method is already mean
+});
+
+  
+////////////////////////////////////////////////////////
+// AGGREGATE 
+var impImage = ee.Image("users/valentinguye/intermediary_multibands_30_th10annualLoss");
+
+// // With this, one can check that the split worked well
+// var image = multiBands.select(6);
+// var image = impImage.select(6);
+// print("image", image);
+// var image = ee.Image(ee.List(multiBands).get(6));
+// print("test", image);
+// print("phtfYearLoss",phtfYearLoss);
+// Map.addLayer(phtfYearLoss, {min: 0, max: 20}, "phtfYearLoss");
+// Map.addLayer(image, {}, "split");
+
+ 
+/* We export to Glass projection (5km) because reducing resolution from 30m pixels to 10km GAEZ pixels requires too many 
+input pixels per output pixels ((10000/30)^2 = ~111112 ) while max allowed is 65536. Aggregating in steps, i.e. first 
+to GLASS and then to GAEZ does not work. 
+*/
+
+var glassProjection = glass.projection();
+var transformGlass = glassProjection.transform(); 
+print("glassProjection", glassProjection);  
+var scaleGlass = glassProjection.nominalScale();
+print("scaleGlass", scaleGlass);
+
+// Loop over the bands of the image (i.e. over years)
+for (var i=0; i<19; i++){
+  // var i = 0;
+  var image = impImage.select(i);
+  print(image);
+  // Following code is from https://developers.google.com/earth-engine/guides/resample
+  // Get the image data at GAEZ scale and projection.
+  var lossSumGlass = image
+      // Force the next reprojection to aggregate instead of resampling.
+      .reduceResolution({ // Reducer input weights will be the product of the input mask and the fraction of the output pixel covered by the input pixel.
+        reducer: ee.Reducer.mean(), // (see notes in TEST section about unweighted reducing, but not relevant anymore)
+        maxPixels: 65536
+        // bestEffort: true
+      })
+      .multiply(ee.Image.pixelArea()).multiply(0.0001)
+      .float();
+      // Request the data at the scale and projection of the GLASS image. 
+      // Necessary if need be to display in the Map, or proceed further computations, 
+      // but NOT if next step is Export
+      // .reproject({
+      //   crs: glassProjection
+      // }); 
+      
+  var yearStrFull = ee.String(ee.Number(years.get(i)).int().add(2000));
+  print(yearStrFull);
+  var exportName = ee.String("10thLossSumGlass_maxP_").cat(yearStrFull).getInfo();
+  print(exportName);
+  
+  Export.image.toDrive({
+    image: lossSumGlass,
+    description: exportName,
+    folder: "GEE_output/GLOBILUC",
+    scale: 5000, // no matter what, this will be the resolution of the ouput. 
+    // crsTransform: [0.04491576420597607, 0, -180.0223829375521, 0, -0.04491576420597607, 85.02554164191271],
+    crs: glassProjection,
+    // crs: 'EPSG:4326',
+    region: tropical_aoi,
+    maxPixels: 1e12
+  }); 
+  // And execute tasks from the Tasks Tab (worked 3 by 3, more at once may not work).   
+};
+
+

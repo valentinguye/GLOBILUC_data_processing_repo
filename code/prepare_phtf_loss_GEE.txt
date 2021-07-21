@@ -1,3 +1,44 @@
+var gfc = ee.Image("UMD/hansen/global_forest_change_2020_v1_8"),
+    phtf = ee.ImageCollection("UMD/GLAD/PRIMARY_HUMID_TROPICAL_FORESTS/v1"),
+    gaez = ee.Image("users/valentinguye/GAEZ/Alfalfa"),
+    glass = ee.Image("users/valentinguye/GLASS-GLC_7classes_1982"),
+    geometry2 = 
+    /* color: #00ffff */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-60.99987776251776, -7.66662293371257],
+          [-60.99987776251776, -7.749296553305199],
+          [-60.91679365607245, -7.749296553305199],
+          [-60.91679365607245, -7.66662293371257]]], null, false),
+    geometry = 
+    /* color: #ff0000 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-60.41622908087714, -7.667303440809743],
+          [-60.41622908087714, -7.749976927509523],
+          [-60.333144974431825, -7.749976927509523],
+          [-60.333144974431825, -7.667303440809743]]], null, false),
+    geometry4 = 
+    /* color: #0000ff */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-60.915420365056825, -7.6676436939503025],
+          [-60.915420365056825, -7.749636740544792],
+          [-60.834052872381044, -7.749636740544792],
+          [-60.834052872381044, -7.6676436939503025]]], null, false);
 
 
 var palette = ['6a2325','152106'];

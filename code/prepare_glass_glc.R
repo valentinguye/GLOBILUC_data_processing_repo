@@ -704,13 +704,4 @@ curtis <- raster(here("input_data", "curtis", "Goode_FinalClassification_19_05pc
 # this one is already projected:
 curtis2 <- raster(here("input_data", "curtis", "Supplementary_Dataset_3.tif"))
 
-# both have NA, 1:5 values 
-# according code in https://www.sustainabilityconsortium.org/tsc-downloads/forest-data/?ind=1536355391488&filename=Supplementary_Dataset_1.txt&wpdmdl=24673&refresh=60f2aa214d3801626516001
-# (see "Create final classification using model output" section)
-# 1 is commodity driven class
-# 2 is shifting agriculture class
-# 3 is forestry
-# 4 is fires
-# 5 is urbanization
-# 0 is minor loss
-# NA is mask for water and <.5% loss 
+
