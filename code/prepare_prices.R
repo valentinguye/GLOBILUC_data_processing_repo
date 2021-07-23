@@ -134,8 +134,8 @@ ps2 <- dplyr::mutate(ps2, across(.cols = (!contains("year") & !contains("MUV_ind
 
 #### IMF DATA #### 
 # "Excel Database" link at: webpage: https://www.imf.org/en/Research/commodity-prices (in April 2021)
-imf <- read_xls(here("input_data", "price_data", "external-dataAPR.xls"), 
-                col_names = TRUE)
+imf <- read_xls(here("input_data", "price_data", "external-dataAPR.xls"), col_names = TRUE)
+
 length(unique(colnames(imf))) == ncol(imf)
 names(imf)[1] <- "year"
 # Select columns we need 
@@ -143,12 +143,13 @@ colnames(imf)
 needed_imf_col <- c("year", 
                     colnames(imf)[grepl(pattern = "oat", x = imf[1,], ignore.case = TRUE)], 
                     colnames(imf)[grepl(pattern = "olive", x = imf[1,], ignore.case = TRUE)], 
+                    colnames(imf)[grepl(pattern = "milk", x = imf[1,], ignore.case = TRUE)], 
                     colnames(imf)[grepl(pattern = "rapeseed", x = imf[1,], ignore.case = TRUE)], 
                     colnames(imf)[grepl(pattern = "sunflower", x = imf[1,], ignore.case = TRUE)],
                     # colnames(imf)[grepl(pattern = "arabica", x = imf[1,], ignore.case = TRUE)],
                     colnames(imf)[grepl(pattern = "pork", x = imf[1,], ignore.case = TRUE)],
-                    colnames(imf)[grepl(pattern = "Food Price Index", x = imf[1,], ignore.case = TRUE)])
-    
+                    # PFOOD is the name of the column for the food price index 
+                    colnames(imf)[grepl(pattern = "pfood", x = imf[1,], ignore.case = TRUE)]) 
 imf <- imf[, needed_imf_col]
 
 # drop first, unnecessary rows
@@ -156,12 +157,15 @@ imf <- imf[-c(1,2,3),]
 
 imf <- as.data.frame(imf)
 
-# Rename
-names(imf) <- c("year", "Oat", "Olive_oil", "Rapeseed_oil", "Sunflower_oil",  "Pork", "FPI")#"Coffee",
+# Rename /!\ ORDER MATTERS HERE ! 
+names(imf)
+names(imf) <- c("year", "Oat", "Olive_oil", "FPI", "Milk", "Rapeseed_oil", "Sunflower_oil",  "Pork")#"Coffee",
 
 # Convert in $/mt 
 # Oat is in USD/bushel (ratio from https://www.sagis.org.za/conversion_table.html)
 imf[,"Oat"] <- as.numeric(imf[,"Oat"]) / 0.014515 
+# Milk is in USD/cwt i.e. hundredweight or 45.36kg  https://en.wikipedia.org/wiki/Hundredweight
+imf[,"Milk"] <- as.numeric(imf[,"Milk"]) * 45.36 / 1000 
 # Pork is in USD cents / pound (ratio from https://www.rapidtables.com/convert/weight/pound-to-kg.html?x=1&x2=&x3=)
 imf[,"Pork"] <- as.numeric(imf[,"Pork"])*0.01/0.000453592 
 
@@ -174,6 +178,7 @@ imf$year <- gsub("M.*", "", imf$year) %>% as.numeric()
 imf <- ddply(imf, "year", summarise, 
                     Oat = Oat %>% as.numeric() %>% mean(), 
                     Olive_oil = Olive_oil %>% as.numeric() %>% mean(), 
+                    Milk = Milk %>% as.numeric() %>% mean(), 
                     Rapeseed_oil = Rapeseed_oil %>% as.numeric() %>% mean(), 
                     Sunflower_oil = Sunflower_oil %>% as.numeric() %>% mean(), 
                     # Coffee = mean(Coffee), 

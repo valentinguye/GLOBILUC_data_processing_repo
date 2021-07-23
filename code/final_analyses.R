@@ -174,6 +174,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
                           price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
+                          fcr = 7.8, # feed conversion ratio according to Wilkinson, 2010. 
                           SjPj = TRUE,
                           SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
@@ -236,6 +237,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   if(outcome_variable == "first_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aeay_long_final.Rdata"))}
   if(outcome_variable == "firstloss_glassgfc"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aeay_long_final.Rdata"))}
   if(outcome_variable == "phtf_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aeay_long_final.Rdata"))}
+  if(outcome_variable == "driven_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aeay_long_final.Rdata"))}
   
   # # restrict the outcome variable to evidence of further LU
   # d <- dplyr::mutate(d, lu_evidence = TRUE)
@@ -293,7 +295,7 @@ make_reg_acay <- function(outcome_variable = "first_loss", # one of "first_loss"
   # Convert fodder crop yield into beef by a feed conversion ratio. 
   # Following Alexander et al. 2016, 25 tons of feed transform into 1 ton of beef meat (in edible weight). 
   # Thus, every ton of feed counted in R_Fodder (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/25 ton of beef meat  
-  d <- dplyr::mutate(d, Fodder = Fodder/25)
+  d <- dplyr::mutate(d, Fodder = Fodder/fcr)
   
   ## Merge only the prices needed, not the whole price dataframe
   d <- left_join(d, prices[,c("year", prices_4_revenue)], by = c("year"))
@@ -764,7 +766,7 @@ qj = "continuous"
 price_info = "4pya"
 
 # For acay we need to compute the revenue here. This helper function does it
-make_rj <- function(data, crops, qj = "continuous", price_info = "lag1"){
+make_rj <- function(data, crops, qj = "continuous", price_info = "lag1", fcr = 7.2){
   ## Revenue variable names
   # To determine land use, only the potential revenue of soybeans is considered (for simplicity) 
   all_crop_prices <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
@@ -808,10 +810,10 @@ make_rj <- function(data, crops, qj = "continuous", price_info = "lag1"){
   # Olive and Oilpalm are expressed in oil already, as in the price data. Hence nothing to do. 
   
   # Convert fodder crop yield into beef by a feed conversion ratio. 
+  # Every ton of feed counted in R_Fodder (coming from agro-climatically achievable yields currently expressed in ton/ha) is scaled to 1/fcr ton of beef meat  
   # Following Alexander et al. 2016, 25 tons of feed transform into 1 ton of beef meat (in edible weight). 
-  # Thus, every ton of feed counted in R_Fodder (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/25 ton of beef meat  
-  data <- dplyr::mutate(data, Fodder = Fodder/25)
-  
+  data <- dplyr::mutate(data, Fodder = Fodder/fcr)
+
   # We will construct expected revenues for all crops - not just those in price_k or crop_j.
   # Thus we take the first lag or the X past year average of the prices, but not the log.
   prices_4_revenue <- paste0(all_crop_prices, "_", price_info)
@@ -862,9 +864,9 @@ make_rj <- function(data, crops, qj = "continuous", price_info = "lag1"){
 }
 
 # Infrastructure to store results
-defo_table <- matrix(nrow = 6, ncol = 6, data = "")
+defo_table <- matrix(nrow = 8, ncol = 6, data = "")
 colnames(defo_table) <- c("Crop", "Region", "Goldman et al. 2020 estimate", "AESI estimate", "AEAY estimate", "AEAYmax estimate")
-row.names(defo_table) <- c("Pasture", "Oil palm", "Soybean", "Cocoa", "Coffee", "Rubber")
+row.names(defo_table) <- c("Pasture Brazil", "Pasture global", "Oil palm", "Soybean South America", "Soybean global", "Cocoa", "Coffee", "Rubber")
 
 ### For soy and pasture, we use different data (prepared in south_america_track.R) and methods. 
 # This is necessary because we want to compare to a measure of deforestation to soy in Goldman et al. 2020 that aggregates the whole continent.
@@ -934,7 +936,7 @@ if(!file.exists(here("temp_data", "glass_sgbp_southam")) |
   sgbp_indonesia <- readRDS(here("temp_data", "phtfloss_sgbp_indonesia"))
 }
 
-### AESI ####
+### GLASS AESI PREDICTIONS ####
 
 ### For soy and pasture, we use data prepared for the whole South American continent, not only its tropical region. 
 d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aesi_long_final.Rdata"))
@@ -955,7 +957,7 @@ accu_0115 <- ddply(d_0115, "grid_id", summarise,
 # Restrict to cells precisely in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
 # Store total
-defo_table["Soybean", "AESI estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
+defo_table["Soybean South America", "AESI estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
 
 # add up annual soy deforestation over the period 2006-2015
 d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
@@ -969,7 +971,7 @@ round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
 # Store total
-defo_table["Pasture", "AESI estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
+defo_table["Pasture Brazil", "AESI estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
 
@@ -1032,7 +1034,7 @@ rm(phtfl, phtfl_08)
 rm(d, d_0115, d_0615, accu_0115, accu_0115_brazil, accu_0115_southam, accu_soy_0615, accu_soy_0615_brazil)
 
 
-### AEAY ####
+### GLASS AEAY PREDICTIONS ####
 
 ### For soy and pasture, we use data prepared for the whole South American continent (i.e. southam_aoi dataset), not only its tropical region. 
 d <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "glass_aeay_long_final.Rdata"))
@@ -1063,7 +1065,7 @@ accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybe
 # Restrict to cells in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
 # Store total
-defo_table["Soybean", "AEAY estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
+defo_table["Soybean South America", "AEAY estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
 # Restrict to cells in Brazil 
 accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
@@ -1073,7 +1075,7 @@ round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
 # Store total
-defo_table["Pasture", "AEAY estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
+defo_table["Pasture Brazil", "AEAY estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
 
@@ -1167,7 +1169,7 @@ accu_soy_0615 <- ddply(d_0615, "grid_id", summarise, accu_soy_defo = sum(Y_soybe
 # Restrict to cells in South America 
 accu_0115_southam <- accu_0115[lengths(sgbp_southam)>0,]
 # Store total
-defo_table["Soybean", "AEAYmax estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
+defo_table["Soybean South America", "AEAYmax estimate"] <- round(sum(accu_0115_southam$accu_soy_defo)/1e6,digits=2) 
 # Restrict to cells in Brazil in 2006-2015
 accu_soy_0615_brazil <- accu_soy_0615[lengths(sgbp_brazil)>0,]
 round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
@@ -1177,7 +1179,7 @@ round(sum(accu_soy_0615_brazil$accu_soy_defo)/1e6,digits=2)
 # Restrict to cells in Brazil
 accu_0115_brazil <- accu_0115[lengths(sgbp_brazil)>0,]
 # Store total
-defo_table["Pasture", "AEAYmax estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
+defo_table["Pasture Brazil", "AEAYmax estimate"] <- round(sum(accu_0115_brazil$accu_pasture_defo)/1e6,digits=2) 
 
 
 
@@ -1231,6 +1233,153 @@ defo_table["Coffee", "AEAYmax estimate"] <- round(sum(accu_0115$accu_coffee_defo
 
 
 
+
+
+### DRIVEN LOSS AESI PREDICTIONS #### 
+# For soy and pasture, we use data prepared for the whole South American continent, not only its tropical region. 
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))
+
+# Build Y_j
+d <- dplyr::select(d, grid_id, year, lon, lat, driven_loss, country_name,
+                   Soybean_std, Fodder_std, Oilpalm_std, Cocoa_std, Coffee_std, Rubber_std)
+d <- dplyr::mutate(d, Y_soybean = driven_loss*Soybean_std, 
+                   Y_pasture = driven_loss*Fodder_std,
+                   Y_oilpalm = driven_loss*Oilpalm_std,
+                   Y_cocoa = driven_loss*Cocoa_std,
+                   Y_coffee = driven_loss*Coffee_std, 
+                   Y_rubber = driven_loss*Rubber_std)
+
+# add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
+
+## SOY ##
+defo_table["Soybean global", "AESI estimate"] <- round(sum(d_0115$Y_soybean, na.rm = TRUE)/1e6,digits=2) 
+
+# Restrict to cells precisely in South America 
+southam_countries <- c("Argentina", 
+                       "Bolivia", 
+                       "Brazil",  
+                       "Isla Brasilera (disp)",  
+                       "Chile",    
+                       "Colombia",  
+                       "Ecuador",  
+                       "French Guiana (Fr)", 
+                       "Guyana", 
+                       "Panama", 
+                       "Paraguay", 
+                       "Peru", 
+                       "Suriname",  
+                       "Trinidad & Tobago",  
+                       "Uruguay",  
+                       "Venezuela")
+d_0115_southam <- dplyr::filter(d_0115, country_name %in% southam_countries)
+
+# Store total
+defo_table["Soybean South America", "AESI estimate"] <- round(sum(d_0115_southam$Y_soybean, na.rm = TRUE)/1e6,digits=2) 
+
+# add up annual soy deforestation over the period 2006-2015
+d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+# Restrict to cells in Brazil 
+d_0615_brazil <- d_0615[d_0615$country_name == "Brazil" | d_0615$country_name == "Isla Brasilera (disp)",]
+round(sum(d_0615_brazil$Y_soybean, na.rm = TRUE)/1e6,digits=2)
+
+
+## PASTURE ##
+defo_table["Pasture global", "AESI estimate"] <- round(sum(d_0115$Y_pasture, na.rm = TRUE)/1e6,digits=2)# Store total
+
+# Restrict to cells in Brazil
+d_0115_brazil <- d_0115[d_0115$country_name == "Brazil" | d_0115$country_name == "Isla Brasilera (disp)",]
+
+defo_table["Pasture Brazil", "AESI estimate"] <- round(sum(d_0115_brazil$Y_pasture, na.rm = TRUE)/1e6,digits=2)# Store total
+
+
+## OIL PALM ## 
+defo_table["Oil palm", "AESI estimate"] <- round(sum(d_0115_brazil$Y_oilpalm, na.rm = TRUE)/1e6,digits=2) 
+
+## COCOA ## 
+defo_table["Cocoa", "AESI estimate"] <- round(sum(d_0115_brazil$Y_cocoa, na.rm = TRUE)/1e6,digits=2)          
+
+## COFFEE ## 
+defo_table["Coffee", "AESI estimate"] <- round(sum(d_0115_brazil$Y_coffee, na.rm = TRUE)/1e6,digits=2) 
+
+## RUBBER ## 
+defo_table["Rubber", "AESI estimate"] <- round(sum(d_0115_brazil$Y_rubber, na.rm = TRUE)/1e6,digits=2)
+
+
+
+### DRIVEN LOSS AEAY PREDICTIONS #### 
+d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aeay_long_final.Rdata"))
+
+# here we need to construct rj with function make_rj
+d <- make_rj(data = d, 
+             crops = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"), 
+             qj = "continuous")
+
+# Build Y_j
+d <- dplyr::select(d, grid_id, year, lon, lat, driven_loss, country_name,
+                   R_Soybean_std, R_Fodder_std, R_Oilpalm_std, R_Cocoa_std, R_Coffee_std, R_Rubber_std)
+
+d <- dplyr::mutate(d, Y_soybean = driven_loss*R_Soybean_std, 
+                   Y_pasture = driven_loss*R_Fodder_std,
+                   Y_oilpalm = driven_loss*R_Oilpalm_std,
+                   Y_cocoa = driven_loss*R_Cocoa_std,
+                   Y_coffee = driven_loss*R_Coffee_std, 
+                   Y_rubber = driven_loss*R_Rubber_std)
+
+# add up annual deforestation over the period 2001-2015
+d_0115 <- dplyr::filter(d, year >= 2001 & year <= 2015)
+
+## SOY ##
+defo_table["Soybean global", "AEAY estimate"] <- round(sum(d_0115$Y_soybean, na.rm = TRUE)/1e6,digits=2) 
+
+# Restrict to cells precisely in South America 
+southam_countries <- c("Argentina", 
+                       "Bolivia", 
+                       "Brazil",  
+                       "Isla Brasilera (disp)",  
+                       "Chile",    
+                       "Colombia",  
+                       "Ecuador",  
+                       "French Guiana (Fr)", 
+                       "Guyana", 
+                       "Panama", 
+                       "Paraguay", 
+                       "Peru", 
+                       "Suriname",  
+                       "Trinidad & Tobago",  
+                       "Uruguay",  
+                       "Venezuela")
+d_0115_southam <- dplyr::filter(d_0115, country_name %in% southam_countries)
+
+# Store total
+defo_table["Soybean South America", "AEAY estimate"] <- round(sum(d_0115_southam$Y_soybean, na.rm = TRUE)/1e6,digits=2) 
+
+## Count soy deforestation over the period 2006-2015 in Brazil
+d_0615 <- dplyr::filter(d, year >= 2006 & year <= 2015)
+d_0615_brazil <- d_0615[d_0615$country_name == "Brazil" | d_0615$country_name == "Isla Brasilera (disp)",]
+round(sum(d_0615_brazil$Y_soybean, na.rm = TRUE)/1e6,digits=2)
+
+
+## PASTURE ##
+defo_table["Pasture global", "AEAY estimate"] <- round(sum(d_0115$Y_pasture, na.rm = TRUE)/1e6,digits=2)# Store total
+
+# Restrict to cells in Brazil
+d_0115_brazil <- d_0115[d_0115$country_name == "Brazil" | d_0115$country_name == "Isla Brasilera (disp)",]
+
+defo_table["Pasture Brazil", "AEAY estimate"] <- round(sum(d_0115_brazil$Y_pasture, na.rm = TRUE)/1e6,digits=2)# Store total
+
+
+## OIL PALM ## 
+defo_table["Oil palm", "AEAY estimate"] <- round(sum(d_0115_brazil$Y_oilpalm, na.rm = TRUE)/1e6,digits=2) 
+
+## COCOA ## 
+defo_table["Cocoa", "AEAY estimate"] <- round(sum(d_0115_brazil$Y_cocoa, na.rm = TRUE)/1e6,digits=2)          
+
+## COFFEE ## 
+defo_table["Coffee", "AEAY estimate"] <- round(sum(d_0115_brazil$Y_coffee, na.rm = TRUE)/1e6,digits=2) 
+
+## RUBBER ## 
+defo_table["Rubber", "AEAY estimate"] <- round(sum(d_0115_brazil$Y_rubber, na.rm = TRUE)/1e6,digits=2)
 
 
 #### DESCRIPTIVE MAP AESI ####
@@ -1366,7 +1515,8 @@ d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aeay_lo
 # here we need to construct rj with function make_rj
 d <- make_rj(data = d, 
              crops = c("Soybean", "Fodder", "Oilpalm", "Cocoa", "Coffee", "Rubber"), 
-             qj = "continuous")
+             qj = "continuous", 
+             fcr = 6)
 
 # Build Y_j
 d <- dplyr::mutate(d, 
