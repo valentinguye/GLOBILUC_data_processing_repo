@@ -99,7 +99,7 @@ ps2 <- ps[, c("year", ps_commo, "MUV Index")]
 # Change (simplify) some names
 names(ps2)[names(ps2) == "Banana, US"] <- "Banana"
 names(ps2)[names(ps2) == "Coconut oil"] <- "Coconut_oil"
-names(ps2)[names(ps2) == "Coffee, Arabica"] <- "Coffee"
+names(ps2)[names(ps2) == "Coffee, Arabica"] <- "Coffee" # for the sake of simplicity, because this is the one we will use with GAEZ. 
 names(ps2)[names(ps2) == "Cotton, A Index"] <- "Cotton"
 names(ps2)[names(ps2) == "Crude oil, average"] <- "Crude_oil"
 names(ps2)[names(ps2) == "Groundnuts"] <- "Groundnut"

@@ -327,7 +327,7 @@ for(name in dataset_names){
                                           # roots_crops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
                                           # # oil_crops = max(c(Groundnut, Jatropha, Olive, Rapeseed, Sunflower)), # we have prices for all of them
                                           # vegetables_crops = max(c(Cabbage, Carrot, Onion, Tomato)),
-                                          # # fruits_crops = max(c(Banana, Citrus, Coconut)), # For coconut we have price only for the oil but it does not matter because it's the AESI workstream anyway 
+                                          # # fruits_crops = max(c(Banana, Citrus, Coconut)), # For coconut we have price only for the oil while it is not expressed in oil in GAEZ. 
                                           # industrial_crops = max(c(Flax)) # Rubber, directly responsible for deforestation, are not mixed with these.
                                           # # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
   ) %>% as.data.frame()
@@ -360,6 +360,7 @@ for(name in dataset_names){
   if(name=="glass_aeay_long"){country_path <- paste0(here(origindir, "glass_aesi_long"), "_country_nf.Rdata")}
   if(name=="firstloss8320_aeay_long"){country_path <- paste0(here(origindir, "firstloss8320_aesi_long"), "_country_nf.Rdata")}
   if(name=="phtfloss_aeay_long"){country_path <- paste0(here(origindir, "phtfloss_aesi_long"), "_country_nf.Rdata")}
+  if(name=="driverloss_aeay_long"){country_path <- paste0(here(origindir, "driverloss_aesi_long"), "_country_nf.Rdata")}
   
   df_country <- readRDS(country_path)
   
