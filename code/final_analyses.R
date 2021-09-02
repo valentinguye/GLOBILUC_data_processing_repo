@@ -131,7 +131,7 @@ prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 # rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, SjPj, SkPk, fe, distribution, output, se, cluster, 
 #    controls, regressors, outcome_variable)
 # 
-outcome_variable = "nd_first_loss" # "first_loss", "firstloss_glassgfc", "phtf_loss"
+outcome_variable = "driven_loss" # "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
 start_year = 2001
 end_year = 2019
 price_info = "lag1"
@@ -151,7 +151,7 @@ price_k <- c("Soybean", "Rapeseed_oil", "Sunflower_oil",
 #               , "Pork")
 extra_price_k = c() # , "Sheep", "Pork", "Chicken"
 SjPj = TRUE
-SkPk = TRUE
+SkPk = FALSE
 fe = "grid_id + country_year"
 distribution = "gaussian"
 se = "cluster"
@@ -166,12 +166,11 @@ output = "coef_table"
 # "Sunflower_oil"
 rm(outcome_variable, start_year, end_year, crop_j, j_soy, fcr, price_k, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
 
-make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
+make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2001, 
                           end_year = 2020, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
                           crop_j = "Oilpalm", # in GAEZ spelling
-                          j_soy = "Soybean", # in case crop_j is Soybean, which price should be used? One of "Soybean", "Soybean_oil", "Soybean_meal".
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
                           price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
@@ -214,7 +213,7 @@ make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_lo
                             mapmat[,"Prices"]!="Soybean_meal" & 
                             mapmat[,"Prices"]!="Coconut_oil" &
                             mapmat[,"Prices"]!="Cotton", "Prices"]
-  all_crop_acay <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
+  all_crop_aeay <- mapmat[mapmat[,"Prices"]!="Soybean_oil" & 
                           mapmat[,"Prices"]!="Soybean_meal" & 
                           mapmat[,"Prices"]!="Coconut_oil" &
                           mapmat[,"Prices"]!="Cotton", "Crops"]
@@ -260,7 +259,7 @@ make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_lo
   ### Keep only variables needed
   # typically removes only aeay of crops that we do not use anyway because they match no price. 
   # and in glass, the sbqt_lu variables. 
-  var2keep <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", outcome_variable, all_crop_acay)
+  var2keep <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", outcome_variable, all_crop_aeay)
   d <- dplyr::select(d, all_of(var2keep))
   rm(var2keep)
   ### PREPARE rj, the standardized achievable revenues
@@ -273,7 +272,7 @@ make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_lo
   # https://gaez.fao.org/pages/theme-details-theme-3
   names(d)
   # Convert those in kg/ha into ton/ha
-  d <- dplyr::mutate(d, across(.cols = all_of(all_crop_acay),
+  d <- dplyr::mutate(d, across(.cols = all_of(all_crop_aeay),
                                .fns = ~./1000)) 
   # Convert Nappier grass and alfalfa (components of Fodder) from now 10 tons to tons. 
   d <- dplyr::mutate(d, across(.cols = all_of("Fodder"),
@@ -304,12 +303,12 @@ make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_lo
   # Prices have been converted to $/t in prepare_prices.R
   for(i in 1:length(prices_4_revenue)){
     price_i <- prices_4_revenue[i]
-    revenue_i <- paste0("R_", all_crop_acay[i])
-    acay_i <- all_crop_acay[i]
+    revenue_i <- paste0("R_", all_crop_aeay[i])
+    aeay_i <- all_crop_aeay[i]
     d <- dplyr::mutate(d, 
-                       !!as.symbol(revenue_i) := !!as.symbol(acay_i)*!!as.symbol(price_i))
+                       !!as.symbol(revenue_i) := !!as.symbol(aeay_i)*!!as.symbol(price_i))
   }
-  rm(price_i, revenue_i, acay_i)                  
+  rm(price_i, revenue_i, aeay_i)                  
   
   
   ## Standardize the revenue variable(s) needed here -> stream dj = Rj/sumRi 
@@ -356,7 +355,7 @@ make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_lo
   }
   rm(varname)
   
-  # Remove the first of the regressors if we do not control for SjPj. The first is necessary SjPj because of the construction of price_all that has price_j first. 
+  # Remove the first of the regressors if we do not control for SjPj. The first is always SjPj because of the construction of price_all that has price_j first. 
   if(!SjPj){
     regressors <- regressors[-1]
   }
@@ -369,7 +368,7 @@ make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_lo
       varname <- paste0("ctrl_", original_price_k[match(Pk, price_k)])
       controls <- c(controls, varname)
       d <- mutate(d, 
-                  !!as.symbol(varname) := !!as.symbol(rk)*!!as.symbol(Pk))
+                  !!as.symbol(varname) := !!as.symbol(Pk)/(!!as.symbol(rk)+0.00000001))
     }
   }
   
@@ -430,7 +429,7 @@ make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_lo
   if(distribution != "negbin"){ # i.e. if it's poisson or quasipoisson or gaussian
     reg_res <- fixest::feglm(fe_model,
                              data = d_clean, 
-                             family = "gaussian",#distribution,#   # "poisson" ,
+                             family = distribution,#distribution,#   # "poisson" ,
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
@@ -476,12 +475,11 @@ make_reg_acay <- function(outcome_variable = "nd_first_loss", # one of "first_lo
 }
 
 
-make_reg_aesi <- function(outcome_variable = "nd_first_loss", # one of "first_loss", "firstloss_glassgfc", "phtf_loss"
+make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2001, 
                           end_year = 2020, 
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
                           crop_j = "Oilpalm", # in GAEZ spelling
-                          j_soy = "Soybean", # in case crop_j is Soybean, which price should be used? One of "Soybean", "Soybean_oil", "Soybean_meal".
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
                           price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
@@ -597,7 +595,7 @@ make_reg_aesi <- function(outcome_variable = "nd_first_loss", # one of "first_lo
       varname <- paste0("ctrl_", original_price_k[match(Pk, price_k)])
       controls <- c(controls, varname)
       d <- mutate(d, 
-                  !!as.symbol(varname) := !!as.symbol(sk)*!!as.symbol(Pk))
+                  !!as.symbol(varname) := !!as.symbol(Pk)/(!!as.symbol(sk)+0.00000001))
     }
   }
   rm(varname)
@@ -1629,13 +1627,14 @@ tm_shape(accu_0115[accu_0115$main_driver!="none",]) +
 
 #### CONSTRUCT SPECIFICATION COMPARATIVE TABLES ####
 
-# We build 5 tables, one for each j crop. 
-# These tables compare nd_first_loss and driven_loss, for the same period, 2001, 2019, for acay (rj) and aesi (sj) models, with and without controlling for SkPk. 
+# We build 6 tables, one for each j crop. 
+# These tables compare aeay (rj) and aesi (sj) models, with and without controlling for SkPk, with different price info  
+
+price_infoS <- c("lag1", "4pya")
 
 # Forest definition
-outcome_variableS <- c("nd_first_loss", "driven_loss")
 SY <- 2001
-EY <- 2014
+EY <- 2019
 # with controls or not 
 control_ornot <- c(FALSE, TRUE)
 
@@ -1647,24 +1646,24 @@ K_beef <- c("Soybean",
 res_list_beef <- list()
 elm <- 1
 
-for(OV in outcome_variableS){
+for(PI in price_infoS){
   for(CTRL in control_ornot){
-    res_list_beef[[elm]] <- make_reg_acay(outcome_variable = OV,
+    res_list_beef[[elm]] <- make_reg_aeay(price_info = PI,
                                                start_year = 2001, end_year = 2019,
                                                crop_j = "Fodder",
                                                price_k = K_beef,
                                                SkPk= CTRL,
                                                extra_price_k = c())#"Sheep", "Pork", "Chicken"
-    names(res_list_beef)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    names(res_list_beef)[elm] <- paste0(PI,"_",CTRL, "_acay")
     elm <- elm + 1
     
-    res_list_beef[[elm]] <- make_reg_aesi(outcome_variable = OV,
+    res_list_beef[[elm]] <- make_reg_aesi(price_info = PI,
                                                start_year = SY, end_year = EY,
                                                crop_j = "Fodder",
                                                price_k = K_beef,
                                                SkPk= CTRL,
                                                extra_price_k = c())#"Sheep", "Pork", "Chicken"
-    names(res_list_beef)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    names(res_list_beef)[elm] <- paste0(PI,"_",CTRL, "_aesi")
     elm <- elm + 1
   }
 }
@@ -1683,7 +1682,7 @@ kable(ape_mat, booktabs = T, align = "r",
   add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "First loss" = 4,"Forest lost to agriculture" = 4),
+  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
                    align = "c",
                    strikeout = F) %>%
   column_spec(column = 1,
@@ -1704,24 +1703,24 @@ K_oilpalm <- c("Soybean", "Rapeseed_oil", "Sunflower_oil",
 res_list_oilpalm <- list()
 elm <- 1
 
-for(OV in outcome_variableS){
+for(PI in price_infoS){
   for(CTRL in control_ornot){
-    res_list_oilpalm[[elm]] <- make_reg_acay(outcome_variable = OV,
+    res_list_oilpalm[[elm]] <- make_reg_aeay(price_info = PI,
                                                start_year = SY, end_year = EY,
                                                crop_j = "Oilpalm",
                                                price_k = K_oilpalm,
                                                SkPk= CTRL,
                                                extra_price_k = c())#
-    names(res_list_oilpalm)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    names(res_list_oilpalm)[elm] <- paste0(PI,"_",CTRL, "_acay")
     elm <- elm + 1
     
-    res_list_oilpalm[[elm]] <- make_reg_aesi(outcome_variable = OV,
+    res_list_oilpalm[[elm]] <- make_reg_aesi(price_info = PI,
                                                start_year = SY, end_year = EY,
                                                crop_j = "Oilpalm",
                                                price_k = K_oilpalm,
                                                SkPk= CTRL,
                                                extra_price_k = c())#
-    names(res_list_oilpalm)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    names(res_list_oilpalm)[elm] <- paste0(PI,"_",CTRL, "_aesi")
     elm <- elm + 1
   }
 }
@@ -1740,7 +1739,7 @@ kable(ape_mat, booktabs = T, align = "r",
   add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "First loss" = 4,"Forest lost to agriculture" = 4),
+  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
                    align = "c",
                    strikeout = F) %>%
   column_spec(column = 1,
@@ -1760,24 +1759,24 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Beef",
 res_list_soy <- list()
 elm <- 1
 
-for(OV in outcome_variableS){
+for(PI in price_infoS){
   for(CTRL in control_ornot){
-    res_list_soy[[elm]] <- make_reg_acay(outcome_variable = OV,
+    res_list_soy[[elm]] <- make_reg_aeay(price_info = PI,
                                              start_year = SY, end_year = EY,
                                              crop_j = "Soybean",
                                              price_k = K_soy,
                                              SkPk= CTRL,
                                              extra_price_k = c())#
-    names(res_list_soy)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    names(res_list_soy)[elm] <- paste0(PI,"_",CTRL, "_acay")
     elm <- elm + 1
     
-    res_list_soy[[elm]] <- make_reg_aesi(outcome_variable = OV,
+    res_list_soy[[elm]] <- make_reg_aesi(price_info = PI,
                                              start_year = SY, end_year = EY,
                                              crop_j = "Soybean",
                                              price_k = K_soy,
                                              SkPk= CTRL,
                                              extra_price_k = c())#
-    names(res_list_soy)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    names(res_list_soy)[elm] <- paste0(PI,"_",CTRL, "_aesi")
     elm <- elm + 1
   }
 }
@@ -1796,7 +1795,7 @@ kable(ape_mat, booktabs = T, align = "r",
   add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "First loss" = 4,"Forest lost to agriculture" = 4),
+  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
                    align = "c",
                    strikeout = F) %>%
   column_spec(column = 1,
@@ -1813,24 +1812,24 @@ K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Sugar") # i
 res_list_cocoa <- list()
 elm <- 1
 
-for(OV in outcome_variableS){
+for(PI in price_infoS){
   for(CTRL in control_ornot){
-    res_list_cocoa[[elm]] <- make_reg_acay(outcome_variable = OV,
+    res_list_cocoa[[elm]] <- make_reg_aeay(price_info = PI,
                                              start_year = SY, end_year = EY,
                                              crop_j = "Cocoa",
                                              price_k = K_cocoa,
                                              SkPk= CTRL,
                                              extra_price_k = c())#
-    names(res_list_cocoa)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    names(res_list_cocoa)[elm] <- paste0(PI,"_",CTRL, "_acay")
     elm <- elm + 1
     
-    res_list_cocoa[[elm]] <- make_reg_aesi(outcome_variable = OV,
+    res_list_cocoa[[elm]] <- make_reg_aesi(price_info = PI,
                                              start_year = SY, end_year = EY,
                                              crop_j = "Cocoa",
                                              price_k = K_cocoa,
                                              SkPk= CTRL,
                                              extra_price_k = c())#
-    names(res_list_cocoa)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    names(res_list_cocoa)[elm] <- paste0(PI,"_",CTRL, "_aesi")
     elm <- elm + 1
   }
 }
@@ -1849,7 +1848,7 @@ kable(ape_mat, booktabs = T, align = "r",
   add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "First loss" = 4,"Forest lost to agriculture" = 4),
+  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
                    align = "c",
                    strikeout = F) %>%
   column_spec(column = 1,
@@ -1865,24 +1864,24 @@ K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 res_list_coffee <- list()
 elm <- 1
 
-for(OV in outcome_variableS){
+for(PI in price_infoS){
   for(CTRL in control_ornot){
-    res_list_coffee[[elm]] <- make_reg_acay(outcome_variable = OV,
+    res_list_coffee[[elm]] <- make_reg_aeay(price_info = PI,
                                              start_year = SY, end_year = EY,
                                              crop_j = "Coffee",
                                              price_k = K_coffee,
                                              SkPk= CTRL,
                                              extra_price_k = c())#
-    names(res_list_coffee)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    names(res_list_coffee)[elm] <- paste0(PI,"_",CTRL, "_acay")
     elm <- elm + 1
     
-    res_list_coffee[[elm]] <- make_reg_aesi(outcome_variable = OV,
+    res_list_coffee[[elm]] <- make_reg_aesi(price_info = PI,
                                              start_year = SY, end_year = EY,
                                              crop_j = "Coffee",
                                              price_k = K_coffee,
                                              SkPk= CTRL,
                                              extra_price_k = c())#
-    names(res_list_coffee)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    names(res_list_coffee)[elm] <- paste0(PI,"_",CTRL, "_aesi")
     elm <- elm + 1
   }
 }
@@ -1901,7 +1900,7 @@ kable(ape_mat, booktabs = T, align = "r",
   add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "First loss" = 4,"Forest lost to agriculture" = 4),
+  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
                    align = "c",
                    strikeout = F) %>%
   column_spec(column = 1,
@@ -1919,24 +1918,24 @@ K_rubber <- c("Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil",
 res_list_rubber <- list()
 elm <- 1
 
-for(OV in outcome_variableS){
+for(PI in price_infoS){
   for(CTRL in control_ornot){
-    res_list_coffee[[elm]] <- make_reg_acay(outcome_variable = OV,
+    res_list_coffee[[elm]] <- make_reg_aeay(price_info = PI,
                                             start_year = SY, end_year = EY,
                                             crop_j = "Rubber",
                                             price_k = K_rubber,
                                             SkPk= CTRL,
                                             extra_price_k = c())#
-    names(res_list_rubber)[elm] <- paste0(OV,"_",CTRL, "_acay")
+    names(res_list_rubber)[elm] <- paste0(PI,"_",CTRL, "_acay")
     elm <- elm + 1
     
-    res_list_coffee[[elm]] <- make_reg_aesi(outcome_variable = OV,
+    res_list_coffee[[elm]] <- make_reg_aesi(price_info = PI,
                                             start_year = SY, end_year = EY,
                                             crop_j = "Rubber",
                                             price_k = K_rubber,
                                             SkPk= CTRL,
                                             extra_price_k = c())#
-    names(res_list_rubber)[elm] <- paste0(OV,"_",CTRL, "_aesi")
+    names(res_list_rubber)[elm] <- paste0(PI,"_",CTRL, "_aesi")
     elm <- elm + 1
   }
 }
@@ -1955,7 +1954,7 @@ kable(ape_mat, booktabs = T, align = "r",
   add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "First loss" = 4,"Forest lost to agriculture" = 4),
+  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
                    align = "c",
                    strikeout = F) %>%
   column_spec(column = 1,
@@ -1980,7 +1979,7 @@ if(OV == "phtf_loss"){main_data <- readRDS(here("temp_data", "merged_datasets", 
 K_beef <- c("Soybean", "Soybean_meal", "Palm_oil", 
              "cereal_crops") # in prices spelling "Barley", "Oat", "Sorghum", "Maize", "Rice"
 
-beef_res <- make_reg_acay(outcome_variable = OV,
+beef_res <- make_reg_aeay(outcome_variable = OV,
                              start_year = SY, end_year = EY,
                              crop_j = "Fodder",
                              price_k = K_beef,
@@ -1991,7 +1990,7 @@ beef_res <- make_reg_acay(outcome_variable = OV,
 K_palmoil <- c("Soybean_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
                "Sugar", "Maize") # in prices spelling "Olive_oil", "Soybean", "Soybean_meal",
 
-oilpalm_res <- make_reg_acay(outcome_variable = OV,
+oilpalm_res <- make_reg_aeay(outcome_variable = OV,
                              start_year = SY, end_year = EY,
                              crop_j = "Oilpalm",
                              price_k = K_palmoil,
@@ -2003,7 +2002,7 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil",
            "Sugar", "Maize") # in prices spelling "Olive_oil",
 
 
-soy_res <- make_reg_acay(outcome_variable = OV,
+soy_res <- make_reg_aeay(outcome_variable = OV,
                          start_year = SY, end_year = EY, 
                          crop_j = "Soybean", 
                          price_k = K_soy, 
@@ -2014,7 +2013,7 @@ soy_res <- make_reg_acay(outcome_variable = OV,
 K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Coconut_oil", "Sugar") # in prices spelling
 
 
-cocoa_res <- make_reg_acay(outcome_variable = OV,
+cocoa_res <- make_reg_aeay(outcome_variable = OV,
                            start_year = SY, end_year = EY, 
                            crop_j = "Cocoa", 
                            price_k = K_cocoa)
@@ -2024,7 +2023,7 @@ cocoa_res <- make_reg_acay(outcome_variable = OV,
 K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 
 
-coffee_res <- make_reg_acay(outcome_variable = OV,
+coffee_res <- make_reg_aeay(outcome_variable = OV,
                             start_year = SY, end_year = EY, 
                             crop_j = "Coffee", 
                             price_k = K_coffee)

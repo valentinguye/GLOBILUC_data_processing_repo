@@ -699,9 +699,4 @@ rm(firstloss8320, cell_area)
 
 
 
-#### 01-19 TRACK: CURTIS #### 
-curtis <- raster(here("input_data", "curtis", "Goode_FinalClassification_19_05pcnt_prj", "Goode_FinalClassification_19_05pcnt_prj.tif"))
-# this one is already projected:
-curtis2 <- raster(here("input_data", "curtis", "Supplementary_Dataset_3.tif"))
-
 
