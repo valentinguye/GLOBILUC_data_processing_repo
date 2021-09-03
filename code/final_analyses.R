@@ -134,7 +134,7 @@ prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 outcome_variable = "driven_loss" # "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
 start_year = 2001
 end_year = 2019
-price_info = "lag1"
+price_info = "4pya"
 further_lu_evidence = "none"
 crop_j = "Oilpalm"
 j_soy = "Soybean"
@@ -151,9 +151,9 @@ price_k <- c("Soybean", "Rapeseed_oil", "Sunflower_oil",
 #               , "Pork")
 extra_price_k = c() # , "Sheep", "Pork", "Chicken"
 SjPj = TRUE
-SkPk = FALSE
+SkPk = TRUE
 fe = "grid_id + country_year"
-distribution = "gaussian"
+distribution = "quasipoisson"
 se = "cluster"
 cluster ="grid_id"
 coefstat = "confint"
@@ -164,7 +164,8 @@ output = "coef_table"
 # "Maize", "Palm_oil", "Rubber", "Sorghum", "Soybean_oil",
 # "Sugar", "Tea", "Tobacco", "Wheat", "Oat", "Olive_oil", "Rapeseed_oil",
 # "Sunflower_oil"
-rm(outcome_variable, start_year, end_year, crop_j, j_soy, fcr, price_k, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors, outcome_variable)
+rm(outcome_variable, start_year, end_year, crop_j, j_soy, fcr, price_k, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors)
+
 
 make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2001, 
@@ -179,7 +180,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
-                          distribution = "gaussian",#  "quasipoisson", 
+                          distribution = "quasipoisson",#  "quasipoisson", 
                           se = "cluster", 
                           cluster ="grid_id",
                           # coefstat = "confint", # one of "se", "tstat", "confint"
@@ -487,7 +488,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
-                          distribution = "gaussian",#  "quasipoisson", 
+                          distribution = "quasipoisson",#  "quasipoisson", 
                           se = "cluster", 
                           cluster ="grid_id",
                           # coefstat = "confint", # one of "se", "tstat", "confint"
@@ -701,7 +702,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
 
 # This function takes as main input the table of results outputted from one regression. It's purpose is to be applied over a list of such results. 
 make_table_mat <- function(df_res, 
-                           rounding=4
+                           rounding=8
                            ){
   
   # Note if there are SkPk controls
@@ -1630,7 +1631,6 @@ tm_shape(accu_0115[accu_0115$main_driver!="none",]) +
 # We build 6 tables, one for each j crop. 
 # These tables compare aeay (rj) and aesi (sj) models, with and without controlling for SkPk, with different price info  
 
-price_infoS <- c("lag1", "4pya")
 
 # Forest definition
 SY <- 2001
@@ -1638,6 +1638,7 @@ EY <- 2019
 # with controls or not 
 control_ornot <- c(FALSE, TRUE)
 
+PI <- "4pya"
 
 ### BEEF
 K_beef <- c("Soybean", 
@@ -1646,27 +1647,26 @@ K_beef <- c("Soybean",
 res_list_beef <- list()
 elm <- 1
 
-for(PI in price_infoS){
-  for(CTRL in control_ornot){
-    res_list_beef[[elm]] <- make_reg_aeay(price_info = PI,
-                                               start_year = 2001, end_year = 2019,
-                                               crop_j = "Fodder",
-                                               price_k = K_beef,
-                                               SkPk= CTRL,
-                                               extra_price_k = c())#"Sheep", "Pork", "Chicken"
-    names(res_list_beef)[elm] <- paste0(PI,"_",CTRL, "_acay")
-    elm <- elm + 1
-    
-    res_list_beef[[elm]] <- make_reg_aesi(price_info = PI,
-                                               start_year = SY, end_year = EY,
-                                               crop_j = "Fodder",
-                                               price_k = K_beef,
-                                               SkPk= CTRL,
-                                               extra_price_k = c())#"Sheep", "Pork", "Chicken"
-    names(res_list_beef)[elm] <- paste0(PI,"_",CTRL, "_aesi")
-    elm <- elm + 1
-  }
+for(CTRL in control_ornot){
+  res_list_beef[[elm]] <- make_reg_aeay(price_info = PI,
+                                             start_year = SY, end_year = EY,
+                                             crop_j = "Fodder",
+                                             price_k = K_beef,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#"Sheep", "Pork", "Chicken"
+  names(res_list_beef)[elm] <- paste0(PI,"_",CTRL, "_aeay")
+  elm <- elm + 1
+  
+  res_list_beef[[elm]] <- make_reg_aesi(price_info = PI,
+                                             start_year = SY, end_year = EY,
+                                             crop_j = "Fodder",
+                                             price_k = K_beef,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#"Sheep", "Pork", "Chicken"
+  names(res_list_beef)[elm] <- paste0(PI,"_",CTRL, "_aesi")
+  elm <- elm + 1
 }
+
 
 # Prepare matrix for table
 rm(ape_mat)
@@ -1679,12 +1679,12 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for cattle, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -1703,27 +1703,26 @@ K_oilpalm <- c("Soybean", "Rapeseed_oil", "Sunflower_oil",
 res_list_oilpalm <- list()
 elm <- 1
 
-for(PI in price_infoS){
-  for(CTRL in control_ornot){
-    res_list_oilpalm[[elm]] <- make_reg_aeay(price_info = PI,
-                                               start_year = SY, end_year = EY,
-                                               crop_j = "Oilpalm",
-                                               price_k = K_oilpalm,
-                                               SkPk= CTRL,
-                                               extra_price_k = c())#
-    names(res_list_oilpalm)[elm] <- paste0(PI,"_",CTRL, "_acay")
-    elm <- elm + 1
-    
-    res_list_oilpalm[[elm]] <- make_reg_aesi(price_info = PI,
-                                               start_year = SY, end_year = EY,
-                                               crop_j = "Oilpalm",
-                                               price_k = K_oilpalm,
-                                               SkPk= CTRL,
-                                               extra_price_k = c())#
-    names(res_list_oilpalm)[elm] <- paste0(PI,"_",CTRL, "_aesi")
-    elm <- elm + 1
-  }
+for(CTRL in control_ornot){
+  res_list_oilpalm[[elm]] <- make_reg_aeay(price_info = PI,
+                                             start_year = SY, end_year = EY,
+                                             crop_j = "Oilpalm",
+                                             price_k = K_oilpalm,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#
+  names(res_list_oilpalm)[elm] <- paste0(PI,"_",CTRL, "_aeay")
+  elm <- elm + 1
+  
+  res_list_oilpalm[[elm]] <- make_reg_aesi(price_info = PI,
+                                             start_year = SY, end_year = EY,
+                                             crop_j = "Oilpalm",
+                                             price_k = K_oilpalm,
+                                             SkPk= CTRL,
+                                             extra_price_k = c())#
+  names(res_list_oilpalm)[elm] <- paste0(PI,"_",CTRL, "_aesi")
+  elm <- elm + 1
 }
+
 
 # Prepare matrix for table
 rm(ape_mat)
@@ -1736,12 +1735,12 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for oil palm, ",SY,"-",EY)) %>% #
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -1759,27 +1758,26 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Beef",
 res_list_soy <- list()
 elm <- 1
 
-for(PI in price_infoS){
-  for(CTRL in control_ornot){
-    res_list_soy[[elm]] <- make_reg_aeay(price_info = PI,
-                                             start_year = SY, end_year = EY,
-                                             crop_j = "Soybean",
-                                             price_k = K_soy,
-                                             SkPk= CTRL,
-                                             extra_price_k = c())#
-    names(res_list_soy)[elm] <- paste0(PI,"_",CTRL, "_acay")
-    elm <- elm + 1
-    
-    res_list_soy[[elm]] <- make_reg_aesi(price_info = PI,
-                                             start_year = SY, end_year = EY,
-                                             crop_j = "Soybean",
-                                             price_k = K_soy,
-                                             SkPk= CTRL,
-                                             extra_price_k = c())#
-    names(res_list_soy)[elm] <- paste0(PI,"_",CTRL, "_aesi")
-    elm <- elm + 1
-  }
+for(CTRL in control_ornot){
+  res_list_soy[[elm]] <- make_reg_aeay(price_info = PI,
+                                           start_year = SY, end_year = EY,
+                                           crop_j = "Soybean",
+                                           price_k = K_soy,
+                                           SkPk= CTRL,
+                                           extra_price_k = c())#
+  names(res_list_soy)[elm] <- paste0(PI,"_",CTRL, "_aeay")
+  elm <- elm + 1
+  
+  res_list_soy[[elm]] <- make_reg_aesi(price_info = PI,
+                                           start_year = SY, end_year = EY,
+                                           crop_j = "Soybean",
+                                           price_k = K_soy,
+                                           SkPk= CTRL,
+                                           extra_price_k = c())#
+  names(res_list_soy)[elm] <- paste0(PI,"_",CTRL, "_aesi")
+  elm <- elm + 1
 }
+
 
 # Prepare matrix for table
 rm(ape_mat)
@@ -1792,12 +1790,12 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for soy, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -1812,27 +1810,26 @@ K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Sugar") # i
 res_list_cocoa <- list()
 elm <- 1
 
-for(PI in price_infoS){
-  for(CTRL in control_ornot){
-    res_list_cocoa[[elm]] <- make_reg_aeay(price_info = PI,
-                                             start_year = SY, end_year = EY,
-                                             crop_j = "Cocoa",
-                                             price_k = K_cocoa,
-                                             SkPk= CTRL,
-                                             extra_price_k = c())#
-    names(res_list_cocoa)[elm] <- paste0(PI,"_",CTRL, "_acay")
-    elm <- elm + 1
-    
-    res_list_cocoa[[elm]] <- make_reg_aesi(price_info = PI,
-                                             start_year = SY, end_year = EY,
-                                             crop_j = "Cocoa",
-                                             price_k = K_cocoa,
-                                             SkPk= CTRL,
-                                             extra_price_k = c())#
-    names(res_list_cocoa)[elm] <- paste0(PI,"_",CTRL, "_aesi")
-    elm <- elm + 1
-  }
+for(CTRL in control_ornot){
+  res_list_cocoa[[elm]] <- make_reg_aeay(price_info = PI,
+                                           start_year = SY, end_year = EY,
+                                           crop_j = "Cocoa",
+                                           price_k = K_cocoa,
+                                           SkPk= CTRL,
+                                           extra_price_k = c())#
+  names(res_list_cocoa)[elm] <- paste0(PI,"_",CTRL, "_aeay")
+  elm <- elm + 1
+  
+  res_list_cocoa[[elm]] <- make_reg_aesi(price_info = PI,
+                                           start_year = SY, end_year = EY,
+                                           crop_j = "Cocoa",
+                                           price_k = K_cocoa,
+                                           SkPk= CTRL,
+                                           extra_price_k = c())#
+  names(res_list_cocoa)[elm] <- paste0(PI,"_",CTRL, "_aesi")
+  elm <- elm + 1
 }
+
 
 # Prepare matrix for table
 rm(ape_mat)
@@ -1845,12 +1842,12 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for cocoa, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -1864,27 +1861,26 @@ K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 res_list_coffee <- list()
 elm <- 1
 
-for(PI in price_infoS){
-  for(CTRL in control_ornot){
-    res_list_coffee[[elm]] <- make_reg_aeay(price_info = PI,
-                                             start_year = SY, end_year = EY,
-                                             crop_j = "Coffee",
-                                             price_k = K_coffee,
-                                             SkPk= CTRL,
-                                             extra_price_k = c())#
-    names(res_list_coffee)[elm] <- paste0(PI,"_",CTRL, "_acay")
-    elm <- elm + 1
-    
-    res_list_coffee[[elm]] <- make_reg_aesi(price_info = PI,
-                                             start_year = SY, end_year = EY,
-                                             crop_j = "Coffee",
-                                             price_k = K_coffee,
-                                             SkPk= CTRL,
-                                             extra_price_k = c())#
-    names(res_list_coffee)[elm] <- paste0(PI,"_",CTRL, "_aesi")
-    elm <- elm + 1
-  }
+for(CTRL in control_ornot){
+  res_list_coffee[[elm]] <- make_reg_aeay(price_info = PI,
+                                           start_year = SY, end_year = EY,
+                                           crop_j = "Coffee",
+                                           price_k = K_coffee,
+                                           SkPk= CTRL,
+                                           extra_price_k = c())#
+  names(res_list_coffee)[elm] <- paste0(PI,"_",CTRL, "_aeay")
+  elm <- elm + 1
+  
+  res_list_coffee[[elm]] <- make_reg_aesi(price_info = PI,
+                                           start_year = SY, end_year = EY,
+                                           crop_j = "Coffee",
+                                           price_k = K_coffee,
+                                           SkPk= CTRL,
+                                           extra_price_k = c())#
+  names(res_list_coffee)[elm] <- paste0(PI,"_",CTRL, "_aesi")
+  elm <- elm + 1
 }
+
 
 # Prepare matrix for table
 rm(ape_mat)
@@ -1897,12 +1893,12 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for coffee, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -1918,27 +1914,26 @@ K_rubber <- c("Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil",
 res_list_rubber <- list()
 elm <- 1
 
-for(PI in price_infoS){
-  for(CTRL in control_ornot){
-    res_list_coffee[[elm]] <- make_reg_aeay(price_info = PI,
-                                            start_year = SY, end_year = EY,
-                                            crop_j = "Rubber",
-                                            price_k = K_rubber,
-                                            SkPk= CTRL,
-                                            extra_price_k = c())#
-    names(res_list_rubber)[elm] <- paste0(PI,"_",CTRL, "_acay")
-    elm <- elm + 1
-    
-    res_list_coffee[[elm]] <- make_reg_aesi(price_info = PI,
-                                            start_year = SY, end_year = EY,
-                                            crop_j = "Rubber",
-                                            price_k = K_rubber,
-                                            SkPk= CTRL,
-                                            extra_price_k = c())#
-    names(res_list_rubber)[elm] <- paste0(PI,"_",CTRL, "_aesi")
-    elm <- elm + 1
-  }
+for(CTRL in control_ornot){
+  res_list_rubber[[elm]] <- make_reg_aeay(price_info = PI,
+                                          start_year = SY, end_year = EY,
+                                          crop_j = "Rubber",
+                                          price_k = K_rubber,
+                                          SkPk= CTRL,
+                                          extra_price_k = c())#
+  names(res_list_rubber)[elm] <- paste0(PI,"_",CTRL, "_aeay")
+  elm <- elm + 1
+  
+  res_list_rubber[[elm]] <- make_reg_aesi(price_info = PI,
+                                          start_year = SY, end_year = EY,
+                                          crop_j = "Rubber",
+                                          price_k = K_rubber,
+                                          SkPk= CTRL,
+                                          extra_price_k = c())#
+  names(res_list_rubber)[elm] <- paste0(PI,"_",CTRL, "_aesi")
+  elm <- elm + 1
 }
+
 
 # Prepare matrix for table
 rm(ape_mat)
@@ -1951,12 +1946,12 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for rubber, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1),
+  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
