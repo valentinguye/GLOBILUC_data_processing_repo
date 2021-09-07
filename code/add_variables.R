@@ -4,7 +4,7 @@
 
 # These are the packages needed in this particular script. 
 neededPackages = c("plyr", "dplyr", "foreign", "here",
-                   "rgdal", "sf") #"nngeo"
+                   "rgdal", "sf", "tmap") #"nngeo"
 #install.packages("sf", source = TRUE)
 # library(sf)
 # 
@@ -36,6 +36,9 @@ lapply(neededPackages, library, character.only = TRUE)
 # 3. If the troubling packages could not be loaded ("there is no package called ...) 
 #   you should try to install them, preferably in their versions stated in the renv.lock file. 
 #   see in particular https://rstudio.github.io/renv/articles/renv.html 
+
+### GLOBAL CRS USED ### 
+mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
 
 
 #### Define GAEZ AESI variables ####
@@ -182,7 +185,75 @@ for(name in dataset_names){
   rm(df_cs)
 }
 
+#### ADD "CONTINENT" VARIABLE #### 
+# We need to set up 3 rectangular shapes. The extreme latitudes are 30 and -30, so we need 2 lines to divide this subtropical band
+# We set the line between America and Africa at -27° lon (includes Cape Verde in Africa, and Fernando in Brazil)
+# We set the line between Asia and America at -110° lon (includes Eastern Island in South America)
+# We set the line between Africa and Asia at 58° lon (includes Maurice in Africa, but also the Arabic peninsula). 
 
+# writing code this way is necessary for asia to actually go from 58° to -110° and not the other way round, if you go with extent %>% bbox etc. 
+
+asia_coords <- matrix(c(58, 30, 180, 30,
+                        180, -30, 58, -30, 
+                        58, 30), ncol = 2, byrow = TRUE)
+
+asia_ext <- st_polygon(list(asia_coords)) %>% st_sfc(crs = 4326)
+
+america_coords <- matrix(c(-180, 30, -27, 30,
+                        -27, -30, -180, -30, 
+                        -180, 30), ncol = 2, byrow = TRUE)
+
+america_ext <- st_polygon(list(america_coords)) %>% st_sfc(crs = 4326)
+
+africa_coords <- matrix(c(-27, 30, 58, 30,
+                           58, -30, -27, -30, 
+                           -27, 30), ncol = 2, byrow = TRUE)
+
+africa_ext <- st_polygon(list(africa_coords)) %>% st_sfc(crs = 4326)
+
+sfc <- c(asia_ext, america_ext, africa_ext)
+
+# sfc <- st_transform(sfc, crs = mercator_world_crs)
+
+continents <- st_sf(data.frame(continent_name = c("Asia", "America", "Africa"), geom = sfc))
+
+# tm_shape(continents)+tm_borders() +tm_fill(col = "continent_name") + tm_graticules() 
+
+
+for(name in dataset_names){
+  
+  path <- paste0(here(origindir, name), ".Rdata")
+  df <- readRDS(path)
+  
+  # Remove gaez variables
+  df <- dplyr::select(df,-all_of(gaez_crops))
+  
+  # Use cross section only
+  df_cs <- df[!duplicated(df$grid_id),]
+  
+  # rm(df)
+  
+  # Spatial
+  df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+  
+  
+  # This is much much faster (like 5 minutes vs. 6h).
+  df_cs <- st_join(x = continents,
+                   y = df_cs,
+                   join = st_contains,
+                   prepared = TRUE,
+                   left = FALSE)# performs inner join so returns only records that spatially match.
+  
+  
+  df_cs <- st_drop_geometry(df_cs)
+  
+  # Keep only new variable and id
+  df_cs <- df_cs[,c("grid_id", "continent_name")]
+  
+  saveRDS(df_cs, paste0(here(origindir, name), "_continent.Rdata"))
+  rm(df_cs)
+
+}
 
 # df_cs_mexico <- df_cs[df_cs$country_name == "Brazil","geometry"]
 # plot(df_cs_mexico)
@@ -265,11 +336,17 @@ for(name in dataset_names){
   # Country variable
   country_path <- paste0(here(origindir, name), "_country_nf.Rdata")
   df_country <- readRDS(country_path)
-  
   # Merge them and remove to save memory 
   final <- left_join(df_base, df_country, by = "grid_id")
   rm(df_base, df_country)
 
+  # Continent variable
+  continent_path <- paste0(here(origindir, name), "_continent.Rdata")
+  df_continent <- readRDS(continent_path)
+
+  final <- left_join(final, df_continent, by = "grid_id")
+  rm(df_continent)
+  
   # Standardized and aggregated suitability indexes
   stdsi_path <- paste0(here(origindir, name), "_stdsi.Rdata")
   df_stdsi <- readRDS(stdsi_path)  
@@ -367,6 +444,17 @@ for(name in dataset_names){
   # Merge them and remove to save memory 
   final <- left_join(df_base, df_country, by = "grid_id")
   rm(df_base, df_country)
+  
+  # Continent variable
+  if(name=="glass_aeay_long"){continent_path <- paste0(here(origindir, "glass_aesi_long"), "_continent.Rdata")}
+  if(name=="firstloss8320_aeay_long"){continent_path <- paste0(here(origindir, "firstloss8320_aesi_long"), "_continent.Rdata")}
+  if(name=="phtfloss_aeay_long"){continent_path <- paste0(here(origindir, "phtfloss_aesi_long"), "_continent.Rdata")}
+  if(name=="driverloss_aeay_long"){continent_path <- paste0(here(origindir, "driverloss_aesi_long"), "_continent.Rdata")}
+  
+  df_continent <- readRDS(continent_path)
+  
+  final <- left_join(final, df_continent, by = "grid_id")
+  rm(df_continent)
   
   # Grouped crops
   grouped_path <- paste0(here(origindir, name), "_groupedcrops.Rdata")
