@@ -874,7 +874,7 @@ res_list_soy[[elm]] <- make_reg_aeay(price_info = PI,
                                      start_year = SY, end_year = EY,
                                      crop_j = "Soybean",
                                      price_k = K_soy,
-                                     extra_price_k = extra_K_price,
+                                     extra_price_k = K_extra,
                                      SkPk= CTRL)#
 names(res_list_soy)[elm] <- paste0(PI,"_",CTRL, "_aeay")
 elm <- elm + 1
@@ -883,7 +883,7 @@ res_list_soy[[elm]] <- make_reg_aesi(price_info = PI,
                                      start_year = SY, end_year = EY,
                                      crop_j = "Soybean",
                                      price_k = K_soy,
-                                     extra_price_k = extra_K_price,
+                                     extra_price_k = K_extra,
                                      SkPk= CTRL)#
 names(res_list_soy)[elm] <- paste0(PI,"_",CTRL, "_aesi")
 elm <- elm + 1

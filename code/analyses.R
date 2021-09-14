@@ -173,7 +173,7 @@ output = "coef_table"
 rm(outcome_variable, start_year, end_year, crop_j, j_soy, fcr, price_k, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors)
 
 
-make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
+ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2001, 
                           end_year = 2020, 
                           continent = "all", # one of "Africa", "America", "Asia", or "all"
@@ -186,7 +186,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           SjPj = TRUE,
                           SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
-                          fe = "grid_id + country_name", 
+                          fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
                           se = "cluster", 
                           cluster ="grid_id",
@@ -507,7 +507,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           SjPj = TRUE,
                           SkPk = FALSE,
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
-                          fe = "grid_id + country_name", 
+                          fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
                           se = "cluster", 
                           cluster ="grid_id",
@@ -1686,7 +1686,7 @@ EY <- 2019
 # control_ornot <- c(FALSE, TRUE)
 CTRL <- TRUE
 
-continentS <- c("Africa", "America", "Asia")
+continentS <- "all" # c("America", "Africa", "Asia")
 
 PI <- "4pya"
 
@@ -1792,15 +1792,15 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for oil palm, ",SY,"-",EY)) %>% #
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
+  add_header_above(c("Estimates" = 1, "PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
   # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
   #                  align = "c",
   #                  strikeout = F) %>%
-    add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
-                   align = "c",
-                   strikeout = F) %>%
+    # add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
+    #                align = "c",
+    #                strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -1852,15 +1852,15 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for soy, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
+  add_header_above(c("Estimates" = 1, "PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
   # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
   #                  align = "c",
   #                  strikeout = F) %>%
-  add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -1911,15 +1911,15 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for cocoa, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
+  add_header_above(c("Estimates" = 1, "PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
   # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
   #                  align = "c",
   #                  strikeout = F) %>%
-  add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -1970,15 +1970,15 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for coffee, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
+  add_header_above(c("Estimates" = 1, "PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
   # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
   #                  align = "c",
   #                  strikeout = F) %>%
-  add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
@@ -2028,15 +2028,15 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for rubber, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
+  add_header_above(c("Estimates" = 1, "PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
   # add_header_above(c(" " = 1, "lag1" = 4,"4pya" = 4),
   #                  align = "c",
   #                  strikeout = F) %>%
-  add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
-                   align = "c",
-                   strikeout = F) %>%
+  # add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
+  #                  align = "c",
+  #                  strikeout = F) %>%
   column_spec(column = 1,
               width = "7em",
               latex_valign = "b") %>% 
