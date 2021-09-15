@@ -355,8 +355,11 @@ for(name in dataset_names){
   rm(df_stdsi)
 
   # Pasture 2000 share of area variable
-  df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
-  
+  if(name == "driverloss_aesi_long"){
+    df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
+    
+    final <- left_join(final, df_pasture, by = c("lon", "lat"))
+  }
   
   # Create country trends variable
   final <- mutate(final, country_year = paste0(country_name, "_", year))
@@ -466,6 +469,13 @@ for(name in dataset_names){
   
   final <- left_join(final, df_grouped, by = "grid_id")
   rm(df_grouped)
+  
+  # Pasture 2000 share of area variable
+  if(name == "driverloss_aeay_long"){
+    df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
+    
+    final <- left_join(final, df_pasture, by = c("lon", "lat"))
+  }
   
   # Create country trends variable
   final <- mutate(final, country_year = paste0(country_name, "_", year))

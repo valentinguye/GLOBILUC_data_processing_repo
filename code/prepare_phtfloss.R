@@ -146,6 +146,9 @@ mask(phtfloss,
      filename = here("temp_data", "processed_phtfloss", "tropical_aoi", "masked_phtfloss.tif"), 
      overwrite = TRUE)
 
+# there were already NAs' in phtfloss (coming from the parts between the three continents, that are NAs in phtf data)
+# so now NAs are these ocean parts, and other ocean and land parts where no phtf loss ever occured. 
+
 
 # masked <- brick(here("temp_data", "processed_phtfloss", "tropical_aoi", "masked_phtfloss.tif"))
 

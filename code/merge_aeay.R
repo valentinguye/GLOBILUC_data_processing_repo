@@ -386,7 +386,9 @@ names(driverloss) <- paste0("driven_loss.",seq(2001, 2019, 1)) # note the differ
 mask <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers.tif"))
 
 mask(x = gaez, 
-     mask = mask, 
+     mask = mask,
+     maskvalue = 0, # necessary here, because the there is no NA in the mask, only 0 and 1 (see the prepare_loss_drivers.R script)
+     updatevalue = NA, 
      filename = here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "driverloss_masked_high_input_all.tif"), 
      overwrite = TRUE)
 

@@ -98,10 +98,17 @@ masked_pasture_output_name <- here("temp_data", "processed_pasture2000", "tropic
 
 mask(x = resampled, 
      mask = mask, 
+     maskvalue = 0, # necessary here, because there is no NA in the mask, only 0 and 1 (see the prepare_loss_drivers.R script)
+     updatevalue = NA, 
      filename = masked_pasture_output_name,
      overwrite = TRUE)
 
 
+# The pasture data have a bit more NAs (~30000) than the gaez data. 
+# This might be a question of what they respectively counted as the shore. 
+# Anyways, in order to merge the pasture data, we need either to trim the other 
+# data sets to the data available (i.e. not NA) in pasture (and loose information), 
+# or to merge based on the centroids
 
 ### STACK RASTERS TO MERGE ###
 # we do not stack rasters to merge them here. It is just for one variable. 
@@ -118,13 +125,7 @@ names(wide_df)
 head(wide_df[,c("x", "y")])
 wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
 
-
-### WIDE TO LONG ### 
-
-# Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
-# So we can simply create an ID that's a sequence. 
-wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
-# as the process was similar to the one used in converting the driverloss raster into a dataframe (in merge_* scripts), the seq gives grid cells the same ids. 
+# We do not creat a sequantial ID, as this would be confounding (see explanation above)
 
 saveRDS(wide_df, here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata"))
 
