@@ -354,6 +354,10 @@ for(name in dataset_names){
   final <- left_join(final, df_stdsi, by = "grid_id")
   rm(df_stdsi)
 
+  # Pasture 2000 share of area variable
+  df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
+  
+  
   # Create country trends variable
   final <- mutate(final, country_year = paste0(country_name, "_", year))
   

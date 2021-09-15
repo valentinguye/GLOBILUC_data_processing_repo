@@ -1,3 +1,6 @@
+# In this script, we merge the 2000 pasture area shares with driven loss data. 
+
+
 ##### 0. PACKAGES, WD, OBJECTS #####
 
 
@@ -41,73 +44,39 @@ lapply(neededPackages, library, character.only = TRUE)
 
 
 ### NEW FOLDERS USED IN THIS SCRIPT 
-dir.create(here("temp_data", "processed_pasture2000", "tropical_aoi"), recursive = TRUE)
+dir.create(here("temp_data", "merged_datasets", "tropical_aoi"), recursive = TRUE)
 
 ### Raster global options
 rasterOptions(timer = TRUE, 
               progress = "text")
 
 
-# Import the pasture data
-pasture <- raster(here("input_data", "CroplandPastureArea2000_Geotiff", "Pasture2000_5m.tif"))
-
-croped_path <- here("temp_data", "processed_pasture2000", "tropical_aoi", "tropical_aoi_pasture2000.tif")
-# crop to ***TROPICAL*** AOI 
-ext <- extent(c(-180, 179.9167, -30, 30))
-pasture <- crop(x = pasture, 
-                y = ext, 
-                filename = croped_path, 
-                overwrite = TRUE)
-
-croped <- raster(croped_path)
-
-# Align to GAEZ exactly
-# resolution is already similar, if not exactly equal
-
-# Read in a GAEZ grid, because we want to align to it. 
-gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Alfalfa.tif"))
-
-resampled_path <- here("temp_data", "processed_pasture2000", "tropical_aoi", "resampled_pasture2000.tif")
-
-resample(x = croped, 
-         y = gaez, 
-         method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
-         # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
-         filename = resampled_path, 
-         overwrite = TRUE)
+### This script's target dir
+targetdir <- here("temp_data", "merged_datasets", "tropical_aoi")
 
 
-
-
-# r <- values(resampled)
-# r1 <- r[!is.na(r)]
-# summary(r1)
-# 
-# it's important to compare with croped raster and not the whole pasture (global) raster that includes out of aoi cells
-# v <- values(croped)
-# v1 <- v[!is.na(v)]
-# summary(v1)
+# Read pasture data 
+pasture <- raster(here("temp_data", "processed_pasture2000", "tropical_aoi", "resampled_pasture2000.tif"))
 
 
 ### MASK PASTURE TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
-resampled <- raster(resampled_path)
 
 mask <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers.tif"))
 
 masked_pasture_output_name <- here("temp_data", "processed_pasture2000", "tropical_aoi", "driverloss_masked_pasture.tif")
 
-mask(x = resampled, 
+mask(x = pasture, 
      mask = mask, 
      filename = masked_pasture_output_name,
      overwrite = TRUE)
 
+pasture_m <- raster(masked_pasture_output_name)
 
 
 ### STACK RASTERS TO MERGE ###
-# we do not stack rasters to merge them here. It is just for one variable. 
+# we do not do it here. It is just for one variable. ... 
 
 ### RASTER TO DATAFRAME ### 
-pasture_m <- raster(masked_pasture_output_name)
 
 # na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
 # We also set long to false because we reshape with a proper function for more control
@@ -126,6 +95,18 @@ wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
 wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
 # as the process was similar to the one used in converting the driverloss raster into a dataframe (in merge_* scripts), the seq gives grid cells the same ids. 
 
-saveRDS(wide_df, here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata"))
+saveRDS(wide_df, here(targetdir, "pasture_4_driverloss_df.Rdata"))
 
-rm(pasture_m, mask, wide_df)
+rm(pasture_m, mask)
+
+rm(pasture, targetdir)
+
+
+
+
+
+
+
+
+
+

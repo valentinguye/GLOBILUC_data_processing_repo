@@ -137,7 +137,7 @@ resample(x = aggregated,
 ### MASK LOSS WITH DRIVERS ### 
 
 drivers_b <- raster(drivers_b_output_name)
-resampled <- brick(resampled_output_name)
+resampled <- brick(resampled_output_name) # this is loss data
 
 agri_lossdrivers_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "agri_lossdrivers.tif")
 
@@ -148,13 +148,14 @@ mask(resampled,
      filename = agri_lossdrivers_output_name, 
      overwrite = TRUE)
 
-
+# so the output of this has either forest loss area if it is driven by agriculture, or 0 if it is either 
+# somewhere without forest loss on land or in the sea *** i.e. there is no NAs at this stage! *** 
 
 
 #### ALIGN to GAEZ ####
 
 # Read in a GAEZ grid, because we want to align to it. 
-gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Alfalfa.tif"))
+gaez <- raster(here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "High-input", "Alfalfa.tif"))
 
 agri_lossdrivers <- brick(agri_lossdrivers_output_name)
 
@@ -166,6 +167,21 @@ resample(x = agri_lossdrivers,
          # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
          filename = gaez_resampled_output_name, 
          overwrite = TRUE)
+
+# resampled <- brick(gaez_resampled_output_name)
+ 
+# v3 <- values(resampled_v3[[1]])
+# v3 <- v3[!is.na(v3)]
+# summary(v3)
+# 
+# v4 <- values(resampled_v4[[1]])
+# v4 <- v4[!is.na(v4)]
+# summary(v4)
+# 
+# v <- values(agri_lossdrivers[[1]])
+# v <- v[!is.na(v)]
+# summary(v)
+
 
 # aligned <- brick(aligned_output_name)
 # 
