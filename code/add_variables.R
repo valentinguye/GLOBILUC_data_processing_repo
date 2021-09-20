@@ -357,6 +357,7 @@ for(name in dataset_names){
   # Pasture 2000 share of area variable
   if(name == "driverloss_aesi_long"){
     df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
+    names(df_pasture)[names(df_pasture)=="driverloss_masked_pasture"] <- "pasture_share"
     
     final <- left_join(final, df_pasture, by = c("lon", "lat"))
   }
@@ -473,6 +474,7 @@ for(name in dataset_names){
   # Pasture 2000 share of area variable
   if(name == "driverloss_aeay_long"){
     df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
+    names(df_pasture)[names(df_pasture)=="driverloss_masked_pasture"] <- "pasture_share"
     
     final <- left_join(final, df_pasture, by = c("lon", "lat"))
   }

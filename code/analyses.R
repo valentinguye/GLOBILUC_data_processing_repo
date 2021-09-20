@@ -135,14 +135,14 @@ prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 # 
 # rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, SjPj, SkPk, fe, distribution, output, se, cluster, 
 #    controls, regressors, outcome_variable)
-# 
+
 outcome_variable = "driven_loss" # "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
 start_year = 2001
 end_year = 2019
-continent = "Asia"
+continent = "all"
 price_info = "4pya"
 further_lu_evidence = "none"
-crop_j = "Oilpalm"
+crop_j = "Fodder"
 j_soy = "Soybean"
 fcr = 7.2
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
@@ -158,10 +158,11 @@ price_k <- c("Soybean", "Rapeseed_oil", "Sunflower_oil",
 extra_price_k = c("Chicken", "Pork") # , "Sheep", 
 SjPj = TRUE
 SkPk = TRUE
+pasture_shares <- FALSE
 fe = "grid_id + country_year"
 distribution = "quasipoisson"
 se = "cluster"
-cluster ="grid_id"
+cluster ="country_name"
 coefstat = "confint"
 output = "coef_table"
 
@@ -173,7 +174,7 @@ output = "coef_table"
 rm(outcome_variable, start_year, end_year, crop_j, j_soy, fcr, price_k, SjPj, SkPk, fe, distribution, output, se, cluster,     controls, regressors)
 
 
- make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
+make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2001, 
                           end_year = 2020, 
                           continent = "all", # one of "Africa", "America", "Asia", or "all"
@@ -185,6 +186,7 @@ rm(outcome_variable, start_year, end_year, crop_j, j_soy, fcr, price_k, SjPj, Sk
                           fcr = 7.8, # feed conversion ratio according to Wilkinson, 2010. 
                           SjPj = TRUE,
                           SkPk = FALSE,
+                          pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
@@ -267,7 +269,7 @@ rm(outcome_variable, start_year, end_year, crop_j, j_soy, fcr, price_k, SjPj, Sk
   ### Keep only variables needed
   # typically removes only aeay of crops that we do not use anyway because they match no price. 
   # and in glass, the sbqt_lu variables. 
-  var2keep <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", "continent_name", outcome_variable, all_crop_aeay)
+  var2keep <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", "continent_name", outcome_variable, all_crop_aeay, "pasture_share")
   d <- dplyr::select(d, all_of(var2keep))
   rm(var2keep)
   ### PREPARE rj, the standardized achievable revenues
@@ -333,6 +335,11 @@ rm(outcome_variable, start_year, end_year, crop_j, j_soy, fcr, price_k, SjPj, Sk
   }else{
     # divide only Revenue of j
     d <- dplyr::mutate(d, !!as.symbol(revenue_j_std) := !!as.symbol(revenue_j)/Ri_sum)
+  }
+  
+  ### If we are in the j = fodder model, AND if we want qj to be proxied with the share of pasture area in 2000, then replace rj with it. 
+  if(revenue_j_std=="R_Fodder_std" & pasture_shares){
+    d$R_Fodder_std <- d$pasture_share
   }
   
   ## Construct the max indicatrice -> stream dj = 1[Rj = maxRi]
@@ -506,6 +513,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           SjPj = TRUE,
                           SkPk = FALSE,
+                          pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
@@ -582,9 +590,14 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   if(outcome_variable == "driven_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))}
   
   # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(c("grid_id", "year", "country_name", "country_year", "continent_name", outcome_variable, 
+  d <- dplyr::select(d, all_of(c("grid_id", "year", "country_name", "country_year", "continent_name", outcome_variable, "pasture_share",
                                suitability_j_std, suitability_k_std))) 
-    
+
+  # If we are in the j = fodder model, AND if we want qj to be proxied with the share of pasture area in 2000, then replace rj with it. 
+  if(suitability_j_std=="Fodder_std" & pasture_shares){
+    d$Fodder_std <- d$pasture_share
+  }
+      
   # and keep only the cells with positive suitability for crop j 
   # Important to do this here, in aesi case, as we divide by sj in main regressor construction
   d <- dplyr::filter(d, !!as.symbol(suitability_j_std) > 0)
@@ -680,6 +693,8 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     d_clean <- d
   }
   
+  rm(d)
+  
   ### REGRESSIONS
   
   if(distribution != "negbin"){ # i.e. if it's poisson or quasipoisson or gaussian
@@ -724,7 +739,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
 
   
-  rm(d, d_clean, reg_res, df_res)
+  rm(d_clean, reg_res, df_res)
   return(toreturn)
   rm(toreturn)
 }
@@ -1686,12 +1701,16 @@ EY <- 2019
 # control_ornot <- c(FALSE, TRUE)
 CTRL <- TRUE
 
-continentS <- "all" # c("America", "Africa", "Asia")
+CNT <- "all" # c("America", "Africa", "Asia")
 
 PI <- "4pya"
 
+# share of pasture area to proxy qj ? 
+SPA <- FALSE
+
 K_extra <- c("Chicken", "Pork")
 
+# clusterS <- list(c("grid_id", "country_year"), "country_name")
 
 ### BEEF
 K_beef <- c("Soybean", 
@@ -1700,15 +1719,18 @@ K_beef <- c("Soybean",
 res_list_beef <- list()
 elm <- 1
 
-for(CNT in continentS){
+for(CLT in clusterS){
   res_list_beef[[elm]] <- make_reg_aeay(price_info = PI,
                                         continent = CNT,
                                         start_year = SY, end_year = EY,
                                              crop_j = "Fodder",
                                              price_k = K_beef,
+                                        # pasture_shares = SPA,
                                              SkPk= CTRL,
-                                             extra_price_k = K_extra)#"Sheep", "Pork", "Chicken"
-  names(res_list_beef)[elm] <- paste0(PI,"_",CNT, "_aeay")
+                                             extra_price_k = K_extra, 
+                                        cluster = c(),
+                                        se = "twoway")#"Sheep", "Pork", "Chicken"
+  names(res_list_beef)[elm] <- paste0(PI,"_",CLT, "_aeay")
   elm <- elm + 1
   
   res_list_beef[[elm]] <- make_reg_aesi(price_info = PI,
@@ -1716,9 +1738,12 @@ for(CNT in continentS){
                                              start_year = SY, end_year = EY,
                                              crop_j = "Fodder",
                                              price_k = K_beef,
+                                        # pasture_shares = SPA,
                                              SkPk= CTRL,
-                                             extra_price_k = K_extra)#"Sheep", "Pork", "Chicken"
-  names(res_list_beef)[elm] <- paste0(PI,"_",CNT, "_aesi")
+                                             extra_price_k = K_extra,
+                                        cluster = c(),
+                                        se = "twoway")#"Sheep", "Pork", "Chicken"
+  names(res_list_beef)[elm] <- paste0(PI,"_",CLT, "_aesi")
   elm <- elm + 1
 }
 
@@ -1734,10 +1759,10 @@ options(knitr.table.format = "latex")
 kable(ape_mat, booktabs = T, align = "r",
       caption = paste0("Indirect effects of global commodity markets on deforestation for cattle, ",SY,"-",EY)) %>% 
   kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1,"PR" = 1,"SI" = 1),
+  add_header_above(c("Estimates" = 1,"PR" = 1,"SI" = 1),
                    bold = F,
                    align = "c") %>%
-  add_header_above(c(" " = 1, "Africa" = 2,"America" = 2, "Asia" = 2),
+  add_header_above(c(" " = 1, "two way clustering" = 2),
                    align = "c",
                    strikeout = F) %>%
   column_spec(column = 1,
@@ -1750,7 +1775,7 @@ kable(ape_mat, booktabs = T, align = "r",
 
 
 ### PALM OIL
-K_oilpalm <- c("Soybean", "Rapeseed_oil", "Sunflower_oil", "Beef",
+K_oilpalm <- c("Soybean", "Rapeseed_oil", "Sunflower_oil",# "Beef",
                "Sugar", "Maize") # in prices spelling. We cannot have "Coconut_oil", because GAEZ yield is only expressed as dry matter and conversion is not possible (see above)
 # "Olive_oil", "Soybean", "Soybean_meal",
 
@@ -1758,15 +1783,17 @@ K_oilpalm <- c("Soybean", "Rapeseed_oil", "Sunflower_oil", "Beef",
 res_list_oilpalm <- list()
 elm <- 1
 
-for(CNT in continentS){
+for(CLT in clusterS){
   res_list_oilpalm[[elm]] <- make_reg_aeay(price_info = PI,
                                            continent = CNT,
                                              start_year = SY, end_year = EY,
                                              crop_j = "Oilpalm",
                                              price_k = K_oilpalm,
                                              SkPk= CTRL,
-                                             extra_price_k = K_extra)#
-  names(res_list_oilpalm)[elm] <- paste0(PI,"_",CNT, "_aeay")
+                                             extra_price_k = K_extra,
+                                           se = "twoway",
+                                           cluster = c())#
+  names(res_list_oilpalm)[elm] <- paste0(PI,"_",CLT, "_aeay")
   elm <- elm + 1
   
   res_list_oilpalm[[elm]] <- make_reg_aesi(price_info = PI,
@@ -1775,8 +1802,10 @@ for(CNT in continentS){
                                              crop_j = "Oilpalm",
                                              price_k = K_oilpalm,
                                              SkPk= CTRL,
-                                             extra_price_k = K_extra)#
-  names(res_list_oilpalm)[elm] <- paste0(PI,"_",CNT, "_aesi")
+                                             extra_price_k = K_extra, 
+                                           se = "twoway",
+                                           cluster = c())#
+  names(res_list_oilpalm)[elm] <- paste0(PI,"_",CLT, "_aesi")
   elm <- elm + 1
 }
 
@@ -1818,15 +1847,17 @@ K_soy <- c("Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Beef",
 res_list_soy <- list()
 elm <- 1
 
-for(CNT in continentS){
+for(CLT in clusterS){
   res_list_soy[[elm]] <- make_reg_aeay(price_info = PI,
                                        continent = CNT,
                                        start_year = SY, end_year = EY,
                                            crop_j = "Soybean",
                                            price_k = K_soy,
                                            extra_price_k = K_extra,
-                                           SkPk= CTRL)#
-  names(res_list_soy)[elm] <- paste0(PI,"_",CNT, "_aeay")
+                                       se = "twoway",
+                                           SkPk= CTRL, 
+                                       cluster = c()) #
+  names(res_list_soy)[elm] <- paste0(PI,"_",CLT, "_aeay")
   elm <- elm + 1
   
   res_list_soy[[elm]] <- make_reg_aesi(price_info = PI,
@@ -1835,8 +1866,10 @@ for(CNT in continentS){
                                            crop_j = "Soybean",
                                            price_k = K_soy,
                                            extra_price_k = K_extra,
-                                           SkPk= CTRL)#
-  names(res_list_soy)[elm] <- paste0(PI,"_",CNT, "_aesi")
+                                       se = "twoway",
+                                           SkPk= CTRL, 
+                                       cluster = c()) #
+  names(res_list_soy)[elm] <- paste0(PI,"_",CLT, "_aesi")
   elm <- elm + 1
 }
 
@@ -1877,15 +1910,17 @@ K_cocoa <- c("Coffee", "Palm_oil", "Rapeseed_oil", "Sunflower_oil", "Sugar") # i
 res_list_cocoa <- list()
 elm <- 1
 
-for(CNT in continentS){
+for(CLT in clusterS){
   res_list_cocoa[[elm]] <- make_reg_aeay(price_info = PI,
                                          continent = CNT,
                                          start_year = SY, end_year = EY,
                                            crop_j = "Cocoa",
                                            price_k = K_cocoa,
                                            SkPk= CTRL,
-                                           extra_price_k = c())#
-  names(res_list_cocoa)[elm] <- paste0(PI,"_",CNT, "_aeay")
+                                           extra_price_k = c(),
+                                         se = "twoway",
+                                         cluster = c())#
+  names(res_list_cocoa)[elm] <- paste0(PI,"_",CLT, "_aeay")
   elm <- elm + 1
   
   res_list_cocoa[[elm]] <- make_reg_aesi(price_info = PI,
@@ -1894,8 +1929,10 @@ for(CNT in continentS){
                                            crop_j = "Cocoa",
                                            price_k = K_cocoa,
                                            SkPk= CTRL,
-                                           extra_price_k = c())#
-  names(res_list_cocoa)[elm] <- paste0(PI,"_",CNT, "_aesi")
+                                           extra_price_k = c(),
+                                         se = "twoway",
+                                         cluster = c())#
+  names(res_list_cocoa)[elm] <- paste0(PI,"_",CLT, "_aesi")
   elm <- elm + 1
 }
 
@@ -1936,15 +1973,17 @@ K_coffee <- c("Tea", "Cocoa", "Sugar", "Tobacco") # in prices spelling
 res_list_coffee <- list()
 elm <- 1
 
-for(CNT in continentS){
+for(CLT in clusterS){
   res_list_coffee[[elm]] <- make_reg_aeay(price_info = PI,
                                           continent = CNT,
                                            start_year = SY, end_year = EY,
                                            crop_j = "Coffee",
                                            price_k = K_coffee,
                                            SkPk= CTRL,
-                                           extra_price_k = c())#
-  names(res_list_coffee)[elm] <- paste0(PI,"_",CNT, "_aeay")
+                                           extra_price_k = c(),
+                                          se = "twoway",
+                                          cluster = c())#
+  names(res_list_coffee)[elm] <- paste0(PI,"_",CLT, "_aeay")
   elm <- elm + 1
   
   res_list_coffee[[elm]] <- make_reg_aesi(price_info = PI,
@@ -1953,8 +1992,10 @@ for(CNT in continentS){
                                            crop_j = "Coffee",
                                            price_k = K_coffee,
                                            SkPk= CTRL,
-                                           extra_price_k = c())#
-  names(res_list_coffee)[elm] <- paste0(PI,"_",CNT, "_aesi")
+                                           extra_price_k = c(),
+                                          se = "twoway",
+                                          cluster = c())#
+  names(res_list_coffee)[elm] <- paste0(PI,"_",CLT, "_aesi")
   elm <- elm + 1
 }
 
@@ -1994,15 +2035,17 @@ K_rubber <- c("Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil",
 res_list_rubber <- list()
 elm <- 1
 
-for(CNT in continentS){
+for(CLT in clusterS){
   res_list_rubber[[elm]] <- make_reg_aeay(price_info = PI,
                                           continent = CNT,
                                           start_year = SY, end_year = EY,
                                           crop_j = "Rubber",
                                           price_k = K_rubber,
                                           SkPk= CTRL,
-                                          extra_price_k = c())#
-  names(res_list_rubber)[elm] <- paste0(PI,"_",CNT, "_aeay")
+                                          extra_price_k = c(), 
+                                          se = "twoway",
+                                          cluster = c())#
+  names(res_list_rubber)[elm] <- paste0(PI,"_",CLT, "_aeay")
   elm <- elm + 1
   
   res_list_rubber[[elm]] <- make_reg_aesi(price_info = PI,
@@ -2011,8 +2054,10 @@ for(CNT in continentS){
                                           crop_j = "Rubber",
                                           price_k = K_rubber,
                                           SkPk= CTRL,
-                                          extra_price_k = c())#
-  names(res_list_rubber)[elm] <- paste0(PI,"_",CNT, "_aesi")
+                                          extra_price_k = c(), 
+                                          se = "twoway",
+                                          cluster = c())#
+  names(res_list_rubber)[elm] <- paste0(PI,"_",CLT, "_aesi")
   elm <- elm + 1
 }
 

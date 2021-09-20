@@ -45,6 +45,14 @@ source("code/prepare_loss_drivers.R")
 #        - "temp_data/GAEZ/AES_index_value/Rain-fed/High-input/Alfalfa.tif"
 # Outputs: - all what is in "temp_data/processed_lossdrivers/tropical_aoi"
 
+source("code/prepare_pasture2000.R")
+# Inputs: - "input_data/CroplandPastureArea2000_Geotiff/Pasture2000_5m.tif" downloaded from http://www.earthstat.org/
+#        - "temp_data/GAEZ/AES_index_value/Rain-fed/High-input/Alfalfa.tif"
+# Outputs:  - "temp_data/processed_pasture2000/tropical_aoi/pasture_4_driverloss_df.Rdata"
+
+
+
+
 # Merge each outcome variable individual dataset with gaez Agro-Ecological Suitability Index (aesi)
 source("code/merge_aesi.R")
 # Inputs: - "temp_data/GAEZ/AES_index_value/Rain-fed/high_input_all.tif"
@@ -101,12 +109,14 @@ source("code/add_variables.R")
 # Inputs: - datasets in "temp_data/merged_datasets/tropical_aoi"
 #         - everything in "temp_data/GAEZ/AES_index_value/Rain-fed/High-input"
 #         - "input_data/Global_LSIB_Polygons_Detailed"
+#         - "temp_data/processed_pasture2000/tropical_aoi/pasture_4_driverloss_df.Rdata"
 # Outputs: - "temp_data/merged_datasets/tropical_aoi/glass_aesi_long_final.Rdata"
 #          - "temp_data/merged_datasets/tropical_aoi/firstloss8320_aesi_long_final.Rdata"
 #          - "temp_data/merged_datasets/tropical_aoi/phtfloss_aesi_long_final.Rdata" 
 #          - "temp_data/merged_datasets/tropical_aoi/glass_acay_long_final.Rdata"
 #          - "temp_data/merged_datasets/tropical_aoi/firstloss8320_acay_long_final.Rdata"
 #          - "temp_data/merged_datasets/tropical_aoi/phtfloss_acay_long_final.Rdata" 
+
 
 
 source("code/final_analyses.R")
