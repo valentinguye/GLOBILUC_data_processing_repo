@@ -85,6 +85,7 @@ lapply(neededPackages, library, character.only = TRUE)
 
 if(FALSE){
   # NOT RUN
+  library(devtools)
   library(data.table)
   library(plyr)
   library(tidyr)
@@ -118,6 +119,7 @@ if(FALSE){
   #library(ExPanDaR)
   library(DataCombine)
   library(fixest)
+  library(stars)
   library(ggplot2)
   #library(doBy)
   library(lubridate)
@@ -128,8 +130,13 @@ if(FALSE){
   library(tmap)
 }
 
+# necessary currently because renv changes the downloaded method at every new session to curl... 
+if(renv:::renv_download_method() != getOption("download.file.method")){
+  Sys.setenv(RENV_DOWNLOAD_METHOD = getOption("download.file.method"))
+}
+
 # If new packages are needed along the project data processing workflow, one should: 
-new_pck <- c("tmap")
+new_pck <- c("devtools")
 # 1. install the packages in the project library (the default if you are within the project)
 install.packages(new_pck)
 # devtools::install_github("julianhinz/R_glmhdfe")
@@ -141,6 +148,8 @@ renv::snapshot()
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
+### or to update 
+renv::update("fixest", check = T)
 
 #### DEPRECATED 
 # Deprecated way to deal with renv::restore() failure for some packages. 

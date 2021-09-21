@@ -142,7 +142,7 @@ end_year = 2019
 continent = "all"
 price_info = "4pya"
 further_lu_evidence = "none"
-crop_j = "Fodder"
+crop_j = "Oilpalm"
 j_soy = "Soybean"
 fcr = 7.2
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
@@ -161,8 +161,10 @@ SkPk = TRUE
 pasture_shares <- FALSE
 fe = "grid_id + country_year"
 distribution = "quasipoisson"
+conley = TRUE
+conley_cutoff <- 100
 se = "cluster"
-cluster ="country_name"
+cluster ="grid_id"
 coefstat = "confint"
 output = "coef_table"
 
@@ -190,10 +192,12 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
+                          conley = FALSE,
+                          conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if conley is TRUE 
                           se = "cluster", 
                           cluster ="grid_id",
                           # coefstat = "confint", # one of "se", "tstat", "confint"
-                          output = "coef_table" # one of "data", "est_obj", "coef_table" 
+                          output = "est_obj" # one of "data", "est_obj", "coef_table" 
 ){
   
   
@@ -269,7 +273,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   ### Keep only variables needed
   # typically removes only aeay of crops that we do not use anyway because they match no price. 
   # and in glass, the sbqt_lu variables. 
-  var2keep <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", "continent_name", outcome_variable, all_crop_aeay, "pasture_share")
+  var2keep <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", outcome_variable, all_crop_aeay, "pasture_share")
   d <- dplyr::select(d, all_of(var2keep))
   rm(var2keep)
   ### PREPARE rj, the standardized achievable revenues
@@ -347,7 +351,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   #                              .names = paste0("{.col}", "_max")))
 
   # Keep only usefull variables
-  vars <- c("grid_id", "year", "lon", "lat", "country_name", "country_year", "continent_name", outcome_variable, 
+  vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", outcome_variable, 
               names(d)[grepl(pattern ="_std", x= names(d))])
   d <- dplyr::select(d, all_of(vars))
   rm(vars)
@@ -420,7 +424,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   # # - have a lu_evidence 
   # d <- dplyr::filter(d, lu_evidence)
   
-  used_vars <- c("grid_id", "year", "country_name", "country_year", "continent_name",
+  used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
                  outcome_variable, regressors, controls)
   
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
@@ -468,27 +472,32 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
   # this is necessary to compute SE as we want to.  
-  df_res <- summary(reg_res, se = se,
-                    cluster = cluster)$coeftable
-  
-  # ci <- confint(reg_res, se =se, cluster = cluster, level = 0.95)   
-  # 
-  # df_res <- cbind(df_res, ci)
-  
-  # add a column with the number of observations
-  df_res$Observations <- reg_res$nobs
-  # mat[row.names(mat)=="Observations",] <- mat[row.names(mat)=="Observations",] %>% formatC(digits = 0, format = "f")
-  
-  # add a row with the number of clusters
-  df_res$Clusters <- length(unique(d_clean[,cluster]))
-  # mat[row.names(mat)=="Clusters",] <- mat[row.names(mat)=="Clusters",] %>% formatC(digits = 0, format = "f")
+  if(conley){
+    sum_res <- summary(reg_res,
+                       vcov = vcov_conley(lat = "lat", lon = "lon", cutoff = conley_cutoff, distance = "spherical"))
+    
+    df_res <- sum_res$coeftable %>% as.data.frame()
+    # add a column with the number of observations
+    df_res$Observations <- sum_res$nobs
+    df_res$`Standard errors` <- paste0("Conley (",conley_cutoff,"km)")
+    
+    
+  }else{
+    sum_res <- summary(reg_res,
+                       vcov = se)
+    
+    df_res <- sum_res$coeftable %>% as.data.frame()
+    # add a column with the number of observations
+    df_res$Observations <- sum_res$nobs
+    df_res$`Standard errors` <- "Clustered"
+  }
   
   
   if(output == "data"){
     toreturn <- list(reg_res, d_clean)
   }
   if(output == "est_obj"){
-    toreturn <- reg_res
+    toreturn <- sum_res
   }
   if(output == "coef_table"){
     toreturn <- df_res
@@ -517,10 +526,12 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
+                          conley = FALSE,
+                          conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if conley is TRUE 
                           se = "cluster", 
                           cluster ="grid_id",
                           # coefstat = "confint", # one of "se", "tstat", "confint"
-                          output = "coef_table" # one of "data", "est_obj", "coef_table" 
+                          output = "est_obj" # one of "data", "est_obj", "coef_table" 
                           ){
 
   #### PREPARE NEEDED VARIABLE NAMES
@@ -590,7 +601,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   if(outcome_variable == "driven_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))}
   
   # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(c("grid_id", "year", "country_name", "country_year", "continent_name", outcome_variable, "pasture_share",
+  d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", outcome_variable, "pasture_share",
                                suitability_j_std, suitability_k_std))) 
 
   # If we are in the j = fodder model, AND if we want qj to be proxied with the share of pasture area in 2000, then replace rj with it. 
@@ -664,7 +675,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     d <- dplyr::filter(d, continent_name == continent)
   }
   
-  used_vars <- c("grid_id", "year", "country_name", "country_year",  "continent_name",
+  used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year",  "continent_name",
                  outcome_variable, regressors, controls)
   
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
@@ -712,19 +723,33 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
   # this is necessary to compute SE as we want to.  
-  df_res <- summary(reg_res, se = se,
-                    cluster = cluster)$coeftable
+  if(conley){
+    sum_res <- summary(reg_res,
+                      vcov = vcov_conley(lat = "lat", lon = "lon", cutoff = conley_cutoff, distance = "spherical"))
+    
+    df_res <- sum_res$coeftable %>% as.data.frame()
+    # add a column with the number of observations
+    df_res$Observations <- sum_res$nobs
+    df_res$`Standard errors` <- paste0("Conley (",conley_cutoff,"km)")
+  
+  
+  }else{
+    sum_res <- summary(reg_res,
+                      vcov = se)
+    
+    df_res <- sum_res$coeftable %>% as.data.frame()
+    # add a column with the number of observations
+    df_res$Observations <- sum_res$nobs
+    df_res$`Standard errors` <- "Clustered"
+  }
+
   
   # ci <- confint(reg_res, se =se, cluster = cluster, level = 0.95)   
   # 
   # df_res <- cbind(df_res, ci)
   
-  # add a column with the number of observations
-  df_res$Observations <- reg_res$nobs
   # mat[row.names(mat)=="Observations",] <- mat[row.names(mat)=="Observations",] %>% formatC(digits = 0, format = "f")
   
-  # add a row with the number of clusters
-  df_res$Clusters <- length(unique(d_clean[,cluster]))
   # mat[row.names(mat)=="Clusters",] <- mat[row.names(mat)=="Clusters",] %>% formatC(digits = 0, format = "f")
   
   
@@ -732,7 +757,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     toreturn <- list(reg_res, d_clean)
   }
   if(output == "est_obj"){
-    toreturn <- reg_res
+    toreturn <- sum_res
   }
   if(output == "coef_table"){
     toreturn <- df_res
@@ -1727,9 +1752,7 @@ for(CLT in clusterS){
                                              price_k = K_beef,
                                         # pasture_shares = SPA,
                                              SkPk= CTRL,
-                                             extra_price_k = K_extra, 
-                                        cluster = c(),
-                                        se = "twoway")#"Sheep", "Pork", "Chicken"
+                                             extra_price_k = K_extra)#"Sheep", "Pork", "Chicken"
   names(res_list_beef)[elm] <- paste0(PI,"_",CLT, "_aeay")
   elm <- elm + 1
   
@@ -1740,9 +1763,7 @@ for(CLT in clusterS){
                                              price_k = K_beef,
                                         # pasture_shares = SPA,
                                              SkPk= CTRL,
-                                             extra_price_k = K_extra,
-                                        cluster = c(),
-                                        se = "twoway")#"Sheep", "Pork", "Chicken"
+                                             extra_price_k = K_extra)#"Sheep", "Pork", "Chicken"
   names(res_list_beef)[elm] <- paste0(PI,"_",CLT, "_aesi")
   elm <- elm + 1
 }
