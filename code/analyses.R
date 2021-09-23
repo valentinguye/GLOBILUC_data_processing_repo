@@ -65,13 +65,21 @@ getFixest_nthreads()
 setFixest_dict(c(grid_id = "grid cell",
                  country_name = "country",
                  country_year = "country*year", 
+                 driven_loss = "Forest loss",
                  first_loss = "First forest loss",
                  Soybean_meal = "Soybean meal",
                  Soybean_oil = "Soybean oil",
                  Olive_oil = "Olive oil",
                  Rapeseed_oil = "Rapeseed oil",
                  Sunflower_oil = "Sunflower oil",
-                 Coconut_oil = "Coconut oil"))
+                 Coconut_oil = "Coconut oil", 
+                 Fodder_X_Beef = "Beef", Fodder_X_Soybean = "Soybean", Fodder_X_Maize = "Maize", Fodder_X_Wheat = "Wheat", Fodder_X_Barley = "Barley", Fodder_X_Oat = "Oat", Fodder_X_Chicken = "Chicken", Fodder_X_Pork = "Pork", Fodder_X_Palm_oil = "Oil palm",Fodder_X_Rapeseed_oil = "Rapeseed oil",Fodder_X_Sunflower_oil = "Sunflower oil", 
+                 Oilpalm_X_Beef = "Beef", Oilpalm_X_Soybean = "Soybean", Oilpalm_X_Maize = "Maize", Oilpalm_X_Wheat = "Wheat", Oilpalm_X_Barley = "Barley", Oilpalm_X_Oat = "Oat", Oilpalm_X_Chicken = "Chicken", Oilpalm_X_Pork = "Pork", Oilpalm_X_Palm_oil = "Oil palm", Oilpalm_X_Sugar = "Sugar",Oilpalm_X_Rapeseed_oil = "Rapeseed oil",Oilpalm_X_Sunflower_oil = "Sunflower oil",
+                 Soybean_X_Beef = "Beef", Soybean_X_Soybean = "Soybean", Soybean_X_Maize = "Maize", Soybean_X_Wheat = "Wheat", Soybean_X_Barley = "Barley", Soybean_X_Oat = "Oat", Soybean_X_Chicken = "Chicken", Soybean_X_Pork = "Pork", Soybean_X_Palm_oil = "Oil palm", Soybean_X_Sugar = "Sugar",Soybean_X_Rapeseed_oil = "Rapeseed oil",Soybean_X_Sunflower_oil = "Sunflower oil",
+                 Cocoa_X_Beef = "Beef", Cocoa_X_Soybean = "Soybean", Cocoa_X_Maize = "Maize", Cocoa_X_Wheat = "Wheat", Cocoa_X_Barley = "Barley", Cocoa_X_Oat = "Oat", Cocoa_X_Chicken = "Chicken", Cocoa_X_Pork = "Pork", Cocoa_X_Palm_oil = "Oil palm", Cocoa_X_Sugar = "Sugar",Cocoa_X_Rapeseed_oil = "Rapeseed oil",Cocoa_X_Sunflower_oil = "Sunflower oil",
+                 Coffee_X_Beef = "Beef", Coffee_X_Soybean = "Soybean", Coffee_X_Maize = "Maize", Coffee_X_Wheat = "Wheat", Coffee_X_Barley = "Barley", Coffee_X_Oat = "Oat", Coffee_X_Chicken = "Chicken", Coffee_X_Pork = "Pork", Coffee_X_Palm_oil = "Oil palm", Coffee_X_Sugar = "Sugar", Coffee_X_Rapeseed_oil = "Rapeseed oil", Coffee_X_Sunflower_oil = "Sunflower oil",
+                 Rubber_X_Beef = "Beef", Rubber_X_Soybean = "Soybean", Rubber_X_Maize = "Maize", Rubber_X_Wheat = "Wheat", Rubber_X_Barley = "Barley", Rubber_X_Oat = "Oat", Rubber_X_Chicken = "Chicken", Rubber_X_Pork = "Pork", Rubber_X_Palm_oil = "Oil palm", Rubber_X_Sugar = "Sugar", Rubber_X_Rapeseed_oil = "Rapeseed oil", Rubber_X_Sunflower_oil = "Sunflower oil",
+                 ))
 
 
 ### GLOBAL CRS USED ### 
@@ -1735,6 +1743,8 @@ SPA <- FALSE
 
 K_extra <- c("Chicken", "Pork")
 
+cutoffS <- c(50)#, 100, 500
+
 # clusterS <- list(c("grid_id", "country_year"), "country_name")
 
 ### BEEF
@@ -1744,7 +1754,7 @@ K_beef <- c("Soybean",
 res_list_beef <- list()
 elm <- 1
 
-for(CLT in clusterS){
+for(COF in cutoffS){
   res_list_beef[[elm]] <- make_reg_aeay(price_info = PI,
                                         continent = CNT,
                                         start_year = SY, end_year = EY,
@@ -1752,8 +1762,10 @@ for(CLT in clusterS){
                                              price_k = K_beef,
                                         # pasture_shares = SPA,
                                              SkPk= CTRL,
-                                             extra_price_k = K_extra)#"Sheep", "Pork", "Chicken"
-  names(res_list_beef)[elm] <- paste0(PI,"_",CLT, "_aeay")
+                                             extra_price_k = K_extra,
+                                        conley = TRUE,
+                                        conley_cutoff = COF)#"Sheep", "Pork", "Chicken"
+  names(res_list_beef)[elm] <- paste0(PI,"_",COF, "_aeay")
   elm <- elm + 1
   
   res_list_beef[[elm]] <- make_reg_aesi(price_info = PI,
@@ -1763,8 +1775,10 @@ for(CLT in clusterS){
                                              price_k = K_beef,
                                         # pasture_shares = SPA,
                                              SkPk= CTRL,
-                                             extra_price_k = K_extra)#"Sheep", "Pork", "Chicken"
-  names(res_list_beef)[elm] <- paste0(PI,"_",CLT, "_aesi")
+                                             extra_price_k = K_extra,
+                                        conley = TRUE,
+                                        conley_cutoff = COF)#"Sheep", "Pork", "Chicken"
+  names(res_list_beef)[elm] <- paste0(PI,"_",COF, "_aesi")
   elm <- elm + 1
 }
 
