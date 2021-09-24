@@ -73,12 +73,12 @@ setFixest_dict(c(grid_id = "grid cell",
                  Rapeseed_oil = "Rapeseed oil",
                  Sunflower_oil = "Sunflower oil",
                  Coconut_oil = "Coconut oil", 
-                 Fodder_X_Beef = "Beef", Fodder_X_Soybean = "Soybean", Fodder_X_Maize = "Maize", Fodder_X_Wheat = "Wheat", Fodder_X_Barley = "Barley", Fodder_X_Oat = "Oat", Fodder_X_Chicken = "Chicken", Fodder_X_Pork = "Pork", Fodder_X_Palm_oil = "Oil palm",Fodder_X_Rapeseed_oil = "Rapeseed oil",Fodder_X_Sunflower_oil = "Sunflower oil", 
-                 Oilpalm_X_Beef = "Beef", Oilpalm_X_Soybean = "Soybean", Oilpalm_X_Maize = "Maize", Oilpalm_X_Wheat = "Wheat", Oilpalm_X_Barley = "Barley", Oilpalm_X_Oat = "Oat", Oilpalm_X_Chicken = "Chicken", Oilpalm_X_Pork = "Pork", Oilpalm_X_Palm_oil = "Oil palm", Oilpalm_X_Sugar = "Sugar",Oilpalm_X_Rapeseed_oil = "Rapeseed oil",Oilpalm_X_Sunflower_oil = "Sunflower oil",
-                 Soybean_X_Beef = "Beef", Soybean_X_Soybean = "Soybean", Soybean_X_Maize = "Maize", Soybean_X_Wheat = "Wheat", Soybean_X_Barley = "Barley", Soybean_X_Oat = "Oat", Soybean_X_Chicken = "Chicken", Soybean_X_Pork = "Pork", Soybean_X_Palm_oil = "Oil palm", Soybean_X_Sugar = "Sugar",Soybean_X_Rapeseed_oil = "Rapeseed oil",Soybean_X_Sunflower_oil = "Sunflower oil",
-                 Cocoa_X_Beef = "Beef", Cocoa_X_Soybean = "Soybean", Cocoa_X_Maize = "Maize", Cocoa_X_Wheat = "Wheat", Cocoa_X_Barley = "Barley", Cocoa_X_Oat = "Oat", Cocoa_X_Chicken = "Chicken", Cocoa_X_Pork = "Pork", Cocoa_X_Palm_oil = "Oil palm", Cocoa_X_Sugar = "Sugar",Cocoa_X_Rapeseed_oil = "Rapeseed oil",Cocoa_X_Sunflower_oil = "Sunflower oil",
-                 Coffee_X_Beef = "Beef", Coffee_X_Soybean = "Soybean", Coffee_X_Maize = "Maize", Coffee_X_Wheat = "Wheat", Coffee_X_Barley = "Barley", Coffee_X_Oat = "Oat", Coffee_X_Chicken = "Chicken", Coffee_X_Pork = "Pork", Coffee_X_Palm_oil = "Oil palm", Coffee_X_Sugar = "Sugar", Coffee_X_Rapeseed_oil = "Rapeseed oil", Coffee_X_Sunflower_oil = "Sunflower oil",
-                 Rubber_X_Beef = "Beef", Rubber_X_Soybean = "Soybean", Rubber_X_Maize = "Maize", Rubber_X_Wheat = "Wheat", Rubber_X_Barley = "Barley", Rubber_X_Oat = "Oat", Rubber_X_Chicken = "Chicken", Rubber_X_Pork = "Pork", Rubber_X_Palm_oil = "Oil palm", Rubber_X_Sugar = "Sugar", Rubber_X_Rapeseed_oil = "Rapeseed oil", Rubber_X_Sunflower_oil = "Sunflower oil",
+                 Fodder_X_Beef = "Beef", Fodder_X_Soybean = "Soybean", Fodder_X_Maize = "Maize", Fodder_X_Sugar = "Sugar", Fodder_X_Wheat = "Wheat", Fodder_X_Barley = "Barley", Fodder_X_Oat = "Oat", Fodder_X_Chicken = "Chicken", Fodder_X_Pork = "Pork", Fodder_X_Palm_oil = "Palm oil",Fodder_X_Rapeseed_oil = "Rapeseed oil",Fodder_X_Sunflower_oil = "Sunflower oil", 
+                 Oilpalm_X_Beef = "Beef", Oilpalm_X_Soybean = "Soybean", Oilpalm_X_Maize = "Maize", Oilpalm_X_Wheat = "Wheat", Oilpalm_X_Barley = "Barley", Oilpalm_X_Oat = "Oat", Oilpalm_X_Chicken = "Chicken", Oilpalm_X_Pork = "Pork", Oilpalm_X_Palm_oil = "Palm oil", Oilpalm_X_Sugar = "Sugar",Oilpalm_X_Rapeseed_oil = "Rapeseed oil",Oilpalm_X_Sunflower_oil = "Sunflower oil",
+                 Soybean_X_Beef = "Beef", Soybean_X_Soybean = "Soybean", Soybean_X_Maize = "Maize", Soybean_X_Wheat = "Wheat", Soybean_X_Barley = "Barley", Soybean_X_Oat = "Oat", Soybean_X_Chicken = "Chicken", Soybean_X_Pork = "Pork", Soybean_X_Palm_oil = "Palm oil", Soybean_X_Sugar = "Sugar",Soybean_X_Rapeseed_oil = "Rapeseed oil",Soybean_X_Sunflower_oil = "Sunflower oil",
+                 Cocoa_X_Cocoa = "Cocoa", Cocoa_X_Coffee = "Coffee", Cocoa_X_Beef = "Beef", Cocoa_X_Soybean = "Soybean", Cocoa_X_Maize = "Maize", Cocoa_X_Wheat = "Wheat", Cocoa_X_Barley = "Barley", Cocoa_X_Oat = "Oat", Cocoa_X_Chicken = "Chicken", Cocoa_X_Pork = "Pork", Cocoa_X_Palm_oil = "Palm oil", Cocoa_X_Sugar = "Sugar",Cocoa_X_Rapeseed_oil = "Rapeseed oil",Cocoa_X_Sunflower_oil = "Sunflower oil",
+                 Coffee_X_Coffee = "Coffee", Coffee_X_Cocoa = "Cocoa", Coffee_X_Tea = "Tea", Coffee_X_Tobacco = "Tobacco",  Coffee_X_Beef = "Beef", Coffee_X_Soybean = "Soybean", Coffee_X_Maize = "Maize", Coffee_X_Wheat = "Wheat", Coffee_X_Barley = "Barley", Coffee_X_Oat = "Oat", Coffee_X_Chicken = "Chicken", Coffee_X_Pork = "Pork", Coffee_X_Palm_oil = "Palm oil", Coffee_X_Sugar = "Sugar", Coffee_X_Rapeseed_oil = "Rapeseed oil", Coffee_X_Sunflower_oil = "Sunflower oil",
+                 Rubber_X_Rubber = "Rubber", Rubber_X_Beef = "Beef", Rubber_X_Soybean = "Soybean", Rubber_X_Maize = "Maize", Rubber_X_Wheat = "Wheat", Rubber_X_Barley = "Barley", Rubber_X_Oat = "Oat", Rubber_X_Chicken = "Chicken", Rubber_X_Pork = "Pork", Rubber_X_Palm_oil = "Palm oil", Rubber_X_Sugar = "Sugar", Rubber_X_Rapeseed_oil = "Rapeseed oil", Rubber_X_Sunflower_oil = "Sunflower oil"
                  ))
 
 
@@ -148,15 +148,14 @@ outcome_variable = "driven_loss" # "nd_first_loss", "first_loss", "firstloss_gla
 start_year = 2001
 end_year = 2019
 continent = "all"
-price_info = "4pya"
+price_info = "3pya"
 further_lu_evidence = "none"
 crop_j = "Oilpalm"
 j_soy = "Soybean"
 fcr = 7.2
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
 # but maybe not with skPk controls.
-price_k <- c("Soybean", "Rapeseed_oil", "Sunflower_oil",
-             "Sugar", "Maize")
+price_k <- c("Beef", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Maize", "Sugar")
 # c( "Sugar", "Maize")
 # "Barley",  "Chicken", "Sheep", "Banana", "Beef", "Olive_oil",
 #               "Orange",  "Cotton",  "Groundnut",  "Rubber", "Sorghum","Cocoa",  "Coffee",
@@ -169,11 +168,10 @@ SkPk = TRUE
 pasture_shares <- FALSE
 fe = "grid_id + country_year"
 distribution = "quasipoisson"
-conley = TRUE
 conley_cutoff <- 100
-se = "cluster"
+se = "twoway"
 cluster ="grid_id"
-coefstat = "confint"
+#coefstat = "confint"
 output = "coef_table"
 
 # "Banana", "Barley", "Beef",
@@ -192,17 +190,16 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           crop_j = "Oilpalm", # in GAEZ spelling
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
-                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
+                          price_info = "3pya", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           fcr = 7.8, # feed conversion ratio according to Wilkinson, 2010. 
                           SjPj = TRUE,
-                          SkPk = FALSE,
+                          SkPk = TRUE,
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
-                          conley = FALSE,
-                          conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if conley is TRUE 
-                          se = "cluster", 
+                          se = "twoway", # passed to vcov argument in fixest::summary. Currently, one of "cluster", "twoway", or "conley".  
+                          conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if se = "conley"  
                           cluster ="grid_id",
                           # coefstat = "confint", # one of "se", "tstat", "confint"
                           output = "est_obj" # one of "data", "est_obj", "coef_table" 
@@ -480,27 +477,35 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
   # this is necessary to compute SE as we want to.  
-  if(conley){
+  if(se == "conley"){
     sum_res <- summary(reg_res,
                        vcov = vcov_conley(lat = "lat", lon = "lon", cutoff = conley_cutoff, distance = "spherical"))
     
-    df_res <- sum_res$coeftable %>% as.data.frame()
-    # add a column with the number of observations
-    df_res$Observations <- sum_res$nobs
-    df_res$`Standard errors` <- paste0("Conley (",conley_cutoff,"km)")
-    
-    
-  }else{
+    # store info on SE method
+    se_info <- paste0("Conley (",conley_cutoff,"km)")
+  }
+  if(se == "twoway"){
+    # " If the two variables were used as fixed-effects in the estimation, 
+    # you can leave it blank with vcov = "twoway""
     sum_res <- summary(reg_res,
                        vcov = se)
     
-    df_res <- sum_res$coeftable %>% as.data.frame()
-    # add a column with the number of observations
-    df_res$Observations <- sum_res$nobs
-    df_res$`Standard errors` <- "Clustered"
+    se_info <- "Clustered (grid cell - country*year"
+  }
+  if(se == "cluster"){
+    sum_res <- summary(reg_res,
+                       vcov = se, 
+                       cluster = cluster)
+  
+    se_info <- paste0("Clustered (",cluster,")")
   }
   
+  df_res <- sum_res$coeftable %>% as.data.frame()
+  # add a column with the number of observations
+  df_res$Observations <- sum_res$nobs
+  df_res$`Standard errors` <- se_info
   
+  # output wanted
   if(output == "data"){
     toreturn <- list(reg_res, d_clean)
   }
@@ -527,16 +532,15 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           crop_j = "Oilpalm", # in GAEZ spelling
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
-                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
+                          price_info = "3pya", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           SjPj = TRUE,
-                          SkPk = FALSE,
+                          SkPk = TRUE,
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
-                          conley = FALSE,
-                          conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if conley is TRUE 
-                          se = "cluster", 
+                          se = "twoway", # passed to vcov argument in fixest::summary. Currently, one of "cluster", "twoway", or "conley".  
+                          conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if se = "conley"  
                           cluster ="grid_id",
                           # coefstat = "confint", # one of "se", "tstat", "confint"
                           output = "est_obj" # one of "data", "est_obj", "coef_table" 
@@ -731,36 +735,35 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
   # this is necessary to compute SE as we want to.  
-  if(conley){
+  if(se == "conley"){
     sum_res <- summary(reg_res,
-                      vcov = vcov_conley(lat = "lat", lon = "lon", cutoff = conley_cutoff, distance = "spherical"))
+                       vcov = vcov_conley(lat = "lat", lon = "lon", cutoff = conley_cutoff, distance = "spherical"))
     
-    df_res <- sum_res$coeftable %>% as.data.frame()
-    # add a column with the number of observations
-    df_res$Observations <- sum_res$nobs
-    df_res$`Standard errors` <- paste0("Conley (",conley_cutoff,"km)")
-  
-  
-  }else{
-    sum_res <- summary(reg_res,
-                      vcov = se)
-    
-    df_res <- sum_res$coeftable %>% as.data.frame()
-    # add a column with the number of observations
-    df_res$Observations <- sum_res$nobs
-    df_res$`Standard errors` <- "Clustered"
+    # store info on SE method
+    se_info <- paste0("Conley (",conley_cutoff,"km)")
   }
-
+  if(se == "twoway"){
+    # " If the two variables were used as fixed-effects in the estimation, 
+    # you can leave it blank with vcov = "twoway""
+    sum_res <- summary(reg_res,
+                       vcov = se)
+    
+    se_info <- "Clustered (grid cell - country*year"
+  }
+  if(se == "cluster"){
+    sum_res <- summary(reg_res,
+                       vcov = se, 
+                       cluster = cluster)
+    
+    se_info <- paste0("Clustered (",cluster,")")
+  }
   
-  # ci <- confint(reg_res, se =se, cluster = cluster, level = 0.95)   
-  # 
-  # df_res <- cbind(df_res, ci)
+  df_res <- sum_res$coeftable %>% as.data.frame()
+  # add a column with the number of observations
+  df_res$Observations <- sum_res$nobs
+  df_res$`Standard errors` <- se_info
   
-  # mat[row.names(mat)=="Observations",] <- mat[row.names(mat)=="Observations",] %>% formatC(digits = 0, format = "f")
-  
-  # mat[row.names(mat)=="Clusters",] <- mat[row.names(mat)=="Clusters",] %>% formatC(digits = 0, format = "f")
-  
-  
+  # output wanted
   if(output == "data"){
     toreturn <- list(reg_res, d_clean)
   }
@@ -1719,13 +1722,255 @@ tm_shape(accu_0115[accu_0115$main_driver!="none",]) +
           convert2density = TRUE, area = "accu_main_driver")  
 
 
+
+
+
+
+#### MAIN TABLE #### 
+crop_prices <- list("Fodder" = c("Soybean", "Palm_oil", "Maize", "Sugar", "Wheat", "Barley", "Oat"), 
+                 "Soybean" = c("Beef", "Palm_oil", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar"),
+                 "Oilpalm" = c("Beef", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Maize", "Sugar"),
+                 "Cocoa" = c("Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Sugar", "Coffee"),
+                 "Coffee" = c("Cocoa", "Tea", "Sugar", "Tobacco"),
+                 "Rubber" = c("Beef", "Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar", "Wheat", "Barley", "Oat")
+                  )
+
+res_list_main <- list()
+elm <- 1
+
+for(j_crop in names(crop_prices)){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+
+  res_list_main[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                        price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                        extra_price_k = K_extra
+                                        )
+  names(res_list_main)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
+
+etable(res_list_main, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, 2001-2019"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+
+### OVER CONTINENTS ### 
+continentS <- c("America", "Africa", "Asia", "all")
+
+# Make one table for eachc j-crop
+
+## Fodder 
+K_extra <- c("Chicken", "Pork")
+res_list_fodder_cnt <- list()
+elm <- 1
+for(CNT in continentS){
+  res_list_fodder_cnt[[elm]] <- make_reg_aeay(crop_j = "Fodder",
+                                        price_k = crop_prices[["Fodder"]],
+                                        extra_price_k = K_extra, 
+                                        continent = CNT
+  )
+  names(res_list_fodder_cnt)[elm] <- paste0("Fodder_", CNT)
+  elm <- elm + 1
+}
+
+etable(res_list_fodder_cnt, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on deforestation for pasture, 2001-2019, by continents"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       headers = list(Area = continentS),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_fodder_cnt)
+
+## Soybean 
+K_extra <- c("Chicken", "Pork")
+res_list_soybean_cnt <- list()
+elm <- 1
+for(CNT in continentS){
+  res_list_soybean_cnt[[elm]] <- make_reg_aeay(crop_j = "Soybean",
+                                               price_k = crop_prices[["Soybean"]],
+                                               extra_price_k = K_extra, 
+                                               continent = CNT
+  )
+  names(res_list_soybean_cnt)[elm] <- paste0("Soybean_", CNT)
+  elm <- elm + 1
+}
+
+etable(res_list_soybean_cnt, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on deforestation for soybean, 2001-2019, by continents"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       headers = list(Area = continentS),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_soybean_cnt)
+
+## Oilpalm 
+K_extra <- c("Chicken", "Pork")
+res_list_oilpalm_cnt <- list()
+elm <- 1
+for(CNT in continentS){
+  res_list_oilpalm_cnt[[elm]] <- make_reg_aeay(crop_j = "Oilpalm",
+                                        price_k = crop_prices[["Oilpalm"]],
+                                        extra_price_k = K_extra, 
+                                        continent = CNT
+  )
+  names(res_list_oilpalm_cnt)[elm] <- paste0("Oilpalm_", CNT)
+  elm <- elm + 1
+}
+
+etable(res_list_oilpalm_cnt, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on deforestation for palm oil, 2001-2019, by continents"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       headers = list(Area = continentS),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_oilpalm_cnt)
+
+
+## Cocoa 
+K_extra <- c()
+res_list_cocoa_cnt <- list()
+elm <- 1
+for(CNT in continentS){
+  res_list_cocoa_cnt[[elm]] <- make_reg_aeay(crop_j = "Cocoa",
+                                        price_k = crop_prices[["Cocoa"]],
+                                        extra_price_k = K_extra, 
+                                        continent = CNT
+  )
+  names(res_list_cocoa_cnt)[elm] <- paste0("Cocoa_", CNT)
+  elm <- elm + 1
+}
+
+etable(res_list_cocoa_cnt, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on deforestation for cocoa, 2001-2019, by continents"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       headers = list(Area = continentS),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_cocoa_cnt)
+
+## Coffee 
+K_extra <- c()
+res_list_coffee_cnt <- list()
+elm <- 1
+for(CNT in continentS){
+  res_list_coffee_cnt[[elm]] <- make_reg_aeay(crop_j = "Coffee",
+                                              price_k = crop_prices[["Coffee"]],
+                                              extra_price_k = K_extra, 
+                                              continent = CNT
+  )
+  names(res_list_coffee_cnt)[elm] <- paste0("Coffee_", CNT)
+  elm <- elm + 1
+}
+
+etable(res_list_coffee_cnt, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on deforestation for coffee, 2001-2019, by continents"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       headers = list(Area = continentS),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_coffee_cnt)
+
+## Rubber 
+K_extra <- c()
+res_list_rubber_cnt <- list()
+elm <- 1
+for(CNT in continentS){
+  res_list_rubber_cnt[[elm]] <- make_reg_aeay(crop_j = "Rubber",
+                                              price_k = crop_prices[["Rubber"]],
+                                              extra_price_k = K_extra, 
+                                              continent = CNT
+  )
+  names(res_list_rubber_cnt)[elm] <- paste0("Rubber_", CNT)
+  elm <- elm + 1
+}
+
+etable(res_list_rubber_cnt, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on deforestation for rubber, 2001-2019, by continents"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       headers = list(Area = continentS),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_rubber_cnt)
+
 #### CONSTRUCT SPECIFICATION COMPARATIVE TABLES ####
 
-# We build 6 tables, one for each j crop. 
-# These tables compare aeay (rj) and aesi (sj) models, with and without controlling for SkPk, with different price info, 
-# across continents, different sets of K prices etc. 
-# NOTE that code needs to be modified each time (loop over the parameter to test). 
+# Produce the same table as the main one, but for different parameters. 
 
+### AESI model 
+
+### Control or not 
+
+### Price dynamics assumed in expectations
+
+### Linear model 
+
+### Spatial clustering 
+
+
+### 
 
 # Forest definition
 SY <- 2001
@@ -1782,6 +2027,19 @@ for(COF in cutoffS){
   elm <- elm + 1
 }
 
+etable(res_list_beef, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on deforestation for cattle, ",SY,"-",EY),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+       )
 
 # Prepare matrix for table
 rm(ape_mat)
