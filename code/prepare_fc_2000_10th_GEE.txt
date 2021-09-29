@@ -1,0 +1,109 @@
+
+
+var palette = ['6a2325','152106'];
+
+// print("Hansen:", gfc);
+print(gfc.projection()); 
+
+// Canopy cover percentage (e.g. 10%).
+var cc = ee.Number(10);
+// Minimum forest area in pixels (e.g. 6 pixels, ~ 0.5 ha in this example).
+var pixels = ee.Number(6);
+// Minimum mapping area for tree loss (usually same as the minimum forest area).
+var lossPixels = ee.Number(6);
+
+
+// DEFINE TO TROPICAL AOI
+// var tropical_aoi = ee.Geometry.Rectangle([[[-180, 30],[-180, -30],[179.9167, -30],[179.9167, 30]]]);
+// requires the following order: minLng, minLat, maxLng, maxLat
+var tropical_aoi = ee.Geometry.Polygon([[[-180, 30],
+          [-180, -30],
+          [179.9167, -30],
+          [179.9167, 30], 
+          [-180, 30]]], null, false); // the false passed to the geodesic argument is necessary. 
+// Map.addLayer(tropical_aoi);
+
+// Not necessary to clip (even not recommended) since we finally export to the tropical_aoi, and GEE works on "pull" basis
+// var gfc = gfc.clip(tropical_aoi);
+// var phtf = phtf.clip(tropical_aoi);
+
+
+// COUNT FOREST LOSS IN canopy cover and contiguous area
+var canopyCover = gfc.select(['treecover2000']);
+
+// Apply the minimum canopy cover percentage (e.g. greater than or equal to 10%) Necessary as we do not restrict to phtf here.
+var canopyCover10 = canopyCover.gte(cc).selfMask(); // don't selfMask, so that no masked pixel is reintroduced afterwards.
+print("canopyCover10", canopyCover10);
+// Map.addLayer(canopyCover10, {min: 0, max: 1}, "canopyCover10");
+
+// Use connectedPixelCount() to get contiguous area.
+var contArea = canopyCover10.connectedPixelCount();
+// Apply the minimum area requirement.
+var minArea = contArea.gte(pixels).selfMask();
+
+// Or without masking
+// var lossyear2 = lossyear.mask(ee.Image(1)); // With this, if you point inspector in the sea (e.g.) lossyear is masked
+// but lossyear2 is 0 (and same logic for phtfYearLoss and phtfYearLoss2). 
+var minArea2 = minArea.mask(ee.Image(1)); 
+print("minArea2",minArea2);
+// Map.addLayer(minArea2);
+// var th10LossYear2 = lossyear2.multiply(minArea2);
+
+var glassProjection = glass.projection();
+var transformGlass = glassProjection.transform(); 
+print("glassProjection", glassProjection);  
+var scaleGlass = glassProjection.nominalScale();
+print("scaleGlass", scaleGlass);
+
+var imageScale = minArea2.projection().nominalScale();
+print("imageScale", imageScale);
+
+// Export.image.toAsset({
+//   image: minArea2,
+//   description: "intermediary_fc_2000_30_th10",
+//   assetId: "users/valentinguye/intermediary_fc_2000_30_th10",
+//   region: tropical_aoi,
+//   scale: 27.829872698318393,  // as copy pasted from the imageScale print
+//   maxPixels: 1e13, 
+//   // pyramidingPolicy: {'.default': 'mean'} not necessary, default method is already mean
+// });
+
+//////////////////////////////////////////////////////
+// AGGREGATE 
+var impImage = ee.Image("users/valentinguye/intermediary_fc_2000_30_th10");
+print(impImage);
+// Map.addLayer(impImage, {min:0, max: 1});
+
+var fc2000 = impImage
+      // Force the next reprojection to aggregate instead of resampling.
+      .reduceResolution({ // Reducer input weights will be the product of the input mask and the fraction of the output pixel covered by the input pixel.
+        reducer: ee.Reducer.mean(), // (see notes in TEST section about unweighted reducing, but not relevant anymore)
+        maxPixels: 65536
+        // bestEffort: true
+      })
+      .multiply(ee.Image.pixelArea()).multiply(0.0001)
+      .float()
+      // Request the data at the scale and projection of the GLASS image. 
+      // Necessary if need be to display in the Map, or proceed further computations, 
+      // but NOT if next step is Export
+      // .reproject({
+      //   crs: glassProjection
+      // }); 
+      
+
+  // var exportName = ee.String("fc_2000_5km_10th").getInfo();
+  // print(exportName);
+  
+  print(fc2000, "fc2000");
+  
+  Export.image.toDrive({
+    image: fc2000,
+    description: "fc_2000_3km_10th",
+    folder: "GEE_output/GLOBILUC",
+    scale: 3000, // We set scale to 3000 because it did not work with 5000 (the glass scale)
+    // crsTransform: [0.04491576420597607, 0, -180.0223829375521, 0, -0.04491576420597607, 85.02554164191271],
+    // crs: glassProjection, // this does not work anymore... 
+    crs: 'EPSG:4326',
+    region: tropical_aoi,
+    maxPixels: 1e12
+  }); 

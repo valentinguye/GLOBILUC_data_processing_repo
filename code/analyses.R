@@ -1769,7 +1769,7 @@ etable(res_list_main,
        placement = "!H"
 )
 
-### OVER CONTINENTS ### 
+#### OVER CONTINENTS ####
 continentS <- c("America", "Africa", "Asia", "all")
 
 # Make one table for eachc j-crop
@@ -1960,17 +1960,224 @@ rm(res_list_rubber_cnt)
 # Produce the same table as the main one, but for different parameters. 
 
 ### AESI model 
+res_list_main_aesi <- list()
+elm <- 1
+
+for(j_crop in names(crop_prices)){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+  
+  res_list_main_aesi[[elm]] <- make_reg_aesi(crop_j = j_crop,
+                                        price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                        extra_price_k = K_extra
+  )
+  names(res_list_main_aesi)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
+
+etable(res_list_main_aesi, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on deforestation predicted by suitability, 2001-2019"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_main_aesi)
 
 ### Control or not 
+res_list_noctrl <- list()
+elm <- 1
 
-### Price dynamics assumed in expectations
+for(j_crop in names(crop_prices)){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+  
+  res_list_noctrl[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                        price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                        extra_price_k = K_extra, 
+                                        SkPk = FALSE
+  )
+  names(res_list_noctrl)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
+
+etable(res_list_noctrl, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, without controls, 2001-2019"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_noctrl)
+
+### 1-year lagged price dynamics assumed in expectations
+res_list_lag1 <- list()
+elm <- 1
+
+for(j_crop in names(crop_prices)){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+  
+  res_list_lag1[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                          price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                          extra_price_k = K_extra, 
+                                          price_info = "lag1"
+  )
+  names(res_list_lag1)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
+
+etable(res_list_lag1, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, 1-year lagged prices, 2001-2019"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+rm(res_list_lag1)
+
 
 ### Linear model 
+res_list_gauss <- list()
+elm <- 1
+
+for(j_crop in names(crop_prices)){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+  
+  res_list_gauss[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                        price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                        extra_price_k = K_extra, 
+                                        distribution = "gaussian"
+  )
+  names(res_list_gauss)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
+
+etable(res_list_gauss, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, Gaussian distribution, 2001-2019"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
 
 ### Spatial clustering 
+res_list_Conley500km <- list()
+elm <- 1
 
+for(j_crop in names(crop_prices)){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+  
+  res_list_Conley500km[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                        price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                        extra_price_k = K_extra, 
+                                        se = "conley", 
+                                        conley_cutoff = 500
+  )
+  names(res_list_Conley500km)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
 
-### 
+etable(res_list_Conley500km, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, Conley standard errors - 500km-cutoff, 2001-2019"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+
+### Without SjPj
+res_list_noSjPj <- list()
+elm <- 1
+
+for(j_crop in names(crop_prices)){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+  
+  res_list_noSjPj[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                        price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                        extra_price_k = K_extra,
+                                        SjPj = FALSE
+  )
+  names(res_list_noSjPj)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
+
+etable(res_list_noSjPj, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, without direct effect control, 2001-2019"),
+       depvar = FALSE,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = "ctrl_", 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
 
 # Forest definition
 SY <- 2001

@@ -398,11 +398,15 @@ names(gaez_m) <- gaez_crops
 
 # (note that masking changes the summary values of gaez)
 
+### ADD THE 2000 FOREST COVER ### 
+# (it is already masked with always zero driven loss, in prepare_fc2000)
+fc2k <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_fc_2000.tif"))
+names(fc2k) <- "fc_2000"
 
 ### STACK RASTERS TO MERGE ###
 
 # Stack together the annual layers of driverloss-GLC data and GAEZ crop cross sections 
-driverloss_gaez <- stack(driverloss, gaez_m)
+driverloss_gaez <- stack(driverloss, gaez_m, fc2k)
 names(driverloss_gaez)
 
 

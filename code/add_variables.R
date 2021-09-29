@@ -265,6 +265,43 @@ for(name in dataset_names){
 # summary(df$soy)
 
 
+#### REMAINING FOREST ####
+
+df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long.Rdata"))
+
+# Remove gaez variables
+df <- dplyr::select(df,-all_of(gaez_crops))
+
+year_list <- list()
+
+# in the first year (2001), the past year accumulated deforestation is null. 
+year_list[["2001"]] <- df[df$year == 2001, c("grid_id", "year")] 
+year_list[["2001"]][,"accu_defo_since2k"] <- 0
+
+# then, each year's deforestation accumulated in the past is the sum of *past years'* deforestation
+years <- 2002:max(df$year)
+for(y in years){
+  sub_ <- df[df$year < y,]
+  year_list[[as.character(y)]] <- ddply(sub_, "grid_id", summarise,
+                                        accu_defo_since2k = sum(driven_loss, na.rm = TRUE))
+  year_list[[as.character(y)]][,"year"] <- y
+}
+
+accu_defo_df <- bind_rows(year_list)
+
+df <- inner_join(df, accu_defo_df, by = c("grid_id", "year"))
+
+
+# summary(df$accu_lucpfp_since2k)
+df <- dplyr::mutate(df, 
+                     remaining_fc = fc_2000 - accu_defo_since2k)
+
+# df[df$grid_id == 1267,c("grid_id", "year", "lucpfap_pixelcount", "accu_lucpfp_since2k", "remain_pf_pixelcount")] 
+
+
+remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k")]
+saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
+
 #### STANDARDIZE AND AGGREGATE SUITABILITY INDICES ####  
  
 # name = dataset_names[1]
