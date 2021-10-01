@@ -298,8 +298,9 @@ df <- dplyr::mutate(df,
 
 # df[df$grid_id == 1267,c("grid_id", "year", "lucpfap_pixelcount", "accu_lucpfp_since2k", "remain_pf_pixelcount")] 
 
-
+# put keep only new variables in remaining
 remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k")]
+
 saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
 
 #### STANDARDIZE AND AGGREGATE SUITABILITY INDICES ####  
@@ -391,12 +392,19 @@ for(name in dataset_names){
   final <- left_join(final, df_stdsi, by = "grid_id")
   rm(df_stdsi)
 
-  # Pasture 2000 share of area variable
+  # Pasture 2000 share of area and remaining variables
   if(name == "driverloss_aesi_long"){
+    # pastures
     df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
     names(df_pasture)[names(df_pasture)=="driverloss_masked_pasture"] <- "pasture_share"
     
     final <- left_join(final, df_pasture, by = c("lon", "lat"))
+    rm(df_pasture)
+    
+    # remaining
+    df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
+    final <- left_join(final, df_remain, by = c("grid_id", "year"))
+    rm(df_remain)
   }
   
   # Create country trends variable
@@ -514,6 +522,13 @@ for(name in dataset_names){
     names(df_pasture)[names(df_pasture)=="driverloss_masked_pasture"] <- "pasture_share"
     
     final <- left_join(final, df_pasture, by = c("lon", "lat"))
+    rm(df_pasture)
+    
+    # remaining
+    # was run only on aesi, hence aesi in the name, but works for aeay too. 
+    df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
+    final <- left_join(final, df_remain, by = c("grid_id", "year"))
+    rm(df_remain)
   }
   
   # Create country trends variable

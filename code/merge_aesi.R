@@ -454,7 +454,7 @@ long_df <- dplyr::arrange(long_df, grid_id, year)
 
 saveRDS(long_df, here(targetdir, "driverloss_aesi_long.Rdata"))
 
-rm(long_df, varying_vars, driverloss_gaez, gaez_m, mask, driverloss)
+rm(long_df, varying_vars, driverloss_gaez, gaez_m, mask, driverloss, fc2k)
 
 
 # Note: much more cells have no some deforestation in the driverloss data than in the first_loss. This is due to the starting resolution of each original data set. 

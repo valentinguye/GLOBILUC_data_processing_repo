@@ -194,6 +194,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           fcr = 7.8, # feed conversion ratio according to Wilkinson, 2010. 
                           SjPj = TRUE,
                           SkPk = TRUE,
+                          remaining = FALSE, # should remaining forest be controlled for 
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
@@ -278,7 +279,9 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   ### Keep only variables needed
   # typically removes only aeay of crops that we do not use anyway because they match no price. 
   # and in glass, the sbqt_lu variables. 
-  var2keep <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", outcome_variable, all_crop_aeay, "pasture_share")
+  var2keep <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", 
+                "remaining_fc", "accu_defo_since2k", "pasture_share",
+                outcome_variable, all_crop_aeay)
   d <- dplyr::select(d, all_of(var2keep))
   rm(var2keep)
   ### PREPARE rj, the standardized achievable revenues
@@ -356,8 +359,9 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   #                              .names = paste0("{.col}", "_max")))
 
   # Keep only usefull variables
-  vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", outcome_variable, 
-              names(d)[grepl(pattern ="_std", x= names(d))])
+  vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", "remaining_fc", "accu_defo_since2k",
+            outcome_variable, 
+            names(d)[grepl(pattern ="_std", x= names(d))])
   d <- dplyr::select(d, all_of(vars))
   rm(vars)
 
@@ -396,6 +400,10 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     }
   }
   
+  # add remainging forest cover as a control
+  if(remaining){
+    controls <- c(controls, "remaining_fc")
+  }
   
   ### MODEL SPECIFICATION FORMULAE
   if(length(controls) > 0){
@@ -425,6 +433,9 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   if(continent != "all"){
     d <- dplyr::filter(d, continent_name == continent)
   }
+  
+  # have remaining forest 2385070
+  # d <- dplyr::filter(d, remaining_fc > 0)
   
   # # - have a lu_evidence 
   # d <- dplyr::filter(d, lu_evidence)
@@ -535,6 +546,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           price_info = "3pya", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           SjPj = TRUE,
                           SkPk = TRUE,
+                          remaining = FALSE, # should remaining forest be controlled for 
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
@@ -613,8 +625,9 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   if(outcome_variable == "driven_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))}
   
   # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", outcome_variable, "pasture_share",
-                               suitability_j_std, suitability_k_std))) 
+  d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", "remaining_fc", "accu_defo_since2k",
+                                 outcome_variable, "pasture_share",
+                                 suitability_j_std, suitability_k_std))) 
 
   # If we are in the j = fodder model, AND if we want qj to be proxied with the share of pasture area in 2000, then replace rj with it. 
   if(suitability_j_std=="Fodder_std" & pasture_shares){
@@ -657,6 +670,10 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
   rm(varname)
 
+  # add remainging forest cover as a control
+  if(remaining){
+    controls <- c(controls, "remaining_fc")
+  }
   
   # MODEL SPECIFICATION FORMULAE
   if(length(controls) > 0){
@@ -687,7 +704,7 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     d <- dplyr::filter(d, continent_name == continent)
   }
   
-  used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year",  "continent_name",
+  used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year",  "continent_name", "remaining_fc", "accu_defo_since2k",
                  outcome_variable, regressors, controls)
   
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
@@ -1758,7 +1775,7 @@ etable(res_list_main,
        dict = getFixest_dict(), 
        title = paste0("Indirect effects of global commodity markets on predicted deforestation, 2001-2019"),
        depvar = FALSE,
-       tex = TRUE, 
+       tex = FALSE, 
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
@@ -2070,7 +2087,7 @@ etable(res_list_lag1,
 rm(res_list_lag1)
 
 
-### Linear model 
+### Linear model (Gaussian)
 res_list_gauss <- list()
 elm <- 1
 
@@ -2105,6 +2122,7 @@ etable(res_list_gauss,
        # extraline = list("Expectations" = price_infoS),
        placement = "!H"
 )
+rm(res_list_gauss)
 
 ### Spatial clustering 
 res_list_Conley500km <- list()

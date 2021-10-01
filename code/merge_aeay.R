@@ -384,6 +384,95 @@ rm(gaez, gaez_crops, gaez_dir, targetdir)
 
 
 
+#### 4. MERGE DRIVER LOSS AND GAEZ #### 
+
+## Read in DRIVER LOSS 
+driverloss <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers.tif")) 
+# Rename layers 
+names(driverloss) <- paste0("driven_loss.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
+
+
+### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+
+mask <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers.tif"))
+
+mask(x = gaez, 
+     mask = mask,
+     maskvalue = 0, # necessary here, because the there is no NA in the mask, only 0 and 1 (see the prepare_loss_drivers.R script)
+     updatevalue = NA, 
+     filename = here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "driverloss_masked_high_input_all.tif"), 
+     overwrite = TRUE)
+
+gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "driverloss_masked_high_input_all.tif"))
+# Rename layers (important, as writing the masked gaez lost the layer names)
+names(gaez_m) <- gaez_crops
+
+# (note that masking changes the summary values of gaez)
+
+### ADD THE 2000 FOREST COVER ### 
+# (it is already masked with always zero driven loss, in prepare_fc2000)
+fc2k <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_fc_2000.tif"))
+names(fc2k) <- "fc_2000"
+
+
+### STACK RASTERS TO MERGE ###
+
+# Stack together the annual layers of driverloss-GLC data and GAEZ crop cross sections 
+driverloss_gaez <- stack(driverloss, gaez_m, fc2k)
+names(driverloss_gaez)
+
+
+### RASTER TO DATAFRAME ### 
+
+# na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
+# We also set long to false because we reshape with a proper function for more control
+wide_df <- raster::as.data.frame(driverloss_gaez, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ~700s. 
+
+# Rename coordinate variables
+names(wide_df)
+head(wide_df[,c("x", "y")])
+wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+
+### WIDE TO LONG ### 
+
+# Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
+# So we can simply create an ID that's a sequence. 
+wide_df$grid_id <- seq(1, nrow(wide_df), 1) 
+
+# the dot is, by construction of all variable names, only in the names of time varying variables. 
+# fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
+varying_vars <- names(driverloss_gaez)[grep(".", names(driverloss_gaez), fixed = TRUE)]
+
+# reshape to long.
+long_df <- stats::reshape(wide_df,
+                          varying = varying_vars,
+                          v.names = "driven_loss",
+                          sep = ".",
+                          timevar = "year",
+                          idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
+                          ids = "grid_id", # lonlat is our cross-sectional identifier.
+                          direction = "long",
+                          new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
+rm(wide_df)
+names(long_df)
+# replace the indices from the raster::as.data.frame with actual years.
+
+years <- seq(2001, 2019, 1) # notice here again that it is not the same years as for phtfloss
+long_df <- mutate(long_df, year = years[year])
+
+long_df <- dplyr::arrange(long_df, grid_id, year)
+
+
+saveRDS(long_df, here(targetdir, "driverloss_aeay_long.Rdata"))
+
+rm(long_df, varying_vars, driverloss_gaez, gaez_m, mask, driverloss, fc2k)
+
+
+
+rm(gaez, gaez_crops, gaez_dir, targetdir)
+
+# Note: much more cells have no some deforestation in the phtfloss data than in the first_loss. This is due to the starting resolution of each original data set. 
 
 
 
