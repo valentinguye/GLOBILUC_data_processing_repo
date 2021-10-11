@@ -148,14 +148,14 @@ outcome_variable = "driven_loss" # "nd_first_loss", "first_loss", "firstloss_gla
 start_year = 2001
 end_year = 2019
 continent = "all"
-price_info = "3pya"
+price_info = "lag1"
 further_lu_evidence = "none"
-crop_j = "Oilpalm"
+crop_j = "Soybean"
 j_soy = "Soybean"
 fcr = 7.2
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
 # but maybe not with skPk controls.
-price_k <- c("Beef", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Maize", "Sugar")
+price_k <- crop_prices[[crop_j]]
 # c( "Sugar", "Maize")
 # "Barley",  "Chicken", "Sheep", "Banana", "Beef", "Olive_oil",
 #               "Orange",  "Cotton",  "Groundnut",  "Rubber", "Sorghum","Cocoa",  "Coffee",
@@ -165,6 +165,7 @@ price_k <- c("Beef", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Maize", "Sugar
 extra_price_k = c("Chicken", "Pork") # , "Sheep", 
 SjPj = TRUE
 SkPk = TRUE
+remaining <- TRUE
 pasture_shares <- FALSE
 fe = "grid_id + country_year"
 distribution = "quasipoisson"
@@ -190,11 +191,11 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           crop_j = "Oilpalm", # in GAEZ spelling
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
-                          price_info = "3pya", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
+                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           fcr = 7.8, # feed conversion ratio according to Wilkinson, 2010. 
                           SjPj = TRUE,
                           SkPk = TRUE,
-                          remaining = FALSE, # should remaining forest be controlled for 
+                          remaining = TRUE, # should remaining forest be controlled for 
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
@@ -203,6 +204,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if se = "conley"  
                           cluster ="grid_id",
                           # coefstat = "confint", # one of "se", "tstat", "confint"
+                          glm_iter = 250,
                           output = "est_obj" # one of "data", "est_obj", "coef_table" 
 ){
   
@@ -435,7 +437,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
   
   # have remaining forest 2385070
-  # d <- dplyr::filter(d, remaining_fc > 0)
+  d <- dplyr::filter(d, remaining_fc > 0)
   
   # # - have a lu_evidence 
   # d <- dplyr::filter(d, lu_evidence)
@@ -480,6 +482,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
+                             glm.iter = glm_iter,
                              notes = TRUE, 
                              verbose = 4)  
     
@@ -543,10 +546,10 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           crop_j = "Oilpalm", # in GAEZ spelling
                           price_k = c("Sugar", "Maize"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
-                          price_info = "3pya", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
+                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
                           SjPj = TRUE,
                           SkPk = TRUE,
-                          remaining = FALSE, # should remaining forest be controlled for 
+                          remaining = TRUE, # should remaining forest be controlled for 
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
@@ -703,6 +706,9 @@ make_reg_aesi <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   if(continent != "all"){
     d <- dplyr::filter(d, continent_name == continent)
   }
+  
+  # have remaining forest
+  d <- dplyr::filter(d, remaining_fc > 0)
   
   used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year",  "continent_name", "remaining_fc", "accu_defo_since2k",
                  outcome_variable, regressors, controls)
@@ -1752,6 +1758,10 @@ crop_prices <- list("Fodder" = c("Soybean", "Palm_oil", "Maize", "Sugar", "Wheat
                  "Rubber" = c("Beef", "Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar", "Wheat", "Barley", "Oat")
                   )
 
+# We do not run robustness checks for Beef and Coffee, as they have nothing significant in the main estimation. 
+crops_to_runover <- c("Soybean", "Oilpalm", "Cocoa", "Rubber")
+
+
 res_list_main <- list()
 elm <- 1
 
@@ -1774,20 +1784,101 @@ for(j_crop in names(crop_prices)){
 etable(res_list_main, 
        dict = getFixest_dict(), 
        title = paste0("Indirect effects of global commodity markets on predicted deforestation, 2001-2019"),
+       headers = names(crop_prices),
        depvar = FALSE,
-       tex = FALSE, 
+       tex = TRUE, 
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        # headers = list(Model = c("PR", "SI")),
        # extraline = list("Expectations" = price_infoS),
        placement = "!H"
 )
+rm(res_list_main)
+
+
+#### MAIN FIGURE #### 
+res_df_list_main <- list()
+elm <- 1
+
+for(j_crop in crops_to_runover){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+  
+  res_df_list_main[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                        price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                        extra_price_k = K_extra, 
+                                        output = "coef_table"
+  )
+  names(res_df_list_main)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
+
+# prepare regression outputs in a tidy data frame readable by dwplot
+rm(df)
+df <- bind_rows(res_df_list_main)#
+# select estimates to display (significant ones)
+
+df <- df[c("Soybean_X_Beef", 
+           "Soybean_X_Palm_oil",
+           "Soybean_X_Sugar", 
+           "Soybean_X_Maize",
+           "Oilpalm_X_Sugar",  
+           "Oilpalm_X_Sunflower_oil",
+           "Cocoa_X_Coffee",
+           "Cocoa_X_Rapeseed_oil", 
+           "Rubber_X_Sugar"),]
+
+df$model <- gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+
+title <- paste0("Indirect effects of commodity prices on agriculture-driven tropical deforestation from 2001 to 2019")
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 1),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Crude_oil = "Crude oil",
+                         Palm_oil = "Palm oil",
+                         Soybean_oil = "Soybean oil",                       
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybean = "Soybean", 
+                         Soybean_meal = "Soybean meal", 
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
 
 #### OVER CONTINENTS ####
-continentS <- c("America", "Africa", "Asia", "all")
+continentS <- c("all", "America", "Africa", "Asia")
 
 # Make one table for eachc j-crop
 
@@ -1805,6 +1896,7 @@ for(CNT in continentS){
   elm <- elm + 1
 }
 
+
 etable(res_list_fodder_cnt, 
        dict = getFixest_dict(), 
        title = paste0("Indirect effects of global commodity markets on deforestation for pasture, 2001-2019, by continents"),
@@ -1813,7 +1905,7 @@ etable(res_list_fodder_cnt,
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        headers = list(Area = continentS),
        # extraline = list("Expectations" = price_infoS),
@@ -1829,12 +1921,74 @@ for(CNT in continentS){
   res_list_soybean_cnt[[elm]] <- make_reg_aeay(crop_j = "Soybean",
                                                price_k = crop_prices[["Soybean"]],
                                                extra_price_k = K_extra, 
-                                               continent = CNT
+                                               continent = CNT, 
+                                               output = "coef_table" # this is necessary to plot
   )
   names(res_list_soybean_cnt)[elm] <- paste0("Soybean_", CNT)
   elm <- elm + 1
 }
 
+# PLOT
+rm(df)
+df_soy_continents <- data.frame()
+for(CNT in continentS){
+  df <- res_list_soybean_cnt[[paste0("Soybean_",CNT)]]
+
+  # select estimates to display (significant ones)
+  df <- df[c("Soybean_X_Beef", 
+             "Soybean_X_Palm_oil",
+             "Soybean_X_Sugar", 
+             "Soybean_X_Maize"),]
+  
+  df$model <- CNT #gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+  df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+  
+  names(df)[names(df)=="Estimate"] <- "estimate"
+  names(df)[names(df)=="Std. Error"] <- "std.error"
+
+  df_soy_continents <- rbind(df_soy_continents, df)
+}
+
+title <- paste0("Indirect effects of commodity prices on soy-driven tropical deforestation from 2001 to 2019")
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df_soy_continents,
+        dodge_size = 0.5,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 1),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Beef = "Beef",
+                        Soybean = "Soybean",
+                         Palm_oil = "Palm oil",
+                         Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Crude_oil = "Crude oil",
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybean_oil = "Soybean oil",                       
+                         Soybean_meal = "Soybean meal", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    scale_color_brewer(palette = "Set1",
+                       guide = guide_legend(reverse = TRUE)) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.83, 0.02),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
+# to LateX
 etable(res_list_soybean_cnt, 
        dict = getFixest_dict(), 
        title = paste0("Indirect effects of global commodity markets on deforestation for soybean, 2001-2019, by continents"),
@@ -1843,13 +1997,14 @@ etable(res_list_soybean_cnt,
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        headers = list(Area = continentS),
        # extraline = list("Expectations" = price_infoS),
        placement = "!H"
 )
 rm(res_list_soybean_cnt)
+
 
 ## Oilpalm 
 K_extra <- c("Chicken", "Pork")
@@ -1859,11 +2014,71 @@ for(CNT in continentS){
   res_list_oilpalm_cnt[[elm]] <- make_reg_aeay(crop_j = "Oilpalm",
                                         price_k = crop_prices[["Oilpalm"]],
                                         extra_price_k = K_extra, 
-                                        continent = CNT
+                                        continent = CNT, 
+                                        output = "coef_table" # this is necessary to plot
   )
   names(res_list_oilpalm_cnt)[elm] <- paste0("Oilpalm_", CNT)
   elm <- elm + 1
 }
+
+
+rm(df)
+df_palm_oil_continents <- data.frame()
+for(CNT in continentS){
+  df <- res_list_oilpalm_cnt[[paste0("Oilpalm_",CNT)]]
+  
+  # select estimates to display (significant ones)
+  df <- df[c("Oilpalm_X_Sugar", 
+             "Oilpalm_X_Sunflower_oil"),]
+  
+  df$model <- CNT #gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+  df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+  
+  names(df)[names(df)=="Estimate"] <- "estimate"
+  names(df)[names(df)=="Std. Error"] <- "std.error"
+  
+  df_palm_oil_continents <- rbind(df_palm_oil_continents, df)
+}
+
+title <- paste0("Indirect effects of commodity prices on palm oil-driven tropical deforestation from 2001 to 2019")
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df_palm_oil_continents,
+        dodge_size = 0.6,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 1),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Beef = "Beef",
+                         Soybean = "Soybean",
+                         Palm_oil = "Palm oil",
+                         Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Crude_oil = "Crude oil",
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybean_oil = "Soybean oil",                       
+                         Soybean_meal = "Soybean meal", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    scale_color_brewer(palette = "Set1",
+                       guide = guide_legend(reverse = TRUE)) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position =  c(0.82, 0.02),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
 
 etable(res_list_oilpalm_cnt, 
        dict = getFixest_dict(), 
@@ -1873,7 +2088,7 @@ etable(res_list_oilpalm_cnt,
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        headers = list(Area = continentS),
        # extraline = list("Expectations" = price_infoS),
@@ -1890,11 +2105,71 @@ for(CNT in continentS){
   res_list_cocoa_cnt[[elm]] <- make_reg_aeay(crop_j = "Cocoa",
                                         price_k = crop_prices[["Cocoa"]],
                                         extra_price_k = K_extra, 
-                                        continent = CNT
+                                        continent = CNT, 
+                                        output = "coef_table" # this is necessary to plot
   )
   names(res_list_cocoa_cnt)[elm] <- paste0("Cocoa_", CNT)
   elm <- elm + 1
 }
+
+rm(df)
+df_cocoa_continents <- data.frame()
+for(CNT in continentS){
+  df <- res_list_cocoa_cnt[[paste0("Cocoa_",CNT)]]
+  
+  # select estimates to display (significant ones)
+  df <- df[c("Cocoa_X_Coffee", 
+             "Cocoa_X_Rapeseed_oil"),]
+  
+  df$model <- CNT #gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+  df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+  
+  names(df)[names(df)=="Estimate"] <- "estimate"
+  names(df)[names(df)=="Std. Error"] <- "std.error"
+  
+  df_cocoa_continents <- rbind(df_cocoa_continents, df)
+}
+
+title <- paste0("Indirect effects of commodity prices on cocoa-driven tropical deforestation from 2001 to 2019")
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df_cocoa_continents,
+        dot_args = list(size = 1),
+        dodge_size = 0.6,
+        whisker_args = list(size = 0.5),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Beef = "Beef",
+                         Soybean = "Soybean",
+                         Palm_oil = "Palm oil",
+                         Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Crude_oil = "Crude oil",
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybean_oil = "Soybean oil",                       
+                         Soybean_meal = "Soybean meal", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    scale_color_brewer(palette = "Set1",
+                       guide = guide_legend(reverse = TRUE)) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.82, 0.02),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
+
 
 etable(res_list_cocoa_cnt, 
        dict = getFixest_dict(), 
@@ -1904,7 +2179,7 @@ etable(res_list_cocoa_cnt,
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        headers = list(Area = continentS),
        # extraline = list("Expectations" = price_infoS),
@@ -1920,7 +2195,8 @@ for(CNT in continentS){
   res_list_coffee_cnt[[elm]] <- make_reg_aeay(crop_j = "Coffee",
                                               price_k = crop_prices[["Coffee"]],
                                               extra_price_k = K_extra, 
-                                              continent = CNT
+                                              continent = CNT,
+                                              output = "coef_table" # this is necessary to plot
   )
   names(res_list_coffee_cnt)[elm] <- paste0("Coffee_", CNT)
   elm <- elm + 1
@@ -1934,7 +2210,7 @@ etable(res_list_coffee_cnt,
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        headers = list(Area = continentS),
        # extraline = list("Expectations" = price_infoS),
@@ -1950,11 +2226,71 @@ for(CNT in continentS){
   res_list_rubber_cnt[[elm]] <- make_reg_aeay(crop_j = "Rubber",
                                               price_k = crop_prices[["Rubber"]],
                                               extra_price_k = K_extra, 
-                                              continent = CNT
+                                              continent = CNT, 
+                                              output = "coef_table" # this is necessary to plot
   )
   names(res_list_rubber_cnt)[elm] <- paste0("Rubber_", CNT)
   elm <- elm + 1
 }
+
+
+rm(df)
+df_cocoa_continents <- data.frame()
+for(CNT in continentS){
+  df <- res_list_cocoa_cnt[[paste0("Cocoa_",CNT)]]
+  
+  # select estimates to display (significant ones)
+  df <- df[c("Cocoa_X_Coffee", 
+             "Cocoa_X_Rapeseed_oil"),]
+  
+  df$model <- CNT #gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+  df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+  
+  names(df)[names(df)=="Estimate"] <- "estimate"
+  names(df)[names(df)=="Std. Error"] <- "std.error"
+  
+  df_cocoa_continents <- rbind(df_cocoa_continents, df)
+}
+
+title <- paste0("Indirect effects of commodity prices on rubber-driven tropical deforestation from 2001 to 2019")
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df_cocoa_continents,
+        dot_args = list(size = 1),
+        dodge_size = 0.6,
+        whisker_args = list(size = 0.5),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Beef = "Beef",
+                         Soybean = "Soybean",
+                         Palm_oil = "Palm oil",
+                         Sugar = "Sugar", 
+                         Maize = "Maize",
+                         Cocoa = "Cocoa", 
+                         Coffee = "Coffee", 
+                         Crude_oil = "Crude oil",
+                         Olive_oil = "Olive oil", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Coconut_oil = "Coconut oil", 
+                         Soybean_oil = "Soybean oil",                       
+                         Soybean_meal = "Soybean meal", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    scale_color_brewer(palette = "Set1",
+                       guide = guide_legend(reverse = TRUE)) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.82, 0.02),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
 
 etable(res_list_rubber_cnt, 
        dict = getFixest_dict(), 
@@ -1964,7 +2300,7 @@ etable(res_list_rubber_cnt,
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        headers = list(Area = continentS),
        # extraline = list("Expectations" = price_infoS),
@@ -1980,7 +2316,7 @@ rm(res_list_rubber_cnt)
 res_list_main_aesi <- list()
 elm <- 1
 
-for(j_crop in names(crop_prices)){
+for(j_crop in crops_to_runover){
   # set extra prices based on crop j
   if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
     K_extra <- c("Chicken", "Pork")
@@ -2000,11 +2336,12 @@ etable(res_list_main_aesi,
        dict = getFixest_dict(), 
        title = paste0("Indirect effects of global commodity markets on deforestation predicted by suitability, 2001-2019"),
        depvar = FALSE,
+       headers = crops_to_runover,
        tex = TRUE, 
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        # headers = list(Model = c("PR", "SI")),
        # extraline = list("Expectations" = price_infoS),
@@ -2016,7 +2353,7 @@ rm(res_list_main_aesi)
 res_list_noctrl <- list()
 elm <- 1
 
-for(j_crop in names(crop_prices)){
+for(j_crop in crops_to_runover){
   # set extra prices based on crop j
   if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
     K_extra <- c("Chicken", "Pork")
@@ -2035,13 +2372,14 @@ for(j_crop in names(crop_prices)){
 
 etable(res_list_noctrl, 
        dict = getFixest_dict(), 
-       title = paste0("Indirect effects of global commodity markets on predicted deforestation, without controls, 2001-2019"),
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, without K-commodities controls, 2001-2019"),
        depvar = FALSE,
+       headers = crops_to_runover,
        tex = TRUE, 
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        # headers = list(Model = c("PR", "SI")),
        # extraline = list("Expectations" = price_infoS),
@@ -2049,11 +2387,88 @@ etable(res_list_noctrl,
 )
 rm(res_list_noctrl)
 
-### 1-year lagged price dynamics assumed in expectations
+### Without SjPj
+res_list_noSjPj <- list()
+elm <- 1
+
+for(j_crop in crops_to_runover){
+  # set extra prices based on crop j
+  if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+    K_extra <- c("Chicken", "Pork")
+  }else{
+    K_extra <- c()
+  }
+  
+  res_list_noSjPj[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                          price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                          extra_price_k = K_extra,
+                                          SjPj = FALSE
+  )
+  names(res_list_noSjPj)[elm] <- paste0(j_crop)
+  elm <- elm + 1
+}
+
+etable(res_list_noSjPj, 
+       dict = getFixest_dict(), 
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, without direct effect control, 2001-2019"),
+       depvar = FALSE,
+       headers = crops_to_runover,
+       tex = TRUE, 
+       digits = "r4",
+       coefstat = "se",# needs the confint to be computed in the summary already.
+       #se.below = TRUE
+       drop = c("ctrl_", "remaining_"), 
+       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       # headers = list(Model = c("PR", "SI")),
+       # extraline = list("Expectations" = price_infoS),
+       placement = "!H"
+)
+
+### Control for remaining forest 
+# res_list_remaining <- list()
+# elm <- 1
+# 
+# for(j_crop in crops_to_runover){
+#   # set extra prices based on crop j
+#   if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
+#     K_extra <- c("Chicken", "Pork")
+#   }else{
+#     K_extra <- c()
+#   }
+#   
+#   res_list_remaining[[elm]] <- make_reg_aeay(crop_j = j_crop,
+#                                           price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+#                                           extra_price_k = K_extra, 
+#                                           SkPk = FALSE, 
+#                                           remaining = TRUE
+#   )
+#   names(res_list_remaining)[elm] <- paste0(j_crop)
+#   elm <- elm + 1
+# }
+# 
+# etable(res_list_remaining, 
+#        dict = getFixest_dict(), 
+#        title = paste0("Indirect effects of global commodity markets on predicted deforestation, controlling for remaining forest, 2001-2019"),
+#        depvar = FALSE,
+#        headers = crops_to_runover,
+#        tex = TRUE, 
+#        digits = "r4",
+#        coefstat = "se",# needs the confint to be computed in the summary already.
+#        #se.below = TRUE
+#        drop = c("ctrl_", "remaining_"),,
+#        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+#        # headers = list(Model = c("PR", "SI")),
+#        # extraline = list("Expectations" = price_infoS),
+#        placement = "!H"
+# )
+# rm(res_list_remaining)
+
+
+### 3-year averaged price dynamics assumed in expectations
 res_list_lag1 <- list()
 elm <- 1
 
-for(j_crop in names(crop_prices)){
+for(j_crop in crops_to_runover){
   # set extra prices based on crop j
   if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
     K_extra <- c("Chicken", "Pork")
@@ -2064,7 +2479,7 @@ for(j_crop in names(crop_prices)){
   res_list_lag1[[elm]] <- make_reg_aeay(crop_j = j_crop,
                                           price_k = crop_prices[[match(j_crop, names(crop_prices))]],
                                           extra_price_k = K_extra, 
-                                          price_info = "lag1"
+                                          price_info = "3pya"
   )
   names(res_list_lag1)[elm] <- paste0(j_crop)
   elm <- elm + 1
@@ -2072,13 +2487,14 @@ for(j_crop in names(crop_prices)){
 
 etable(res_list_lag1, 
        dict = getFixest_dict(), 
-       title = paste0("Indirect effects of global commodity markets on predicted deforestation, 1-year lagged prices, 2001-2019"),
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, 3-year averaged prices, 2001-2019"),
        depvar = FALSE,
+       headers = crops_to_runover,
        tex = TRUE, 
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        # headers = list(Model = c("PR", "SI")),
        # extraline = list("Expectations" = price_infoS),
@@ -2091,7 +2507,7 @@ rm(res_list_lag1)
 res_list_gauss <- list()
 elm <- 1
 
-for(j_crop in names(crop_prices)){
+for(j_crop in crops_to_runover){
   # set extra prices based on crop j
   if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
     K_extra <- c("Chicken", "Pork")
@@ -2112,11 +2528,12 @@ etable(res_list_gauss,
        dict = getFixest_dict(), 
        title = paste0("Indirect effects of global commodity markets on predicted deforestation, Gaussian distribution, 2001-2019"),
        depvar = FALSE,
+       headers = crops_to_runover,
        tex = TRUE, 
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        # headers = list(Model = c("PR", "SI")),
        # extraline = list("Expectations" = price_infoS),
@@ -2124,11 +2541,11 @@ etable(res_list_gauss,
 )
 rm(res_list_gauss)
 
-### Spatial clustering 
+### Spatial clustering - 500km
 res_list_Conley500km <- list()
 elm <- 1
 
-for(j_crop in names(crop_prices)){
+for(j_crop in crops_to_runover){
   # set extra prices based on crop j
   if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
     K_extra <- c("Chicken", "Pork")
@@ -2150,22 +2567,26 @@ etable(res_list_Conley500km,
        dict = getFixest_dict(), 
        title = paste0("Indirect effects of global commodity markets on predicted deforestation, Conley standard errors - 500km-cutoff, 2001-2019"),
        depvar = FALSE,
+       headers = crops_to_runover,
        tex = TRUE, 
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        # headers = list(Model = c("PR", "SI")),
        # extraline = list("Expectations" = price_infoS),
        placement = "!H"
 )
+rm(res_list_Conley500km)
 
-### Without SjPj
-res_list_noSjPj <- list()
+
+
+### Spatial clustering - 100km
+res_list_Conley100km <- list()
 elm <- 1
 
-for(j_crop in names(crop_prices)){
+for(j_crop in crops_to_runover){
   # set extra prices based on crop j
   if(j_crop %in% c("Fodder", "Oilpalm", "Soybean")){
     K_extra <- c("Chicken", "Pork")
@@ -2173,29 +2594,37 @@ for(j_crop in names(crop_prices)){
     K_extra <- c()
   }
   
-  res_list_noSjPj[[elm]] <- make_reg_aeay(crop_j = j_crop,
-                                        price_k = crop_prices[[match(j_crop, names(crop_prices))]],
-                                        extra_price_k = K_extra,
-                                        SjPj = FALSE
+  res_list_Conley100km[[elm]] <- make_reg_aeay(crop_j = j_crop,
+                                               price_k = crop_prices[[match(j_crop, names(crop_prices))]],
+                                               extra_price_k = K_extra, 
+                                               se = "conley", 
+                                               conley_cutoff = 100
   )
-  names(res_list_noSjPj)[elm] <- paste0(j_crop)
+  names(res_list_Conley100km)[elm] <- paste0(j_crop)
   elm <- elm + 1
 }
 
-etable(res_list_noSjPj, 
+etable(res_list_Conley100km, 
        dict = getFixest_dict(), 
-       title = paste0("Indirect effects of global commodity markets on predicted deforestation, without direct effect control, 2001-2019"),
+       title = paste0("Indirect effects of global commodity markets on predicted deforestation, Conley standard errors - 100km-cutoff, 2001-2019"),
        depvar = FALSE,
+       headers = crops_to_runover,
        tex = TRUE, 
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
        # headers = list(Model = c("PR", "SI")),
        # extraline = list("Expectations" = price_infoS),
        placement = "!H"
 )
+rm(res_list_Conley100km)
+
+
+
+#### ---------------------------------
+
 
 # Forest definition
 SY <- 2001
@@ -2260,7 +2689,7 @@ etable(res_list_beef,
        digits = "r4",
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
-       drop = "ctrl_", 
+       drop = c("ctrl_", "remaining_"), 
        # headers = list(Model = c("PR", "SI")),
        # extraline = list("Expectations" = price_infoS),
        placement = "!H"
@@ -2915,7 +3344,7 @@ names(df)[names(df)=="Std. Error"] <- "std.error"
 #        tex = TRUE, 
 #        title = table_title,
 #        depvar = TRUE,
-#        subtitles = paste0("k = ", K_commodities),
+#        headers = paste0("k = ", K_commodities),
 #        #drop = c("SkPk", "SjPj"),
 #        #coefstat = "confint",
 #        sdBelow = TRUE,
