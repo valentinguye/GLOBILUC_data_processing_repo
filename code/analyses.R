@@ -124,6 +124,17 @@ mapmat <- matrix(data = mapmat_data,
 
 colnames(mapmat) <- c("Prices", "Crops")
 
+crop_prices <- list("Fodder" = c("Soybean", "Palm_oil", "Maize", "Sugar", "Wheat", "Barley", "Oat"), 
+                    "Soybean" = c("Beef", "Palm_oil", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar", "Wheat"),
+                    "Oilpalm" = c("Beef", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Maize", "Sugar", "Wheat"),
+                    "Cocoa" = c("Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Sugar", "Coffee"),
+                    "Coffee" = c("Cocoa", "Tea", "Sugar", "Tobacco"),
+                    "Rubber" = c("Beef", "Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar", "Wheat", "Barley", "Oat")
+)
+
+# We do not run robustness checks for Beef and Coffee, as they have nothing significant in the main estimation. 
+crops_to_runover <- c("Soybean", "Oilpalm", "Cocoa", "Rubber")
+
 
 ### READ ALL POSSIBLE DATASETS HERE 
 # but not all together because of memory issues. 
@@ -149,6 +160,8 @@ start_year = 2001
 end_year = 2019
 continent = "all"
 price_info = "lag1"
+sjpj_lag = "_lag2" # either "" or "_lag1" or "_lag2"
+skpk_lag = "_lag1" # either "" or "_lag1" or "_lag2"
 further_lu_evidence = "none"
 crop_j = "Soybean"
 j_soy = "Soybean"
@@ -162,7 +175,7 @@ price_k <- crop_prices[[crop_j]]
 #                "Rice",   "Wheat",  "Palm_oil", ),
 #                "Tea", "Tobacco",  "Oat",
 #               , "Pork")
-extra_price_k = c("Chicken", "Pork") # , "Sheep", 
+extra_price_k = c("Chicken", "Pork") # , "Sheep",
 SjPj = TRUE
 SkPk = TRUE
 remaining <- TRUE
@@ -174,6 +187,7 @@ se = "twoway"
 cluster ="grid_id"
 #coefstat = "confint"
 output = "coef_table"
+glm_iter <- 25
 
 # "Banana", "Barley", "Beef",
 # "Orange", "Cocoa", "Coconut_oil", "Coffee", "Cotton", "Rice", "Groundnut",
@@ -195,6 +209,8 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           fcr = 7.8, # feed conversion ratio according to Wilkinson, 2010. 
                           SjPj = TRUE,
                           SkPk = TRUE,
+                          sjpj_lag = "_lag2", # either "" or "_lag1" or "_lag2"
+                          skpk_lag = "_lag1", # either "" or "_lag1" or "_lag2"
                           remaining = TRUE, # should remaining forest be controlled for 
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
@@ -204,7 +220,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if se = "conley"  
                           cluster ="grid_id",
                           # coefstat = "confint", # one of "se", "tstat", "confint"
-                          glm_iter = 250,
+                          glm_iter = 25,
                           output = "est_obj" # one of "data", "est_obj", "coef_table" 
 ){
   
@@ -218,15 +234,21 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   names(price_j) <- NULL
   
   # Group the names of the different prices 
-  original_price_all <- c(price_j, price_k, extra_price_k)
-  original_price_k <- price_k
-  # lag and log
-  price_all <- paste0(original_price_all, "_", price_info)
-  price_all <- paste0("ln_", price_all)
-  price_k <- paste0(original_price_k, "_", price_info)
-  price_k <- paste0("ln_", price_k)
+  original_price_j <- price_j
+  original_price_k <- price_k # /!\ this one is used in making rk 
+  original_price_reg <- c(price_k, extra_price_k)
   
-  ## Revenue variable names
+  
+  ## lag and log the different price sets
+  # Prices used in main regressors
+  price_reg <- paste0("ln_", original_price_reg, "_", price_info)
+
+  # Prices used in controls
+  price_j <- paste0("ln_", original_price_j, skpk_lag)
+  price_k <- paste0("ln_", original_price_k, sjpj_lag)
+  
+  
+  ## Revenue variable names ####
   # Identify only Prices and Crops that can be matched 
   # See below, in conversion part, why we exclude coconut and cotton. 
   # To determine land use, only the potential revenue of soybeans is considered (for simplicity) 
@@ -367,31 +389,39 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   d <- dplyr::select(d, all_of(vars))
   rm(vars)
 
-  ### MAKE FINAL REGRESSION VARIABLES 
+  ### MAKE FINAL REGRESSION VARIABLES ####
   
   # keep only the cells with positive rj (since we need to divide by rj)
   d <- dplyr::filter(d, !!as.symbol(revenue_j_std) > 0)
   
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", price_all)], by = c("year"))
+  d <- left_join(d, prices[,c("year", unique(c(price_reg, price_j, price_k)))], by = c("year"))
   
   # Main regressors
   regressors <- c()
-  for(Pk in price_all){
-    varname <- paste0(crop_j, "_X_", original_price_all[match(Pk, price_all)])
+  for(Pk in price_reg){
+    varname <- paste0(crop_j, "_X_", original_price_reg[match(Pk, price_reg)])
     regressors <- c(regressors, varname)
     d <- mutate(d, 
                 !!as.symbol(varname) := !!as.symbol(Pk)/(!!as.symbol(revenue_j_std)))
   }
-  rm(varname)
+  rm(varname, Pk)
   
-  # Remove the first of the regressors if we do not control for SjPj. The first is always SjPj because of the construction of price_all that has price_j first. 
-  if(!SjPj){
-    regressors <- regressors[-1]
+  # # Remove the first of the regressors if we do not control for SjPj. The first is always SjPj because of the construction of price_all that has price_j first. 
+  # if(!SjPj){
+  #   regressors <- regressors[-1]
+  # }
+  
+  ## Controls 
+  controls <- c() # it's important that this is not conditioned on SkPk nor sjPj
+  
+  if(SjPj){
+    varname <- paste0("ctrl_", original_price_j)
+    controls <- c(controls, varname)
+    d <- mutate(d, 
+                !!as.symbol(varname) := !!as.symbol(price_j)/(!!as.symbol(revenue_j_std)))
   }
   
-  # Controls  
-  controls <- c() # it's important that this is not conditioned on SkPk
   if(SkPk){
     for(Pk in price_k){
       rk <- revenue_k_std[match(Pk, price_k)]
@@ -483,7 +513,7 @@ make_reg_aeay <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                              #fixef.iter = 100000,
                              nthreads = 3,
                              glm.iter = glm_iter,
-                             notes = TRUE, 
+                             notes = FALSE, 
                              verbose = 4)  
     
     
@@ -1750,17 +1780,6 @@ tm_shape(accu_0115[accu_0115$main_driver!="none",]) +
 
 
 #### MAIN TABLE #### 
-crop_prices <- list("Fodder" = c("Soybean", "Palm_oil", "Maize", "Sugar", "Wheat", "Barley", "Oat"), 
-                 "Soybean" = c("Beef", "Palm_oil", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar"),
-                 "Oilpalm" = c("Beef", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Maize", "Sugar"),
-                 "Cocoa" = c("Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil", "Sugar", "Coffee"),
-                 "Coffee" = c("Cocoa", "Tea", "Sugar", "Tobacco"),
-                 "Rubber" = c("Beef", "Palm_oil", "Soybean", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar", "Wheat", "Barley", "Oat")
-                  )
-
-# We do not run robustness checks for Beef and Coffee, as they have nothing significant in the main estimation. 
-crops_to_runover <- c("Soybean", "Oilpalm", "Cocoa", "Rubber")
-
 
 res_list_main <- list()
 elm <- 1
@@ -1791,11 +1810,13 @@ etable(res_list_main,
        coefstat = "se",# needs the confint to be computed in the summary already.
        #se.below = TRUE
        drop = c("ctrl_", "remaining_"), 
-       order = c("Beef", "Soybean", "Palm oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork"),
+       order = c("Beef", "Soybean", "Palm oil", "Maize", "Sugar", "Rapeseed oil", "Sunflower oil", "Wheat", "Barley", "Oat", "Chicken", "Pork", "Cocoa", "Coffee", "Rubber"),
        # headers = list(Model = c("PR", "SI")),
-       # extraline = list("Expectations" = price_infoS),
+       extraline = list("Avg. deforestation" = function(model){return(mean(model$y))}), #list("Expectations" = price_infoS),
        placement = "!H"
 )
+
+
 rm(res_list_main)
 
 
@@ -1938,7 +1959,10 @@ for(CNT in continentS){
   df <- df[c("Soybean_X_Beef", 
              "Soybean_X_Palm_oil",
              "Soybean_X_Sugar", 
-             "Soybean_X_Maize"),]
+             "Soybean_X_Maize",
+             "Soybean_X_Rapeseed_oil",
+             "Soybean_X_Sunflower_oil", 
+             "Soybean_X_Wheat"),]
   
   df$model <- CNT #gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
   df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
@@ -1956,7 +1980,7 @@ title <- paste0("Indirect effects of commodity prices on soy-driven tropical def
 # brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
 #                  c("Biofuel feedstock", "Sugar", "Maize"))
 {dwplot(df_soy_continents,
-        dodge_size = 0.5,
+        dodge_size = 0.4,
         dot_args = list(size = 2),
         whisker_args = list(size = 1),
         vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
@@ -2028,8 +2052,13 @@ for(CNT in continentS){
   df <- res_list_oilpalm_cnt[[paste0("Oilpalm_",CNT)]]
   
   # select estimates to display (significant ones)
-  df <- df[c("Oilpalm_X_Sugar", 
-             "Oilpalm_X_Sunflower_oil"),]
+  df <- df[c("Oilpalm_X_Beef", 
+             "Oilpalm_X_Palm_oil",
+             "Oilpalm_X_Sugar", 
+             "Oilpalm_X_Maize",
+             "Oilpalm_X_Rapeseed_oil",
+             "Oilpalm_X_Sunflower_oil", 
+             "Oilpalm_X_Wheat"),]
   
   df$model <- CNT #gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
   df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
@@ -2240,8 +2269,7 @@ for(CNT in continentS){
   df <- res_list_cocoa_cnt[[paste0("Cocoa_",CNT)]]
   
   # select estimates to display (significant ones)
-  df <- df[c("Cocoa_X_Coffee", 
-             "Cocoa_X_Rapeseed_oil"),]
+  df <- df[c("Rubber_X_Sugar"),]
   
   df$model <- CNT #gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
   df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing

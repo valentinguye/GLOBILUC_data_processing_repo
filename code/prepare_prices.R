@@ -268,7 +268,7 @@ for(voi in ip_variables){
 
 # remove some variables that were only temporarily necessary
 # (we want to keep lag1)
-vars_torm <- names(inter_prices)[(grepl(pattern = "_lag2", x = names(inter_prices)) |
+vars_torm <- names(inter_prices)[(#grepl(pattern = "_lag2", x = names(inter_prices)) |
                               grepl(pattern = "_lag3", x = names(inter_prices)) |
                               grepl(pattern = "_lag4", x = names(inter_prices)) |
                               grepl(pattern = "_lag5", x = names(inter_prices)))]
