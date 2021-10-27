@@ -338,20 +338,53 @@ for(name in dataset_names){
   # sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
 
   ## Standardize crops that can be matched with a price and crop groups
-  indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder", 
-                         "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber", 
-                         "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
+  # indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder", 
+  #                        "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber", 
+  #                        "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
   
+  ## No. Rather: standardize crops to compute agro-ecological exposure (/risk) to deforestation for a specific LU
+  indivcrops_to_std <- c("Cocoa", "Coffee", "Fodder", "Oilpalm", "Rubber", "Soybean")
+  
+  ## First way to standardize, sum (the denominator) over the 6 main crops
   # To understand these lines, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
-  df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = (contains("_crops") | any_of(indivcrops_to_std)))))
+  df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = (any_of(indivcrops_to_std)))))#contains("_crops") |
 
-  df_cs <- dplyr::mutate(df_cs, across(.cols = (contains("_crops") | any_of(indivcrops_to_std)),
-                                       .fns = ~./si_sum, 
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),#contains("_crops") | 
+                                       .fns = ~./(si_sum), 
                                        .names = paste0("{.col}", "_std")))
 
+
+  ## Second way to standardize: for each of the 6 main driver crops, 
+  # standardize by dividing by the sum of the suitability indexes of the N (N = 2,...,6) crops with the highest suitability (among all, not only among the six drivers), 
+  # and give a 0 value to the crops that are not in the top N suitability index. 
+  
+  # N = 2 
+  # identify the N highest suitability index values (in every grid cell)
+  # highest
+  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_si = max(c_across(cols = any_of(gaez_crops)))) %>% as.data.frame()
+  # 2nd highest: 
+  df_cs$max_si_2nd <- NA
+  for(i in 1:nrow(df_cs)){
+    # vector of interest 
+    x <- df_cs[i,gaez_crops]
+    # max value of the row
+    row_max_si <- df_cs[i,"max_si"]
+    # second max value
+    df_cs[i,"max_si_2nd"] <- max(x[x!=row_max_si])
+  }
+  
+  df_cs <- dplyr::mutate(df_cs, sum_2_max_si = rowSums(across(.cols = c(max_si, max_si_2nd))))#contains("_crops") |
+  
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),#contains("_crops") | 
+                                       .fns = ~./(sum_2_max_si), 
+                                       .names = paste0("{.col}", "_std")))
+  
+  
+  
   # Select only newly constructed variables, and id
-  var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs))] # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs))
-  # and this is if we want the new variables in non std format too | names(df_cs) %in% c("Fodder", "Rice", "Sugar")
+  var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs))| names(df_cs) %in% c("Fodder", "Rice", "Sugar", "Sorghum2")] 
+  # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs))
+  # and this is if we want the new variables in non std format too | names(df_cs) %in% c("Fodder", "Rice", "Sugar", "Sorghum2")
   df_cs <- df_cs[,c("grid_id", var_names)]
   
   saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))  
@@ -368,8 +401,8 @@ for(name in dataset_names){
   base_path <- paste0(here(origindir, name), ".Rdata")
   df_base <- readRDS(base_path)
   
-  # Remove non-standardized suitability indexes
-  df_base <- dplyr::select(df_base,-all_of(gaez_crops))
+  # # Remove non-standardized suitability indexes
+  # df_base <- dplyr::select(df_base,-all_of(gaez_crops))
   
   # Country variable
   country_path <- paste0(here(origindir, name), "_country_nf.Rdata")
