@@ -11,7 +11,8 @@
 # see this project's README for a better understanding of how packages are handled in this project. 
 
 # These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
-neededPackages = c("plyr", "dplyr", "here", #"tibble", "data.table",
+neededPackages = c("Matrix",
+                   "plyr", "dplyr", "here", #"tibble", "data.table",
                    "foreign", # "readxl",
                    "raster", "rgdal",  "sp", "sf", # "spdep",
                    "DataCombine",
@@ -160,18 +161,18 @@ start_year = 2001
 end_year = 2019
 continent = "all"
 further_lu_evidence = "none"
-crop_j = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber") # in GAEZ spelling
+crop_j = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber") # in GAEZ spelling , 
 j_soy = "Soybean"
-standardized = FALSE
+standardization = "_std"
 fcr = 7.2
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
 # but maybe not with skPk controls.
-price_k <- c("Beef", "Soybean", "Palm_oil", "Cocoa", "Coffee", "Rubber")#, 
+price_k <- c("Rapeseed_oil")#,"Beef" , , "Palm_oil", "Cocoa", "Coffee", "Rubber"
              # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum")
 
 extra_price_k = c() # , "Sheep","Chicken", "Pork"
 price_info = "lag1"
-sjpj_lag = "_lag2" # either "" or "_lag1" or "_lag2"
+sjpj_lag = "_lag1" # either "" or "_lag1" or "_lag2"
 skpk_lag = "_lag1" # either "" or "_lag1" or "_lag2"SjPj = TRUE
 # SjPj = TRUE
 # SkPk = TRUE
@@ -179,7 +180,7 @@ remaining <- TRUE
 pasture_shares <- FALSE
 open_path <- FALSE
 commoXcommo <- "Fodder_X_Beef"
-fe = "grid_id + country_year"
+fe = "grid_id + year"
 distribution = "quasipoisson"
 conley_cutoff <- 100
 se = "twoway"
@@ -199,6 +200,8 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           price_k = c("Beef", "Soybean", "Palm_oil", "Cocoa", "Coffee", "Rubber", 
                                       "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum"), # in prices spelling
                           extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
+                          standardization = "_std", # one of "", "_std", or "_std2"
+                          aggregation = "over_j", # one of "", "over_j", or "over_k"
                           SjPj = TRUE,
                           SkPk = TRUE,
                           price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
@@ -209,7 +212,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           open_path = FALSE,
                           commoXcommo = "Fodder_X_Beef",
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
-                          fe = "grid_id + country_year", 
+                          fe = "grid_id + year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
                           se = "twoway", # passed to vcov argument in fixest::summary. Currently, one of "cluster", "twoway", or "conley".  
                           conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if se = "conley"  
@@ -229,13 +232,9 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   crop_k <- mapmat[,"Crops"][match(price_k, mapmat[,"Prices"])]
 
   # Standardized suitability index or not
-  if(standardized){
-    suitability_j <- paste0(crop_j, "_std")  
-    suitability_k <- paste0(crop_k, "_std")  
-  } else{
-    suitability_j <- crop_j
-    suitability_k <- crop_k
-  }
+  suitability_j <- paste0(crop_j, standardization)  
+  # suitability_k <- paste0(crop_k, standardization)
+
   
   ## Price variable names
   # Explicit the name of the price of j based on crop_j (GAEZ spelling)
@@ -262,7 +261,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   # Keep only in data the useful variables 
   d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", "remaining_fc", "accu_defo_since2k",
                                  outcome_variable, "pasture_share",
-                                 suitability_j, suitability_k))) 
+                                 suitability_j))) #,suitability_k
   
   # If we want the exposure to deforestation for pasture to be proxied with the share of pasture area in 2000, rather than suitability index, 
   if(pasture_shares){
@@ -400,7 +399,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     sum_res <- summary(reg_res,
                        vcov = se)
     
-    se_info <- "Clustered (grid cell - country*year"
+    se_info <- "Two-way clustered (grid cell - year)"
   }
   if(se == "cluster"){
     sum_res <- summary(reg_res,
@@ -410,10 +409,35 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     se_info <- paste0("Clustered (",cluster,")")
   }
   
+  
+  # pimp the result dataframe a bit
   df_res <- sum_res$coeftable %>% as.data.frame()
   # add a column with the number of observations
   df_res$Observations <- sum_res$nobs
   df_res$`Standard errors` <- se_info
+  # do not keep the control variables 
+  df_res <- df_res[regressors,]
+  
+  ### COMPUTE AGGREGATED EFFECT 
+  #if(aggregation == "over_j"){
+    vcov_mat <- sum_res$cov.scaled %>% as.matrix()
+    vcov_mat <- vcov_mat[regressors,regressors]
+    # extract the covariance estimates 
+    unique_cov <- c()
+    for(n in 1:nrow(vcov_mat)){
+      unique_cov <- c(unique_cov,vcov_mat[n,1:n])
+    }
+    
+    aggr_effect <- sum(sum_res$coefficients[regressors])   
+    aggr_effect_stderr <- sqrt(sum(unique_cov))
+      
+    statistic <- (aggr_effect - 0) / aggr_effect_stderr
+      
+    pval <-  2 * pnorm(abs(statistic), lower.tail = FALSE) 
+  
+  #}
+
+  df_res <- rbind(df_res, c(aggr_effect, aggr_effect_stderr, statistic, pval, sum_res$nobs, se_info))
   
   # output wanted
   if(output == "data"){
@@ -433,62 +457,74 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
 }
 
 
-#### MAIN FIGURE #### 
-df <- df_res
+#### NET EFFECTS #### 
 
+# Here, we run the regression over every j-k combinations of interest, and store and plot the estimates 
 
-df <- make_main_reg(crop_j = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"),
-                         price_k =  c("Beef", "Soybean", "Palm_oil", "Cocoa", "Coffee", "Rubber"),
-                         output = "coef_table"
-)
+# infrastructure to store results
+net_res_list <- list()
+elm <- 1
 
+for(j_crop in c("Soybean")){#"Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"
+  for(k_price in c("Beef" ,"Soybean", "Palm_oil", "Cocoa", "Coffee", "Rubber"
+                   #"Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum", 
+                   #"Chicken", "Pork", "Sheep", "Crude_oil"
+                   )){
+    
+    net_res_list[[elm]] <- make_main_reg(crop_j = j_crop, 
+                                         price_k = k_price, 
+                                         output = "coef_table")
+    
+    names(net_res_list)[elm] <- paste0(j_crop,"_X_",k_price)
+    elm <- elm + 1
+  }
+}
+
+# let's plot everything first (insignificant ones are a matter of absence of true effect or precision, but not bias)
 
 # prepare regression outputs in a tidy data frame readable by dwplot
-
-# select estimates to display (significant ones)
-df <- df[df$`Pr(>|t|)`<0.1,]
-df <- df[rownames(df)!="remaining_fc",]
-# df <- df[c("Soybean_X_Beef", 
-#            "Soybean_X_Palm_oil",
-#            "Soybean_X_Sugar", 
-#            "Soybean_X_Maize",
-#            "Oilpalm_X_Sugar",  
-#            "Oilpalm_X_Sunflower_oil",
-#            "Cocoa_X_Coffee",
-#            "Cocoa_X_Rapeseed_oil", 
-#            "Rubber_X_Sugar"),]
+df <- bind_rows(net_res_list)
 
 df$model <- gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
 df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
 
+# necessary for dotwhisker to recognize those columns
 names(df)[names(df)=="Estimate"] <- "estimate"
 names(df)[names(df)=="Std. Error"] <- "std.error"
 
-title <- paste0("Indirect effects of commodity prices on agriculture-driven tropical deforestation")
+title <- paste0("Moderations from commodity prices on the effects of agro-ecological suitability on pan-tropical deforestation, 2001-2019") # Cross-effects
 
 # If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
 # %>%  add_brackets(brackets)
 # brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
 #                  c("Biofuel feedstock", "Sugar", "Maize"))
+
 {dwplot(df,
         dot_args = list(size = 2),
-        whisker_args = list(size = 1),
+        whisker_args = list(size = 0.5),
         vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
-    relabel_predictors(c(Sugar = "Sugar", 
-                         Maize = "Maize",
-                         Crude_oil = "Crude oil",
-                         Palm_oil = "Palm oil",
-                         Soybean_oil = "Soybean oil",                       
-                         Olive_oil = "Olive oil", 
-                         Rapeseed_oil = "Rapeseed oil", 
-                         Sunflower_oil = "Sunflower oil", 
-                         Coconut_oil = "Coconut oil", 
-                         Soybean = "Soybean", 
-                         Soybean_meal = "Soybean meal", 
+    relabel_predictors(c(Beef = "Beef",
+                         Chicken = "Chicken",
                          Cocoa = "Cocoa", 
+                         Coconut_oil = "Coconut oil", 
                          Coffee = "Coffee", 
+                         Crude_oil = "Crude oil",
+                         Maize = "Maize",
+                         Olive_oil = "Olive oil", 
+                         Palm_oil = "Palm oil",
+                         Pork = "Pork", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Rice = "Rice",
+                         Rubber = "Rubber",
+                         Sheep = "Sheep", 
+                         Sorghum = "Sorghum",
+                         Soybean = "Soybean",
+                         Soybean_meal = "Soybean meal", 
+                         Sugar = "Sugar", 
+                         Sunflower_oil = "Sunflower oil", 
                          Tea = "Tea", 
-                         Tobacco = "Tobacco"
+                         Tobacco = "Tobacco",
+                         Wheat = "Wheat"
     )) +
     theme_bw() + xlab("Coefficient Estimate") + ylab("") +
     geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
@@ -499,6 +535,12 @@ title <- paste0("Indirect effects of commodity prices on agriculture-driven trop
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank())}  
 
+
+#### NET AGGREGATED EFFECTS ####
+
+# For net aggregated effects, since we remove one dimension,we have space for another dimension to distinguish estimates. 
+# We use it to feature different specifications, and different continents. 
+# So it makes 4 figures: aggregation over two dimensions (j and k), each either broken down into specifications or continents.
 
 
 

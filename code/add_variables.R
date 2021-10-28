@@ -306,6 +306,13 @@ saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "driverl
 #### STANDARDIZE AND AGGREGATE SUITABILITY INDICES ####  
  
 # name = dataset_names[1]
+# Nota: produces warnings ("In max(x[x < 0]) : aucun argument pour max ; -Inf est renvoyé")
+# this is not an issue. It comes from obs. that have suitability indexes equal across all crops.
+# but in such cases, the -Inf value is not given, it is the max_si value that is given (see below) 
+
+# Note also that the standardizing procedures produce some NaN values for stdandardized variables, due to dividing by 0 
+# (for grid cells) that have only 0 SI for all crops. This is not an issue, and it will be handled within the data cleaning process in 
+# make_main_reg function in analyses.R
 
 for(name in dataset_names){
   
@@ -318,19 +325,20 @@ for(name in dataset_names){
   
   ### Standardize suitability indexes
   
-  ## Aggregate suitability indexes to match price data
+  ## Aggregate suitability indexes to match price data (for Sugar, Fodder, Rice and Sorghum) 
+  # and also aggregate crops with common use, including those that would match a price (eg. oat and cotton) bc we do not match SI with prices
   df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
                                           Fodder = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop  
                                           Rice = max(c(Drylandrice, Wetlandrice)),
                                           Sorghum2 = max(c(Sorghum, Sorghumbiomass)),
                                           bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Switchgrass)),
-                                          cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye)),
-                                          pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea)),
+                                          cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye, Oat)),
+                                          pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea, Groundnut)),
                                           roots_crops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
                                           # oil_crops = max(c(Groundnut, Jatropha, Olive, Rapeseed, Sunflower)), # we have prices for all of them
                                           vegetables_crops = max(c(Cabbage, Carrot, Onion, Tomato)),
                                           # fruits_crops = max(c(Banana, Citrus, Coconut)), # For coconut we have price only for the oil but it does not matter because it's the AESI workstream anyway 
-                                          industrial_crops = max(c(Flax)) # Rubber, directly responsible for deforestation, are not mixed with these.
+                                          industrial_crops = max(c(Flax, Cotton)) # Rubber, directly responsible for deforestation, are not mixed with these.
                                           # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
                                           
   ) %>% as.data.frame()
@@ -357,42 +365,78 @@ for(name in dataset_names){
   ## Second way to standardize: for each of the 6 main driver crops, 
   # standardize by dividing by the sum of the suitability indexes of the N (N = 2,...,6) crops with the highest suitability (among all, not only among the six drivers), 
   # and give a 0 value to the crops that are not in the top N suitability index. 
+
+  # the following modifies the base SI data (needed to make non highest suitable index crop equal to 0) 
+  # hence, save a version of non modified SI variables
+  df_cs_saved <- df_cs   
+  
+  # we need a slightly modified version of gaez_crops, that does not include elements of aggregated crops, but includes aggregated crops
+  # (necessary for Fodder, Sugar, Rice, Sorghum2, but not for the _crops variables actually, in the current version that does not 
+  # account for the number of crops having equal suitable indexes. 
+  all_crops <- gaez_crops[!(gaez_crops %in% c("Alfalfa", "Napiergrass", "Sugarbeet", "Sugarcane", 
+                                              "Drylandrice", "Wetlandrice", "Sorghum", "Sorghumbiomass", 
+                                              "Jatropha", "Miscanthus", "Reedcanarygrass", "Switchgrass", 
+                                              "Buckwheat", "Foxtailmillet", "Pearlmillet", "Rye", 
+                                              "Chickpea", "Cowpea", "Drypea", "Gram", "Phaseolousbean", "Pigeonpea", 
+                                              "Cassava", "Sweetpotato", "Whitepotato", "Yam", 
+                                              "Cabbage", "Carrot", "Onion", "Tomato", 
+                                              "Flax"))]
+  
+  all_crops <- c(all_crops, "Fodder", "Sugar", "Rice", "Sorghum2", 
+                 "bioenergy_crops", "cereal_crops", "pulses_crops", "roots_crops", "vegetables_crops", "industrial_crops")
   
   # N = 2 
   # identify the N highest suitability index values (in every grid cell)
   # highest
-  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_si = max(c_across(cols = any_of(gaez_crops)))) %>% as.data.frame()
+  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_si = max(c_across(cols = any_of(all_crops)))) %>% as.data.frame()
+  
   # 2nd highest: 
   df_cs$max_si_2nd <- NA
+
   for(i in 1:nrow(df_cs)){
     # vector of interest 
-    x <- df_cs[i,gaez_crops]
+    x <- df_cs[i,all_crops]
     # max value of the row
     row_max_si <- df_cs[i,"max_si"]
+
     # second max value
-    df_cs[i,"max_si_2nd"] <- max(x[x!=row_max_si])
+    row_max_si_2nd <- max(x[x<row_max_si])    
+
+    # handle cases with more than one max values 
+    if(length(which(x == row_max_si))==1){# i.e. if there is only one crop with the highest value 
+      df_cs[i,"max_si_2nd"] <-  row_max_si_2nd     
+    }else{
+      df_cs[i,"max_si_2nd"] <- row_max_si     
+    }
+    
+    # /!\ modify SI value (to 0) for all the crops that are not in the top N
+    df_cs[i,names(x[which(x < df_cs[i,"max_si_2nd"])])] <- 0
+    
+    rm(x, row_max_si, row_max_si_2nd)
   }
   
   df_cs <- dplyr::mutate(df_cs, sum_2_max_si = rowSums(across(.cols = c(max_si, max_si_2nd))))#contains("_crops") |
   
   df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),#contains("_crops") | 
                                        .fns = ~./(sum_2_max_si), 
-                                       .names = paste0("{.col}", "_std")))
+                                       .names = paste0("{.col}", "_std2")))
   
+  # Add standardized variables to the initial data
+  std2_var_names <- names(df_cs)[grepl(pattern = "_std2", x = names(df_cs))]
+  df_cs_saved <- inner_join(df_cs_saved, df_cs[,c("grid_id",std2_var_names)], by = "grid_id")
   
+  # Select variables to save: only newly constructed variables (not grouped crops), and id
+  var_names <- names(df_cs_saved)[grepl(pattern = "_std", x = names(df_cs_saved))] #  & !grepl(pattern = "_crops", x = names(df_cs_saved)) not necessary bc we selected the crops to standardize, so _crops* vars have not been stded. 
+  # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs_saved))
+  # and this is if we want the new variables in non std format too | names(df_cs_saved) %in% c("Fodder", "Rice", "Sugar", "Sorghum2")
+  df_cs_saved <- df_cs_saved[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2", var_names)]
   
-  # Select only newly constructed variables, and id
-  var_names <- names(df_cs)[grepl(pattern = "_std", x = names(df_cs))| names(df_cs) %in% c("Fodder", "Rice", "Sugar", "Sorghum2")] 
-  # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs))
-  # and this is if we want the new variables in non std format too | names(df_cs) %in% c("Fodder", "Rice", "Sugar", "Sorghum2")
-  df_cs <- df_cs[,c("grid_id", var_names)]
-  
-  saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))  
-  rm(df_cs, path)
+  saveRDS(df_cs_saved, paste0(here(origindir, name), "_stdsi.Rdata"))  
+  rm(df_cs, df_cs_saved, path)
 }
 
 
-
+# df_cs[,c("si_sum", "max_si", "max_si_2nd", var_names)]
 
 #### MERGE AESI DATASETS WITH ADDED VARIABLES #### 
 for(name in dataset_names){
