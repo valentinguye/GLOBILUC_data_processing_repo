@@ -125,61 +125,42 @@ mapmat <- matrix(data = mapmat_data,
 
 colnames(mapmat) <- c("Prices", "Crops")
 
-# crop_prices <- list("Fodder" = c("Soybean", "Palm_oil", "Cocoa", "Coffee", "Rubber", "Maize", "Sugar", "Wheat", "Barley", "Oat"), 
-#                     "Soybean" = c("Beef", "Palm_oil", "Cocoa", "Coffee", "Rubber", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar", "Wheat"),
-#                     "Oilpalm" = c("Beef", "Soybean", "Cocoa", "Coffee", "Rubber", "Rapeseed_oil", "Sunflower_oil", "Maize", "Sugar", "Wheat"),
-#                     "Cocoa" = c("Beef", "Soybean", "Palm_oil", "Coffee", "Rubber", "Rapeseed_oil", "Sunflower_oil", "Sugar"),
-#                     "Coffee" = c("Beef", "Soybean", "Palm_oil", "Cocoa", "Rubber", "Tea", "Sugar", "Tobacco"),
-#                     "Rubber" = c("Beef", "Soybean", "Palm_oil", "Coffee", "Cocoa", "Rapeseed_oil", "Sunflower_oil",  "Maize", "Sugar", "Wheat", "Barley", "Oat")
-# )
 
-# We do not run robustness checks for Beef and Coffee, as they have nothing significant in the main estimation. 
-# crops_to_runover <- c("Soybean", "Oilpalm", "Cocoa", "Rubber")
+### MAIN DATA SET ### 
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))
 
-
-### READ ALL POSSIBLE DATASETS HERE 
-# but not all together because of memory issues. 
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))
-
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aesi_long_final.Rdata"))
-
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))
-
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aeay_long_final.Rdata"))
-
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aeay_long_final.Rdata"))
-
-# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aeay_long_final.Rdata"))
-
+### PRICE DATA ###
 prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
-# 
-# rm(outcome_variable, start_year, end_year, crop_j, j_soy, price_k, extra_price_k, SjPj, SkPk, fe, distribution, output, se, cluster, 
-#    controls, regressors, outcome_variable)
 
+
+
+### TEMPORARY OBJECTS 
 outcome_variable = "driven_loss" # "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
 start_year = 2001
 end_year = 2019
 continent = "all"
 further_lu_evidence = "none"
-crop_j = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber") # in GAEZ spelling , 
+crop_j = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber") # in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
 j_soy = "Soybean"
 standardization = "_std"
 fcr = 7.2
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
 # but maybe not with skPk controls.
-price_k <- c("Rapeseed_oil")#,"Beef" , , "Palm_oil", "Cocoa", "Coffee", "Rubber"
+price_k <- c("Rapeseed_oil")# in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+              # "Beef" , , "Palm_oil", "Cocoa", "Coffee", "Rubber"
              # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum")
 
-extra_price_k = c() # , "Sheep","Chicken", "Pork"
+extra_price_k = c() # in price spelling. One, part, or all of the full set of commodities NOT having a price-AESI match.
+                # "Sheep","Chicken", "Pork", "Crude_oil
 price_info = "lag1"
-sjpj_lag = "_lag1" # either "" or "_lag1" or "_lag2"
-skpk_lag = "_lag1" # either "" or "_lag1" or "_lag2"SjPj = TRUE
+# sjpj_lag = "_lag1" # either "" or "_lag1" or "_lag2"
+# skpk_lag = "_lag1" # either "" or "_lag1" or "_lag2"SjPj = TRUE
 # SjPj = TRUE
 # SkPk = TRUE
 remaining <- TRUE
 pasture_shares <- FALSE
-open_path <- FALSE
-commoXcommo <- "Fodder_X_Beef"
+# open_path <- FALSE
+# commoXcommo <- "Fodder_X_Beef"
 fe = "grid_id + year"
 distribution = "quasipoisson"
 conley_cutoff <- 100
@@ -196,23 +177,26 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           end_year = 2020, 
                           continent = "all", # one of "Africa", "America", "Asia", or "all"
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
-                          crop_j = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"), # in GAEZ spelling
-                          price_k = c("Beef", "Soybean", "Palm_oil", "Cocoa", "Coffee", "Rubber", 
-                                      "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum"), # in prices spelling
-                          extra_price_k = c(), # One of "Crude_oil", "Chicken", "Pork", "Sheep" 
-                          standardization = "_std", # one of "", "_std", or "_std2"
-                          aggregation = "over_j", # one of "", "over_j", or "over_k"
-                          SjPj = TRUE,
-                          SkPk = TRUE,
-                          price_info = "lag1", # one of "lag1", "2pya", "3pya", "4pya", "5pya",
-                          sjpj_lag = "_lag1", # either "" or "_lag1" or "_lag2"
-                          skpk_lag = "_lag1", # either "" or "_lag1" or "_lag2"
-                          remaining = TRUE, # should remaining forest be controlled for 
+                          exposures = c("Fodder"),  # in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+                          # , "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"
+                          treatments = c("Soybean"), # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+                          # , "Palm_oil", "Cocoa", "Coffee", "Rubber", 
+                          # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum"
+                          extra_price_k = c("Chicken", "Pork", "Sheep", "Crude_oil"), # in price spelling. One, part, or all of the full set of commodities NOT having a price-AESI match.
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
-                          open_path = FALSE,
-                          commoXcommo = "Fodder_X_Beef",
+                          standardization = "_std2", # one of "", "_std", or "_std2"
+                          price_info = "_lag1", # one of "lag1", "_2pya", "_3pya", "_4pya", "_5pya",
+                          estimation_step = "alpha",# one of "alpha", "beta", "delta"
+                          aggregation = "", # one of "", "main_drivers", or "gaez_prices" - currently
+                          # SjPj = FALSE,
+                          # SkPk = TRUE,
+                          # sjpj_lag = "_lag1", # either "" or "_lag1" or "_lag2"
+                          # skpk_lag = "_lag1", # either "" or "_lag1" or "_lag2"
+                          remaining = TRUE, # should remaining forest be controlled for 
+                          # open_path = FALSE,
+                          # commoXcommo = "Fodder_X_Beef",
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
-                          fe = "grid_id + year", 
+                          fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
                           se = "twoway", # passed to vcov argument in fixest::summary. Currently, one of "cluster", "twoway", or "conley".  
                           conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if se = "conley"  
@@ -224,98 +208,131 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   
   #### PREPARE NEEDED VARIABLE NAMES
-  # this does not involve data, just arguments of the make_reg function 
+  # this does not involve data, just arguments of the make_reg function
+  # original_ names are used to get generic covariate names in coefficient tables (irrespective of modelling choices)
   
-  ## Suitability index variable names
-  # Explicit the names of the sk variables corresponding to commodities in price_k only (i.e. not in price_j nor extra_price_k)
-  # match function is important because suitability_k must have commodities in the same order as price_k 
-  crop_k <- mapmat[,"Crops"][match(price_k, mapmat[,"Prices"])]
-
-  # Standardized suitability index or not
-  suitability_j <- paste0(crop_j, standardization)  
-  # suitability_k <- paste0(crop_k, standardization)
-
+  ## Standardized suitability index to find in the main data 
+  # this just those for which focus is set in current specification
+  original_exposures <- exposures
+  exposures <- paste0(exposures, standardization)  
+  # this is all possible exposures, necessary in every specificaton 
+  original_all_exposures <- mapmat[,"Crops"]
+  all_exposures <- paste0(original_all_exposures, standardization)
   
-  ## Price variable names
-  # Explicit the name of the price of j based on crop_j (GAEZ spelling)
-  price_j <- mapmat[match(crop_j, mapmat[,"Crops"]),"Prices"]
-
-  # Group the names of the different prices 
-  original_price_j <- price_j
-  original_price_k <- price_k # /!\ this one is used in making rk 
-  original_price_reg <- c(price_k, extra_price_k)
-  
-  # lag the different price sets
-  price_reg <- paste0(original_price_reg, "_", price_info)
-  price_j <- paste0(original_price_j, sjpj_lag)
-  price_k <- paste0(original_price_k, skpk_lag)
-  
+  ## Price variable names to find in the price data
+  # this just those for which focus is set in current specification
+  original_treatments <- treatments
+  treatments <- paste0(treatments, price_info)
+  # this is all possible treatments, necessary in every specificaton 
+  original_all_treatments <- mapmat[,"Prices"]
+  all_treatments <- paste0(original_all_treatments, price_info)
   
   #### MAKE THE VARIABLES NEEDED IN THE DATA
-  #d <- main_data
-  if(outcome_variable == "first_loss" | outcome_variable == "nd_first_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "glass_aesi_long_final.Rdata"))}
-  if(outcome_variable == "firstloss_glassgfc"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "firstloss8320_aesi_long_final.Rdata"))}
-  if(outcome_variable == "phtf_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "phtfloss_aesi_long_final.Rdata"))}
-  if(outcome_variable == "driven_loss"){d <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))}
-  
+  # manipulate a different data set so that original one can be provided to all functions and not read again every time. 
+  d <- main_data
+ 
   # Keep only in data the useful variables 
   d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", "remaining_fc", "accu_defo_since2k",
                                  outcome_variable, "pasture_share",
-                                 suitability_j))) #,suitability_k
+                                 unique(exposures, all_exposures)))) #
+
+  # Merge only the prices needed, not the whole price dataframe
+  d <- left_join(d, prices[,c("year", unique(treatments, all_treatments))], by = c("year"))
+
   
   # If we want the exposure to deforestation for pasture to be proxied with the share of pasture area in 2000, rather than suitability index, 
   if(pasture_shares){
     d[,grepl("Fodder", names(d))] <- d$pasture_share
   }
   
-  # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", unique(c(price_reg, price_j, price_k)))], by = c("year"))
-  
-  # Main regressors
+  ### Main regressors
   regressors <- c()
-  for(Pk in price_reg){
-    for(Sj in suitability_j){
-      varname <- paste0(crop_j[match(Sj, suitability_j)], "_X_", original_price_reg[match(Pk, price_reg)])
+  for(Pk in treatments){
+    for(Sj in exposures){
+      varname <- paste0(original_exposures[match(Sj, exposures)], "_X_", original_treatments[match(Pk, treatments)])
       regressors <- c(regressors, varname)
+      # Log them so their variations are comparable
       d <- mutate(d, 
-                  !!as.symbol(varname) := (!!as.symbol(Sj)*(!!as.symbol(Pk))))
+                  !!as.symbol(varname) := log( (!!as.symbol(Sj)) * (!!as.symbol(Pk)) +1))
     }
   }
   rm(varname, Sj, Pk)
+
   
+  ### Controls - mechanisms
+  # it's important that this is not conditioned on SkPk nor sjPj
+  controls_alpha <- c()
+  controls_beta <- c() 
+  controls_delta <- c() 
   
-  ## Mechanisms
-  # direct_effects_var <- paste0(mapmat[,"Crops"], "_X_", mapmat[,"Prices"]) 
-  if(open_path){
-    regressors <- regressors[!(regressors %in% commoXcommo)]
-  }
-  
-  
-  ## Log them so their variations are comparable
-  for(reg in regressors){
-    d <- mutate(d, !!as.symbol(reg) := log(!!as.symbol(reg)+1))
-  }
+  # it is not needed to do all that if we only estimate alphas
+  if(estimation_step != "alpha"){
+    # construct all interaction variables
+    indiv_controls <- c()
+    for(Pk in all_treatments){
+      for(Sj in all_exposures){
+        varname <- paste0(original_all_exposures[match(Sj, all_exposures)], "_X_", original_all_treatments[match(Pk, all_treatments)])
+        indiv_controls <- c(indiv_controls, varname)
+        d <- mutate(d, 
+                    !!as.symbol(varname) := log( (!!as.symbol(Sj)) * (!!as.symbol(Pk)) +1))
+      }
+    }
+    rm(varname, Pk, Sj)
     
-  ## Controls
-  controls <- c() # it's important that this is not conditioned on SkPk nor sjPj
+    ## Full control (to estimate delta)
+    # identify the variables to put in the full control term
+    full_control_vars <- indiv_controls[!(indiv_controls %in% regressors)]
+    # sum them up (linear combination)
+    d <- dplyr::mutate(d, full_control = rowSums(across(.cols = (any_of(full_control_vars)))))
+    
+    controls_delta <- c(controls_delta, "full_control")
+    
+    ## Partial control (to estimate beta)
+    # identify the variables to put in the partial control term, but this changes depending on the question we are answering.
+    if(aggregation == "main_drivers"){ 
+      # in this case, we capture the confounding covariation between the treatment and the prices of the main crops directly driving deforestation 
+      terms_to_remove <- c()
+      for(Sj in original_exposures){
+        varname <- paste0(Sj, "_X_", mapmat[Sj,"Prices"])
+        terms_to_remove <- c(terms_to_remove, varname)
+      }
+      part_control_vars <- full_control_vars[!(full_control_vars %in% terms_to_remove)]
+    }
+    if(aggregation == "gaez_prices"){ 
+      # in this case, we capture the confounding covariation between the exposure and the suitability indexes of all the crops that have a price match
+      terms_to_remove <- c()
+      for(Pk in original_treatments){
+        varname <- paste0(mapmat[Pk,"Crops"], "_X_", Pk)
+        terms_to_remove <- c(terms_to_remove, varname)
+      }
+      part_control_vars <- full_control_vars[!(full_control_vars %in% terms_to_remove)]
+    }
+
+    # sum partial control individual terms up (linear combination)
+    d <- dplyr::mutate(d, part_control = rowSums(across(.cols = (any_of(part_control_vars)))))
+  
+    controls_beta <- c(controls_beta, "part_control")
+  }
   
   # add remainging forest cover as a control
   if(remaining){
-    controls <- c(controls, "remaining_fc")
+    controls_alpha <- c(controls_alpha, "remaining_fc")
+    controls_beta <- c(controls_beta, "remaining_fc")
+    controls_delta <- c(controls_delta, "remaining_fc")
   }
   
   
   # MODEL SPECIFICATION FORMULAE
   if(length(controls) > 0){
-    fe_model <- as.formula(paste0(outcome_variable,
+    alpha_model <- as.formula(paste0(outcome_variable,
                                   " ~ ",
                                   paste0(regressors, collapse = "+"),
                                   " + ",
-                                  paste0(controls, collapse = "+"),
+                                  paste0(controls_alpha, collapse = "+"),
                                   " | ",
                                   fe))
   }else{
-    fe_model <- as.formula(paste0(outcome_variable,
+    model <- as.formula(paste0(outcome_variable,
                                   " ~ ",
                                   paste0(regressors, collapse = "+"),
                                   " | ",
@@ -418,26 +435,26 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   # do not keep the control variables 
   df_res <- df_res[regressors,]
   
-  ### COMPUTE AGGREGATED EFFECT 
-  #if(aggregation == "over_j"){
-    vcov_mat <- sum_res$cov.scaled %>% as.matrix()
-    vcov_mat <- vcov_mat[regressors,regressors]
-    # extract the covariance estimates 
-    unique_cov <- c()
-    for(n in 1:nrow(vcov_mat)){
-      unique_cov <- c(unique_cov,vcov_mat[n,1:n])
-    }
-    
-    aggr_effect <- sum(sum_res$coefficients[regressors])   
-    aggr_effect_stderr <- sqrt(sum(unique_cov))
-      
-    statistic <- (aggr_effect - 0) / aggr_effect_stderr
-      
-    pval <-  2 * pnorm(abs(statistic), lower.tail = FALSE) 
-  
-  #}
-
-  df_res <- rbind(df_res, c(aggr_effect, aggr_effect_stderr, statistic, pval, sum_res$nobs, se_info))
+  # ### COMPUTE AGGREGATED EFFECT 
+  # #if(aggregation == "over_j"){
+  # vcov_mat <- sum_res$cov.scaled %>% as.matrix()
+  # vcov_mat <- vcov_mat[regressors,regressors]
+  # # extract the covariance estimates 
+  # unique_cov <- c()
+  # for(n in 1:nrow(vcov_mat)){
+  #   unique_cov <- c(unique_cov,vcov_mat[n,1:n])
+  # }
+  # or use lower.tri ! 
+  # aggr_effect <- sum(sum_res$coefficients[regressors])   
+  # aggr_effect_stderr <- sqrt(sum(unique_cov))
+  # 
+  # statistic <- (aggr_effect - 0) / aggr_effect_stderr
+  # 
+  # pval <-  2 * pnorm(abs(statistic), lower.tail = FALSE) 
+  # 
+  # #}
+  # 
+  # df_res <- rbind(df_res, c(aggr_effect, aggr_effect_stderr, statistic, pval, sum_res$nobs, se_info))
   
   # output wanted
   if(output == "data"){
@@ -455,6 +472,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   return(toreturn)
   rm(toreturn)
 }
+
 
 
 #### NET EFFECTS #### 
@@ -534,6 +552,10 @@ title <- paste0("Moderations from commodity prices on the effects of agro-ecolog
           legend.justification = c(0, 0), 
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank())}  
+
+
+## Joint net effects ## 
+joint_net_effects <- make_main_reg(output = "coef_table")
 
 
 #### NET AGGREGATED EFFECTS ####
