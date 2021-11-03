@@ -140,25 +140,28 @@ start_year = 2001
 end_year = 2019
 continent = "all"
 further_lu_evidence = "none"
-crop_j = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber") # in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
-j_soy = "Soybean"
-standardization = "_std"
-fcr = 7.2
+original_exposures = c("Fodder") # , "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
-# but maybe not with skPk controls.
-price_k <- c("Rapeseed_oil")# in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+original_treatments <- c("Beef")# in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
               # "Beef" , , "Palm_oil", "Cocoa", "Coffee", "Rubber"
              # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum")
 
 extra_price_k = c() # in price spelling. One, part, or all of the full set of commodities NOT having a price-AESI match.
                 # "Sheep","Chicken", "Pork", "Crude_oil
-price_info = "lag1"
+
+pasture_shares <- FALSE
+j_soy = "Soybean"
+fcr = 7.2
+standardization = "_std2"
+price_info = "_lag1"
+estimation_step = "alpha"
+aggregaton = "none"
 # sjpj_lag = "_lag1" # either "" or "_lag1" or "_lag2"
 # skpk_lag = "_lag1" # either "" or "_lag1" or "_lag2"SjPj = TRUE
 # SjPj = TRUE
 # SkPk = TRUE
 remaining <- TRUE
-pasture_shares <- FALSE
 # open_path <- FALSE
 # commoXcommo <- "Fodder_X_Beef"
 fe = "grid_id + year"
@@ -177,9 +180,9 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           end_year = 2020, 
                           continent = "all", # one of "Africa", "America", "Asia", or "all"
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
-                          exposures = c("Fodder"),  # in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+                          original_exposures = c("Fodder"),  # in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
                           # , "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"
-                          treatments = c("Soybean"), # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+                          original_treatments = c("Soybean"), # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
                           # , "Palm_oil", "Cocoa", "Coffee", "Rubber", 
                           # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum"
                           extra_price_k = c("Chicken", "Pork", "Sheep", "Crude_oil"), # in price spelling. One, part, or all of the full set of commodities NOT having a price-AESI match.
@@ -187,7 +190,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           standardization = "_std2", # one of "", "_std", or "_std2"
                           price_info = "_lag1", # one of "lag1", "_2pya", "_3pya", "_4pya", "_5pya",
                           estimation_step = "alpha",# one of "alpha", "beta", "delta"
-                          aggregation = "", # one of "", "main_drivers", or "gaez_prices" - currently
+                          aggregation = "none", # one of "none", "main_drivers", or "gaez_prices" - currently
                           # SjPj = FALSE,
                           # SkPk = TRUE,
                           # sjpj_lag = "_lag1", # either "" or "_lag1" or "_lag2"
@@ -198,9 +201,9 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
-                          se = "twoway", # passed to vcov argument in fixest::summary. Currently, one of "cluster", "twoway", or "conley".  
-                          conley_cutoff = 100, # the distance cutoff, in km, passed to fixest::vcov_conley, if se = "conley"  
-                          cluster ="grid_id", # the cluster level if se = "cluster" (i.e. one way)
+                          se = "twoway", # passed to vcov argument in fixest::summary. Currently, one of "cluster", "twoway", or an object of the form:    
+                          # vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical")
+                          # with cutoff the distance, in km, passed to fixest::vcov_conley, if se = "conley"  
                           # coefstat = "confint", # one of "se", "tstat", "confint"
                           glm_iter = 25,
                           output = "est_obj" # one of "data", "est_obj", "coef_table" 
@@ -213,16 +216,14 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   ## Standardized suitability index to find in the main data 
   # this just those for which focus is set in current specification
-  original_exposures <- exposures
-  exposures <- paste0(exposures, standardization)  
+  exposures <- paste0(original_exposures, standardization)  
   # this is all possible exposures, necessary in every specificaton 
   original_all_exposures <- mapmat[,"Crops"]
   all_exposures <- paste0(original_all_exposures, standardization)
   
   ## Price variable names to find in the price data
   # this just those for which focus is set in current specification
-  original_treatments <- treatments
-  treatments <- paste0(treatments, price_info)
+  treatments <- paste0(original_treatments, price_info)
   # this is all possible treatments, necessary in every specificaton 
   original_all_treatments <- mapmat[,"Prices"]
   all_treatments <- paste0(original_all_treatments, price_info)
@@ -260,12 +261,19 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
 
   
   ### Controls - mechanisms
-  # it's important that this is not conditioned on SkPk nor sjPj
-  controls_alpha <- c()
-  controls_beta <- c() 
-  controls_delta <- c() 
+  # it's important that this is not conditioned on anything so these objects exist
+  alpha_controls <- c()
+  beta_controls <- c() 
+  delta_controls <- c() 
   
-  # it is not needed to do all that if we only estimate alphas
+  # add remainging forest cover as a control
+  if(remaining){
+    alpha_controls <- c(alpha_controls, "remaining_fc")
+    beta_controls <- c(beta_controls, "remaining_fc")
+    delta_controls <- c(delta_controls, "remaining_fc")
+  }
+  
+  # it is not needed to do all that if we only estimate alphas 
   if(estimation_step != "alpha"){
     # construct all interaction variables
     indiv_controls <- c()
@@ -275,6 +283,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
         indiv_controls <- c(indiv_controls, varname)
         d <- mutate(d, 
                     !!as.symbol(varname) := log( (!!as.symbol(Sj)) * (!!as.symbol(Pk)) +1))
+        # note that mutate will overwrite the already existing varnames created in the regressors step above. 
       }
     }
     rm(varname, Pk, Sj)
@@ -285,61 +294,62 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     # sum them up (linear combination)
     d <- dplyr::mutate(d, full_control = rowSums(across(.cols = (any_of(full_control_vars)))))
     
-    controls_delta <- c(controls_delta, "full_control")
+    delta_controls <- c(delta_controls, "full_control")
     
     ## Partial control (to estimate beta)
     # identify the variables to put in the partial control term, but this changes depending on the question we are answering.
-    if(aggregation == "main_drivers"){ 
-      # in this case, we capture the confounding covariation between the treatment and the prices of the main crops directly driving deforestation 
-      terms_to_remove <- c()
-      for(Sj in original_exposures){
-        varname <- paste0(Sj, "_X_", mapmat[Sj,"Prices"])
-        terms_to_remove <- c(terms_to_remove, varname)
-      }
-      part_control_vars <- full_control_vars[!(full_control_vars %in% terms_to_remove)]
+    # yet, it is not necesary to condition: the loop handles it, 
+    # bc in all cases, the removed controls capture the confounding covariation between the treatment and the prices of the main crops directly driving deforestation 
+    terms_to_remove <- c()
+    for(Sj in original_exposures){
+      varname <- paste0(Sj, "_X_", mapmat[mapmat[,"Crops"]==Sj,"Prices"])
+      terms_to_remove <- c(terms_to_remove, varname)
     }
-    if(aggregation == "gaez_prices"){ 
-      # in this case, we capture the confounding covariation between the exposure and the suitability indexes of all the crops that have a price match
-      terms_to_remove <- c()
-      for(Pk in original_treatments){
-        varname <- paste0(mapmat[Pk,"Crops"], "_X_", Pk)
-        terms_to_remove <- c(terms_to_remove, varname)
-      }
-      part_control_vars <- full_control_vars[!(full_control_vars %in% terms_to_remove)]
-    }
-
+    part_control_vars <- full_control_vars[!(full_control_vars %in% terms_to_remove)] # (note the regressors are already taken our of full_control_vars)
+  
     # sum partial control individual terms up (linear combination)
     d <- dplyr::mutate(d, part_control = rowSums(across(.cols = (any_of(part_control_vars)))))
   
-    controls_beta <- c(controls_beta, "part_control")
+    beta_controls <- c(beta_controls, "part_control")
+    
+    
+    ## MODEL SPECIFICATION FORMULAE - beta and delta models
+    beta_model <- as.formula(paste0(outcome_variable,
+                                    " ~ ",
+                                    paste0(regressors, collapse = "+"),
+                                    " + ",
+                                    paste0(beta_controls, collapse = "+"),
+                                    " | ",
+                                    fe)) 
+    
+    delta_model <- as.formula(paste0(outcome_variable,
+                                    " ~ ",
+                                    paste0(regressors, collapse = "+"),
+                                    " + ",
+                                    paste0(delta_controls, collapse = "+"),
+                                    " | ",
+                                    fe)) 
   }
   
-  # add remainging forest cover as a control
-  if(remaining){
-    controls_alpha <- c(controls_alpha, "remaining_fc")
-    controls_beta <- c(controls_beta, "remaining_fc")
-    controls_delta <- c(controls_delta, "remaining_fc")
-  }
-  
-  
-  # MODEL SPECIFICATION FORMULAE
-  if(length(controls) > 0){
+
+  ## MODEL SPECIFICATION FORMULAE - alpha model
+  if(length(alpha_controls) > 0){ 
     alpha_model <- as.formula(paste0(outcome_variable,
                                   " ~ ",
                                   paste0(regressors, collapse = "+"),
                                   " + ",
-                                  paste0(controls_alpha, collapse = "+"),
+                                  paste0(alpha_controls, collapse = "+"),
                                   " | ",
                                   fe))
   }else{
-    model <- as.formula(paste0(outcome_variable,
+    alpha_model <- as.formula(paste0(outcome_variable,
                                   " ~ ",
                                   paste0(regressors, collapse = "+"),
                                   " | ",
                                   fe))
   }
   
-  
+
   ### KEEP OBSERVATIONS THAT: 
   
   # - are in study period 
@@ -354,9 +364,14 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   # have remaining forest
   d <- dplyr::filter(d, remaining_fc > 0)
   
-  used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
-                 outcome_variable, regressors, controls)
-  
+  if(estimation_step == "alpha"){
+    used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
+                   outcome_variable, regressors, alpha_controls)    
+  }else{
+    used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
+                   outcome_variable, regressors, beta_controls, delta_controls)    
+  }
+
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
   # for instance, there are some NAs in the suitability index (places in water that we kept while processing other variables...) 
   usable <- lapply(used_vars, FUN = function(var){is.finite(d[,var]) | is.character(d[,var])})
@@ -370,7 +385,6 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   rm(filter_vec, usable)
   
   # is.na(d$Oilpalm) %>% sum()
-  
   
   # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
   obstormv <- obs2remove(fml = as.formula(paste0(outcome_variable, " ~ ", fe)),
@@ -386,11 +400,12 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   rm(d, obstormv)
   
   ### REGRESSIONS
-  
-  if(distribution != "negbin"){ # i.e. if it's poisson or quasipoisson or gaussian
-    reg_res <- fixest::feglm(fe_model,
+  # handle SE computation flexibly within feglm now, through argument vcov
+  if(estimation_step == "alpha"){
+    reg_res <- fixest::feglm(alpha_model,
                              data = d_clean, 
                              family = distribution,# "gaussian",#  # "poisson" ,
+                             vcov = se,
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
@@ -399,8 +414,31 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                              verbose = 4)  
     
     
-  }
+
+  }else{
+    beta_reg_res <- fixest::feglm(beta_model,
+                             data = d_clean, 
+                             family = distribution,# "gaussian",#  # "poisson" ,
+                             # glm.iter = 25,
+                             #fixef.iter = 100000,
+                             nthreads = 3,
+                             glm.iter = glm_iter,
+                             notes = TRUE, 
+                             verbose = 4)  
+      
+    delta_reg_res <- fixest::feglm(delta_model,
+                             data = d_clean, 
+                             family = distribution,# "gaussian",#  # "poisson" ,
+                             # glm.iter = 25,
+                             #fixef.iter = 100000,
+                             nthreads = 3,
+                             glm.iter = glm_iter,
+                             notes = TRUE, 
+                             verbose = 4)  
   
+    beta
+  }
+
   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
   # this is necessary to compute SE as we want to.  
   if(se == "conley"){
