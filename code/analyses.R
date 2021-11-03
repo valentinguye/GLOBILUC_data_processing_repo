@@ -182,6 +182,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           further_lu_evidence = "none", # either "none", "sbqt_direct_lu", or "sbqt"mode_lu"
                           original_exposures = c("Fodder"),  # in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
                           # , "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"
+                          # note that this is the vector that defines what is removed from full_control
                           original_treatments = c("Soybean"), # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
                           # , "Palm_oil", "Cocoa", "Coffee", "Rubber", 
                           # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum"
@@ -189,8 +190,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           standardization = "_std2", # one of "", "_std", or "_std2"
                           price_info = "_lag1", # one of "lag1", "_2pya", "_3pya", "_4pya", "_5pya",
-                          estimation_step = "alpha",# one of "alpha", "beta", "delta"
-                          aggregation = "none", # one of "none", "main_drivers", or "gaez_prices" - currently
+                          estimation_step = "alpha",# one of "alpha", "delta", "gamma"
                           # SjPj = FALSE,
                           # SkPk = TRUE,
                           # sjpj_lag = "_lag1", # either "" or "_lag1" or "_lag2"
@@ -204,6 +204,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           se = "twoway", # passed to vcov argument in fixest::summary. Currently, one of "cluster", "twoway", or an object of the form:    
                           # vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical")
                           # with cutoff the distance, in km, passed to fixest::vcov_conley, if se = "conley"  
+                          # old argument: cluster ="grid_id", # the cluster level if se = "cluster" (i.e. one way)
                           # coefstat = "confint", # one of "se", "tstat", "confint"
                           glm_iter = 25,
                           output = "est_obj" # one of "data", "est_obj", "coef_table" 
@@ -247,6 +248,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
   
   ### Main regressors
+  
   regressors <- c()
   for(Pk in treatments){
     for(Sj in exposures){
@@ -263,13 +265,13 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   ### Controls - mechanisms
   # it's important that this is not conditioned on anything so these objects exist
   alpha_controls <- c()
-  beta_controls <- c() 
+  gamma_controls <- c() 
   delta_controls <- c() 
   
   # add remainging forest cover as a control
   if(remaining){
     alpha_controls <- c(alpha_controls, "remaining_fc")
-    beta_controls <- c(beta_controls, "remaining_fc")
+    gamma_controls <- c(gamma_controls, "remaining_fc")
     delta_controls <- c(delta_controls, "remaining_fc")
   }
   
@@ -296,7 +298,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     
     delta_controls <- c(delta_controls, "full_control")
     
-    ## Partial control (to estimate beta)
+    ## Partial control (to estimate gamma)
     # identify the variables to put in the partial control term, but this changes depending on the question we are answering.
     # yet, it is not necesary to condition: the loop handles it, 
     # bc in all cases, the removed controls capture the confounding covariation between the treatment and the prices of the main crops directly driving deforestation 
@@ -310,15 +312,15 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     # sum partial control individual terms up (linear combination)
     d <- dplyr::mutate(d, part_control = rowSums(across(.cols = (any_of(part_control_vars)))))
   
-    beta_controls <- c(beta_controls, "part_control")
+    gamma_controls <- c(gamma_controls, "part_control")
     
     
-    ## MODEL SPECIFICATION FORMULAE - beta and delta models
-    beta_model <- as.formula(paste0(outcome_variable,
+    ## MODEL SPECIFICATION FORMULAE - gamma and delta models
+    gamma_model <- as.formula(paste0(outcome_variable,
                                     " ~ ",
                                     paste0(regressors, collapse = "+"),
                                     " + ",
-                                    paste0(beta_controls, collapse = "+"),
+                                    paste0(gamma_controls, collapse = "+"),
                                     " | ",
                                     fe)) 
     
@@ -369,7 +371,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                    outcome_variable, regressors, alpha_controls)    
   }else{
     used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
-                   outcome_variable, regressors, beta_controls, delta_controls)    
+                   outcome_variable, regressors, gamma_controls, delta_controls)    
   }
 
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
@@ -384,7 +386,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   if(anyNA(d)){stop()}
   rm(filter_vec, usable)
   
-  # is.na(d$Oilpalm) %>% sum()
+  # is.na(d$Oilpalm) 
   
   # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
   obstormv <- obs2remove(fml = as.formula(paste0(outcome_variable, " ~ ", fe)),
@@ -402,7 +404,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   ### REGRESSIONS
   # handle SE computation flexibly within feglm now, through argument vcov
   if(estimation_step == "alpha"){
-    reg_res <- fixest::feglm(alpha_model,
+    alpha_reg_res <- fixest::feglm(alpha_model,
                              data = d_clean, 
                              family = distribution,# "gaussian",#  # "poisson" ,
                              vcov = se,
@@ -413,12 +415,19 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                              notes = TRUE, 
                              verbose = 4)  
     
+  # select the coefficients to be addep up (code works in cases when there is only one regressor because we investigate specific crop-crop interactions)
+  # (I have checked it)
+    alpha_aggr_coeff <- alpha_reg_res$coefficients[regressors] %>% sum()
+  # select the part of the VCOV matrix that is to be used to compute the standard error of the sum 
+  # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+    alpha_aggr_se <- alpha_reg_res$cov.scaled[regressors,regressors] %>% as.matrix() %>% sum() %>% sqrt()
     
 
   }else{
-    beta_reg_res <- fixest::feglm(beta_model,
+    gamma_reg_res <- fixest::feglm(gamma_model,
                              data = d_clean, 
                              family = distribution,# "gaussian",#  # "poisson" ,
+                             vcov = se,
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
@@ -429,38 +438,56 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     delta_reg_res <- fixest::feglm(delta_model,
                              data = d_clean, 
                              family = distribution,# "gaussian",#  # "poisson" ,
+                             vcov = se,
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
                              glm.iter = glm_iter,
                              notes = TRUE, 
                              verbose = 4)  
-  
-    beta
+    
+    gamma_aggr_coeff <- gamma_reg_res$coefficients[regressors] %>% sum()
+    gamma_aggr_se <- gamma_reg_res$cov.scaled[regressors,regressors] %>% as.matrix() %>% sum() %>% sqrt()
+    
+    delta_aggr_coeff <- delta_reg_res$coefficients[regressors] %>% sum()
+    delta_aggr_se <- delta_reg_res$cov.scaled[regressors,regressors] %>% as.matrix() %>% sum() %>% sqrt()
+    
+    # this is our coefficient of interest
+    beta_coeff <- gamma_aggr_coeff - delta_aggr_coeff
+    # its SE is conservatively estimated as if delta and gamma coefficients had a null covariance.  
+    beta_se <- gamma_aggr_se + delta_aggr_se
+
   }
+
+  
+  # we need to aggregate coefficients, before subtracting gamma and delta. 
+
+  
+  
+  
+  
+  
+    gamma_df_res <- gamma_reg_res$coeftable %>% as.data.frame()
+  delta_df_res <- delta_reg_res$coeftable %>% as.data.frame()
+  gamma_delta <- data.frame()
+  colnames(gamma_delta) <- colnames(gamma_df_res)
+  gamma_delta$estimate
+  
 
   # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
   # this is necessary to compute SE as we want to.  
+  
+  
+  # store info on SE method
   if(se == "conley"){
-    sum_res <- summary(reg_res,
-                       vcov = vcov_conley(lat = "lat", lon = "lon", cutoff = conley_cutoff, distance = "spherical"))
-    
-    # store info on SE method
     se_info <- paste0("Conley (",conley_cutoff,"km)")
   }
   if(se == "twoway"){
     # " If the two variables were used as fixed-effects in the estimation, 
     # you can leave it blank with vcov = "twoway""
-    sum_res <- summary(reg_res,
-                       vcov = se)
-    
     se_info <- "Two-way clustered (grid cell - year)"
   }
   if(se == "cluster"){
-    sum_res <- summary(reg_res,
-                       #vcov = se, 
-                       cluster = cluster)
-    
     se_info <- paste0("Clustered (",cluster,")")
   }
   
@@ -473,27 +500,9 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   # do not keep the control variables 
   df_res <- df_res[regressors,]
   
-  # ### COMPUTE AGGREGATED EFFECT 
-  # #if(aggregation == "over_j"){
-  # vcov_mat <- sum_res$cov.scaled %>% as.matrix()
-  # vcov_mat <- vcov_mat[regressors,regressors]
-  # # extract the covariance estimates 
-  # unique_cov <- c()
-  # for(n in 1:nrow(vcov_mat)){
-  #   unique_cov <- c(unique_cov,vcov_mat[n,1:n])
-  # }
-  # or use lower.tri ! 
-  # aggr_effect <- sum(sum_res$coefficients[regressors])   
-  # aggr_effect_stderr <- sqrt(sum(unique_cov))
-  # 
-  # statistic <- (aggr_effect - 0) / aggr_effect_stderr
-  # 
-  # pval <-  2 * pnorm(abs(statistic), lower.tail = FALSE) 
-  # 
-  # #}
-  # 
-  # df_res <- rbind(df_res, c(aggr_effect, aggr_effect_stderr, statistic, pval, sum_res$nobs, se_info))
-  
+ 
+  df_res <- rbind(df_res, c(aggr_effect, aggr_effect_stderr, statistic, pval, sum_res$nobs, se_info))
+
   # output wanted
   if(output == "data"){
     toreturn <- list(reg_res, d_clean)
