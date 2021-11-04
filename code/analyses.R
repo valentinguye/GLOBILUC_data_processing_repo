@@ -92,7 +92,7 @@ mapmat_data <- c(
   "Banana","Banana",
   "Barley", "Barley",
   "Beef", "Fodder", 
-  "Orange", "Citrus",
+  "Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
   "Cocoa", "Cocoa",
   "Coconut_oil", "Coconut",
   "Coffee", "Coffee",
@@ -100,7 +100,6 @@ mapmat_data <- c(
   "Groundnut", "Groundnut",
   "Maize", "Maizegrain",
   "Oat", "Oat",
-  "Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
   "Olive_oil", "Olive",
   "Palm_oil", "Oilpalm",
   "Rapeseed_oil", "Rapeseed",
@@ -140,22 +139,22 @@ start_year = 2001
 end_year = 2019
 continent = "all"
 further_lu_evidence = "none"
-original_exposures = c("Fodder") # , "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+original_exposures = c("Soybean") # ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
 
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
-original_treatments <- c("Beef")# in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+original_treatments <-  c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil") # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
               # "Beef" , , "Palm_oil", "Cocoa", "Coffee", "Rubber"
              # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum")
 
 extra_price_k = c() # in price spelling. One, part, or all of the full set of commodities NOT having a price-AESI match.
-                # "Sheep","Chicken", "Pork", "Crude_oil
+                # ,"Chicken", "Pork", "Crude_oil
 
 pasture_shares <- FALSE
 j_soy = "Soybean"
 fcr = 7.2
 standardization = "_std2"
 price_info = "_lag1"
-estimation_step = "alpha"
+estimated_effect = "alpha"
 aggregaton = "none"
 # sjpj_lag = "_lag1" # either "" or "_lag1" or "_lag2"
 # skpk_lag = "_lag1" # either "" or "_lag1" or "_lag2"SjPj = TRUE
@@ -164,7 +163,7 @@ aggregaton = "none"
 remaining <- TRUE
 # open_path <- FALSE
 # commoXcommo <- "Fodder_X_Beef"
-fe = "grid_id + year"
+fe = "grid_id + country_year"
 distribution = "quasipoisson"
 conley_cutoff <- 100
 se = "twoway"
@@ -186,11 +185,11 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           original_treatments = c("Soybean"), # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
                           # , "Palm_oil", "Cocoa", "Coffee", "Rubber", 
                           # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum"
-                          extra_price_k = c("Chicken", "Pork", "Sheep", "Crude_oil"), # in price spelling. One, part, or all of the full set of commodities NOT having a price-AESI match.
+                          extra_price_k = c(), # "Chicken", "Pork", "Sheep", "Crude_oil" in price spelling. One, part, or all of the full set of commodities NOT having a price-AESI match.
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           standardization = "_std2", # one of "", "_std", or "_std2"
                           price_info = "_lag1", # one of "lag1", "_2pya", "_3pya", "_4pya", "_5pya",
-                          estimation_step = "alpha",# one of "alpha", "delta", "gamma"
+                          estimated_effect = "alpha",# if "alpha", estimates the (aggregated or not) cross-elasticity effect. If different from "alpha" (e.g. "gamma") it estimates the ILUC effect from price covariation. 
                           # SjPj = FALSE,
                           # SkPk = TRUE,
                           # sjpj_lag = "_lag1", # either "" or "_lag1" or "_lag2"
@@ -207,7 +206,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           # old argument: cluster ="grid_id", # the cluster level if se = "cluster" (i.e. one way)
                           # coefstat = "confint", # one of "se", "tstat", "confint"
                           glm_iter = 25,
-                          output = "est_obj" # one of "data", "est_obj", "coef_table" 
+                          output = "coef_table" # one of "data", or "coef_table" 
 ){
   
   
@@ -253,14 +252,18 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   for(Pk in treatments){
     for(Sj in exposures){
       varname <- paste0(original_exposures[match(Sj, exposures)], "_X_", original_treatments[match(Pk, treatments)])
-      regressors <- c(regressors, varname)
-      # Log them so their variations are comparable
-      d <- mutate(d, 
-                  !!as.symbol(varname) := log( (!!as.symbol(Sj)) * (!!as.symbol(Pk)) +1))
+      # this makes sure that only cross-commodity terms are in the regressors
+      #if(!(varname %in% c("Fodder_X_Beef", "Soybean_X_Soybean", "Oilpalm_X_Palmoil", "Cocoa_X_Cocoa", "Coffee_X_Coffee", "Rubber_X_Rubber"))){
+        regressors <- c(regressors, varname)
+        # Log them so their variations are comparable
+        d <- mutate(d, 
+                    !!as.symbol(varname) := log( (!!as.symbol(Sj)) * (!!as.symbol(Pk)) +1))
+      #}
     }
   }
   rm(varname, Sj, Pk)
 
+  
   
   ### Controls - mechanisms
   # it's important that this is not conditioned on anything so these objects exist
@@ -276,7 +279,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
   
   # it is not needed to do all that if we only estimate alphas 
-  if(estimation_step != "alpha"){
+  if(estimated_effect != "alpha"){
     # construct all interaction variables
     indiv_controls <- c()
     for(Pk in all_treatments){
@@ -366,7 +369,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   # have remaining forest
   d <- dplyr::filter(d, remaining_fc > 0)
   
-  if(estimation_step == "alpha"){
+  if(estimated_effect == "alpha"){
     used_vars <- c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
                    outcome_variable, regressors, alpha_controls)    
   }else{
@@ -402,12 +405,21 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   rm(d, obstormv)
   
   ### REGRESSIONS
+  
+  # Store only information necessary, in a dataframe. otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
+  # either there are several elemnts in regressors, and then we want to aggregate them, or there is only one. 
+  # In both cases, we are interested in a one-line output
+  df_res <- data.frame(estimate = NA, std.error = NA, t.statistic = NA, p.value = NA, observations = NA, inference = NA)  
+  
   # handle SE computation flexibly within feglm now, through argument vcov
-  if(estimation_step == "alpha"){
+  if(estimated_effect == "alpha"){
     alpha_reg_res <- fixest::feglm(alpha_model,
                              data = d_clean, 
                              family = distribution,# "gaussian",#  # "poisson" ,
                              vcov = se,
+                             # this is just to get the same p value by recomputing by hand below. 
+                             # see https://cran.r-project.org/web/packages/fixest/vignettes/standard_errors.html
+                             ssc = ssc(cluster.df = "conventional", t.df = "conventional"),
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
@@ -415,19 +427,21 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                              notes = TRUE, 
                              verbose = 4)  
     
-  # select the coefficients to be addep up (code works in cases when there is only one regressor because we investigate specific crop-crop interactions)
-  # (I have checked it)
-    alpha_aggr_coeff <- alpha_reg_res$coefficients[regressors] %>% sum()
-  # select the part of the VCOV matrix that is to be used to compute the standard error of the sum 
-  # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
-    alpha_aggr_se <- alpha_reg_res$cov.scaled[regressors,regressors] %>% as.matrix() %>% sum() %>% sqrt()
+    # select the coefficients to be addep up (code works in cases when there is only one regressor because we investigate specific crop-crop interactions)
+    # (I have checked it)
+    df_res[,"estimate"] <- alpha_reg_res$coefficients[regressors] %>% sum()
+    # select the part of the VCOV matrix that is to be used to compute the standard error of the sum 
+    # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+    df_res[,"std.error"] <- alpha_reg_res$cov.scaled[regressors,regressors] %>% as.matrix() %>% sum() %>% sqrt()
     
-
+    df_res[,"observations"] <- alpha_reg_res$nobs
+    
   }else{
     gamma_reg_res <- fixest::feglm(gamma_model,
                              data = d_clean, 
                              family = distribution,# "gaussian",#  # "poisson" ,
                              vcov = se,
+                             ssc = ssc(cluster.df = "conventional", t.df = "conventional"),
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
@@ -439,6 +453,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                              data = d_clean, 
                              family = distribution,# "gaussian",#  # "poisson" ,
                              vcov = se,
+                             ssc = ssc(cluster.df = "conventional", t.df = "conventional"),
                              # glm.iter = 25,
                              #fixef.iter = 100000,
                              nthreads = 3,
@@ -453,30 +468,18 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     delta_aggr_se <- delta_reg_res$cov.scaled[regressors,regressors] %>% as.matrix() %>% sum() %>% sqrt()
     
     # this is our coefficient of interest
-    beta_coeff <- gamma_aggr_coeff - delta_aggr_coeff
+    df_res[,"estimate"] <- gamma_aggr_coeff - delta_aggr_coeff
     # its SE is conservatively estimated as if delta and gamma coefficients had a null covariance.  
-    beta_se <- gamma_aggr_se + delta_aggr_se
+    df_res[,"std.error"] <- gamma_aggr_se + delta_aggr_se
+    
+    df_res[,"observations"] <- gamma_reg_res$nobs
 
   }
+  
+  # compute t.stat and p-value of the aggregated estimate (yields similar quantities as in alpha_reg_res if only one coeff was aggregated)
+  df_res <- dplyr::mutate(df_res, t.statistic = (estimate - 0)/(std.error))
 
-  
-  # we need to aggregate coefficients, before subtracting gamma and delta. 
-
-  
-  
-  
-  
-  
-    gamma_df_res <- gamma_reg_res$coeftable %>% as.data.frame()
-  delta_df_res <- delta_reg_res$coeftable %>% as.data.frame()
-  gamma_delta <- data.frame()
-  colnames(gamma_delta) <- colnames(gamma_df_res)
-  gamma_delta$estimate
-  
-
-  # Now keep only information necessary, otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
-  # this is necessary to compute SE as we want to.  
-  
+  df_res <- dplyr::mutate(df_res, p.value =  (2*pnorm(abs(t.statistic), lower.tail = FALSE)) )
   
   # store info on SE method
   if(se == "conley"){
@@ -490,26 +493,16 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   if(se == "cluster"){
     se_info <- paste0("Clustered (",cluster,")")
   }
+  df_res$inference <- se_info  
   
   
-  # pimp the result dataframe a bit
-  df_res <- sum_res$coeftable %>% as.data.frame()
-  # add a column with the number of observations
-  df_res$Observations <- sum_res$nobs
-  df_res$`Standard errors` <- se_info
-  # do not keep the control variables 
-  df_res <- df_res[regressors,]
-  
- 
-  df_res <- rbind(df_res, c(aggr_effect, aggr_effect_stderr, statistic, pval, sum_res$nobs, se_info))
-
   # output wanted
   if(output == "data"){
-    toreturn <- list(reg_res, d_clean)
+    toreturn <- list(df_res, d_clean)
   }
-  if(output == "est_obj"){
-    toreturn <- sum_res
-  }
+  # if(output == "est_obj"){
+  #   toreturn <- sum_res
+  # }
   if(output == "coef_table"){
     toreturn <- df_res
   }
@@ -522,25 +515,22 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
 
 
 
-#### NET EFFECTS #### 
+#### ALPHA EFFECTS #### 
 
+### DISAGGREGATED EFFECTS ### 
 # Here, we run the regression over every j-k combinations of interest, and store and plot the estimates 
 
 # infrastructure to store results
-net_res_list <- list()
+alpha_disaggr_res_list <- list()
 elm <- 1
 
-for(j_crop in c("Soybean")){#"Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"
-  for(k_price in c("Beef" ,"Soybean", "Palm_oil", "Cocoa", "Coffee", "Rubber"
-                   #"Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum", 
-                   #"Chicken", "Pork", "Sheep", "Crude_oil"
-                   )){
+for(j_crop in c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber")){#
+  for(k_price in c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil")){
     
-    net_res_list[[elm]] <- make_main_reg(crop_j = j_crop, 
-                                         price_k = k_price, 
-                                         output = "coef_table")
+    alpha_disaggr_res_list[[elm]] <- make_main_reg(original_exposures = j_crop, 
+                                                   original_treatments = k_price)
     
-    names(net_res_list)[elm] <- paste0(j_crop,"_X_",k_price)
+    names(alpha_disaggr_res_list)[elm] <- paste0(j_crop,"_X_",k_price)
     elm <- elm + 1
   }
 }
@@ -548,7 +538,7 @@ for(j_crop in c("Soybean")){#"Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", 
 # let's plot everything first (insignificant ones are a matter of absence of true effect or precision, but not bias)
 
 # prepare regression outputs in a tidy data frame readable by dwplot
-df <- bind_rows(net_res_list)
+df <- bind_rows(alpha_disaggr_res_list)
 
 df$model <- gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
 df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
@@ -557,7 +547,7 @@ df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # repl
 names(df)[names(df)=="Estimate"] <- "estimate"
 names(df)[names(df)=="Std. Error"] <- "std.error"
 
-title <- paste0("Moderations from commodity prices on the effects of agro-ecological suitability on pan-tropical deforestation, 2001-2019") # Cross-effects
+title <- paste0("Moderation effects of commodity prices on the influence of agro-ecological suitability on pan-tropical deforestation, 2001-2019") # Cross-effects
 
 # If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
 # %>%  add_brackets(brackets)
@@ -601,11 +591,153 @@ title <- paste0("Moderations from commodity prices on the effects of agro-ecolog
           legend.title = element_blank())}  
 
 
-## Joint net effects ## 
-joint_net_effects <- make_main_reg(output = "coef_table")
+### EFFECTS AGGREGATED OVER J MAIN DRIVERS #### 
+# Here, we run the regression over every J-k combinations of interest, and store and plot the estimates 
+
+# infrastructure to store results
+alpha_aggr_J_res_list <- list()
+elm <- 1
+
+for(k_price in c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil")){
+  
+  alpha_aggr_J_res_list[[elm]] <- make_main_reg(original_exposures = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"), 
+                                                original_treatments = k_price)
+  
+  names(alpha_aggr_J_res_list)[elm] <- paste0("6 main drivers_X_",k_price)
+  elm <- elm + 1
+}
+
+# let's plot everything first (insignificant ones are a matter of absence of true effect or precision, but not bias)
+
+# prepare regression outputs in a tidy data frame readable by dwplot
+df <- bind_rows(alpha_aggr_J_res_list)
+
+df$model <- gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+# necessary for dotwhisker to recognize those columns
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+
+title <- paste0("Moderation effects of commodity prices on the influence of agro-ecological suitability on pan-tropical deforestation, 2001-2019, aggregated over the 6 main drivers") # Cross-effects
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+
+{dwplot(df,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 0.5),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Beef = "Beef",
+                         Chicken = "Chicken",
+                         Cocoa = "Cocoa", 
+                         Coconut_oil = "Coconut oil", 
+                         Coffee = "Coffee", 
+                         Crude_oil = "Crude oil",
+                         Maize = "Maize",
+                         Olive_oil = "Olive oil", 
+                         Palm_oil = "Palm oil",
+                         Pork = "Pork", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Rice = "Rice",
+                         Rubber = "Rubber",
+                         Sheep = "Sheep", 
+                         Sorghum = "Sorghum",
+                         Soybean = "Soybean",
+                         Soybean_meal = "Soybean meal", 
+                         Sugar = "Sugar", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco",
+                         Wheat = "Wheat"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
+
+### EFFECTS AGGREGATED OVER K PRICES ####
+# Here, we run the regression over every j-K combinations of interest, and store and plot the estimates 
+
+# infrastructure to store results
+alpha_aggr_K_res_list <- list()
+elm <- 1
+
+for(j_crop in c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber")){#
+
+  alpha_aggr_K_res_list[[elm]] <- make_main_reg(original_exposures = j_crop, 
+                                                original_treatments = c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil"))
+  
+  names(alpha_aggr_K_res_list)[elm] <- paste0(j_crop, "_X_all prices")
+  elm <- elm + 1
+}
+
+# let's plot everything first (insignificant ones are a matter of absence of true effect or precision, but not bias)
+
+# prepare regression outputs in a tidy data frame readable by dwplot
+df <- bind_rows(alpha_aggr_K_res_list)
+
+df$model <- gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+# necessary for dotwhisker to recognize those columns
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+
+title <- paste0("Moderation effects of commodity prices on the influence of agro-ecological suitability on pan-tropical deforestation, 2001-2019, aggregated over 28 commodity prices") # Cross-effects
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+
+{dwplot(df,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 0.5),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Beef = "Beef",
+                         Chicken = "Chicken",
+                         Cocoa = "Cocoa", 
+                         Coconut_oil = "Coconut oil", 
+                         Coffee = "Coffee", 
+                         Crude_oil = "Crude oil",
+                         Maize = "Maize",
+                         Olive_oil = "Olive oil", 
+                         Palm_oil = "Palm oil",
+                         Pork = "Pork", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Rice = "Rice",
+                         Rubber = "Rubber",
+                         Sheep = "Sheep", 
+                         Sorghum = "Sorghum",
+                         Soybean = "Soybean",
+                         Soybean_meal = "Soybean meal", 
+                         Sugar = "Sugar", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco",
+                         Wheat = "Wheat"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
 
 
 #### NET AGGREGATED EFFECTS ####
+
 
 # For net aggregated effects, since we remove one dimension,we have space for another dimension to distinguish estimates. 
 # We use it to feature different specifications, and different continents. 

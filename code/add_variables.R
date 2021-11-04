@@ -55,6 +55,8 @@ dataset_names <- c("glass_aesi_long",
                    "phtfloss_aesi_long", 
                    "driverloss_aesi_long")
 
+name <- dataset_names[4]
+
 #### ADD COUNTRY INFORMATION #### 
 
 countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
@@ -327,48 +329,31 @@ for(name in dataset_names){
   
   ## Aggregate suitability indexes to match price data (for Sugar, Fodder, Rice and Sorghum) 
   # and also aggregate crops with common use, including those that would match a price (eg. oat and cotton) bc we do not match SI with prices
-  df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
-                                          Fodder = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop  
-                                          Rice = max(c(Drylandrice, Wetlandrice)),
-                                          Sorghum2 = max(c(Sorghum, Sorghumbiomass)),
-                                          bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Switchgrass)),
-                                          cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye, Oat)),
-                                          pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea, Groundnut)),
-                                          roots_crops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
-                                          # oil_crops = max(c(Groundnut, Jatropha, Olive, Rapeseed, Sunflower)), # we have prices for all of them
-                                          vegetables_crops = max(c(Cabbage, Carrot, Onion, Tomato)),
-                                          # fruits_crops = max(c(Banana, Citrus, Coconut)), # For coconut we have price only for the oil but it does not matter because it's the AESI workstream anyway 
-                                          industrial_crops = max(c(Flax, Cotton)) # Rubber, directly responsible for deforestation, are not mixed with these.
-                                          # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
-                                          
+  df_cs <- df_cs %>% rowwise(grid_id) %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
+                                                  Fodder = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop  
+                                                  Rice = max(c(Drylandrice, Wetlandrice)),
+                                                  Sorghum2 = max(c(Sorghum, Sorghumbiomass)),
+                                                  bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Switchgrass)),
+                                                  cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye, Oat)),
+                                                  pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea, Groundnut)),
+                                                  roots_crops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
+                                                  # oil_crops = max(c(Groundnut, Jatropha, Olive, Rapeseed, Sunflower)), # we have prices for all of them
+                                                  vegetables_crops = max(c(Cabbage, Carrot, Onion, Tomato)),
+                                                  # fruits_crops = max(c(Banana, Citrus, Coconut)), # For coconut we have price only for the oil but it does not matter because it's the AESI workstream anyway 
+                                                  industrial_crops = max(c(Flax, Cotton)) # Rubber, directly responsible for deforestation, are not mixed with these.
+                                                  # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
+                                                  
   ) %>% as.data.frame()
   
   # sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
 
-  ## Standardize crops that can be matched with a price and crop groups
-  # indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder", 
-  #                        "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber", 
-  #                        "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
+  ## Standardize crops that can be matched with a price
+  indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder",
+                         "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber",
+                         "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
   
   ## No. Rather: standardize crops to compute agro-ecological exposure (/risk) to deforestation for a specific LU
-  indivcrops_to_std <- c("Cocoa", "Coffee", "Fodder", "Oilpalm", "Rubber", "Soybean")
-  
-  ## First way to standardize, sum (the denominator) over the 6 main crops
-  # To understand these lines, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
-  df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = (any_of(indivcrops_to_std)))))#contains("_crops") |
-
-  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),#contains("_crops") | 
-                                       .fns = ~./(si_sum), 
-                                       .names = paste0("{.col}", "_std")))
-
-
-  ## Second way to standardize: for each of the 6 main driver crops, 
-  # standardize by dividing by the sum of the suitability indexes of the N (N = 2,...,6) crops with the highest suitability (among all, not only among the six drivers), 
-  # and give a 0 value to the crops that are not in the top N suitability index. 
-
-  # the following modifies the base SI data (needed to make non highest suitable index crop equal to 0) 
-  # hence, save a version of non modified SI variables
-  df_cs_saved <- df_cs   
+  # indivcrops_to_std <- c("Cocoa", "Coffee", "Fodder", "Oilpalm", "Rubber", "Soybean")
   
   # we need a slightly modified version of gaez_crops, that does not include elements of aggregated crops, but includes aggregated crops
   # (necessary for Fodder, Sugar, Rice, Sorghum2, but not for the _crops variables actually, in the current version that does not 
@@ -385,10 +370,49 @@ for(name in dataset_names){
   all_crops <- c(all_crops, "Fodder", "Sugar", "Rice", "Sorghum2", 
                  "bioenergy_crops", "cereal_crops", "pulses_crops", "roots_crops", "vegetables_crops", "industrial_crops")
   
-  # N = 2 
+  ## First way to standardize, sum (the denominator) over all crops
+  # To understand these lines, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
+  df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = (any_of(all_crops)))))#contains("_crops") |
+
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),#contains("_crops") | 
+                                       .fns = ~./(si_sum), 
+                                       .names = paste0("{.col}", "_std")))
+
+
+  ## Second way to standardize: for each crop that can be matched with a price, 
+  # standardize by dividing by the sum of the suitability indexes of the N (N = 1,2) crops with the highest suitability (among all, not only among the six drivers), 
+  # and give a 0 value to the crops that are not in the top N suitability index. 
+  # if N = 1, this procedure is equivalent to sj = 1[Sj = max(Si)]
+  
+  # identify the highest suitability index values (in every grid cell)
+  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_si = max(c_across(cols = any_of(all_crops)))) %>% as.data.frame()
+
+  ## N = 1
+  # if N = 1, this procedure is equivalent to sj = 1[Sj = max(Si)]
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),
+                                       .fns = ~if_else(.==max_si, true = 1, false = 0), 
+                                       .names = paste0("{.col}", "_ismax")))
+
+  # and then standardize by the number of different crops being the highest
+  indivcrops_to_std_ismax <- paste0(indivcrops_to_std,"_ismax")
+  df_cs <- dplyr::mutate(df_cs, n_max = rowSums(across(.cols = (any_of(indivcrops_to_std_ismax)))))
+
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std_ismax)),
+                                       .fns = ~./n_max, 
+                                       .names = paste0("{.col}", "_std1")))
+  
+  # remove those columns
+  df_cs <- dplyr::select(df_cs, !ends_with("_ismax"))  
+  
+  
+  ## N = 2 
+  # the following modifies the base SI data (needed to make non highest suitable index crop equal to 0) 
+  # hence, save a version of non modified SI variables
+  df_cs_saved <- df_cs   
+  
   # identify the N highest suitability index values (in every grid cell)
   # highest
-  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_si = max(c_across(cols = any_of(all_crops)))) %>% as.data.frame()
+  # df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_si = max(c_across(cols = any_of(all_crops)))) %>% as.data.frame()
   
   # 2nd highest: 
   df_cs$max_si_2nd <- NA
