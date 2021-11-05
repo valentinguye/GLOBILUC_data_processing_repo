@@ -346,11 +346,6 @@ for(name in dataset_names){
   ) %>% as.data.frame()
   
   # sugar crops and oil crops could alternatively be categorized as bioenergy feedstock, and Miscanthus etc. as fodder crops (according to Wikipedia).
-
-  ## Standardize crops that can be matched with a price
-  indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder",
-                         "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber",
-                         "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
   
   ## No. Rather: standardize crops to compute agro-ecological exposure (/risk) to deforestation for a specific LU
   # indivcrops_to_std <- c("Cocoa", "Coffee", "Fodder", "Oilpalm", "Rubber", "Soybean")
@@ -374,7 +369,7 @@ for(name in dataset_names){
   # To understand these lines, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
   df_cs <- dplyr::mutate(df_cs, si_sum = rowSums(across(.cols = (any_of(all_crops)))))#contains("_crops") |
 
-  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),#contains("_crops") | 
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops)),#contains("_crops") | 
                                        .fns = ~./(si_sum), 
                                        .names = paste0("{.col}", "_std")))
 
@@ -389,74 +384,94 @@ for(name in dataset_names){
 
   ## N = 1
   # if N = 1, this procedure is equivalent to sj = 1[Sj = max(Si)]
-  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops)),
                                        .fns = ~if_else(.==max_si, true = 1, false = 0), 
                                        .names = paste0("{.col}", "_ismax")))
 
   # and then standardize by the number of different crops being the highest
-  indivcrops_to_std_ismax <- paste0(indivcrops_to_std,"_ismax")
-  df_cs <- dplyr::mutate(df_cs, n_max = rowSums(across(.cols = (any_of(indivcrops_to_std_ismax)))))
+  all_crops_ismax <- paste0(all_crops,"_ismax")
+  df_cs <- dplyr::mutate(df_cs, n_max = rowSums(across(.cols = (any_of(all_crops_ismax)))))
 
-  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std_ismax)),
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops_ismax)),
                                        .fns = ~./n_max, 
                                        .names = paste0("{.col}", "_std1")))
   
   # remove those columns
   df_cs <- dplyr::select(df_cs, !ends_with("_ismax"))  
   
+  # rename new ones 
+  names(df_cs)[grepl("_std1", names(df_cs))] <- paste0(all_crops, "_std1")
   
-  ## N = 2 
-  # the following modifies the base SI data (needed to make non highest suitable index crop equal to 0) 
-  # hence, save a version of non modified SI variables
-  df_cs_saved <- df_cs   
+  # _std do not sum up to 1, because the _crops vars weight in the denominator but are not counted in the sum. 
+  # _std1 do sum up to 1. 
+  # df_cs[876,paste0(indivcrops_to_std, "_std")]%>%sum()
   
-  # identify the N highest suitability index values (in every grid cell)
-  # highest
-  # df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_si = max(c_across(cols = any_of(all_crops)))) %>% as.data.frame()
+  ## N = 2: 2nd highest:
+  # work on a separate dataset, because the following modifies the base SI data (needed to make SI of non-top2 crops equal to 0)
+  working_df_cs <- df_cs
   
-  # 2nd highest: 
-  df_cs$max_si_2nd <- NA
-
-  for(i in 1:nrow(df_cs)){
-    # vector of interest 
-    x <- df_cs[i,all_crops]
+  # loop is not efficient but don't know how to code 2nd highest with dplyr
+  working_df_cs$max_si_2nd <- NA
+  for(i in 1:nrow(working_df_cs)){
+    # vector of interest
+    x <- working_df_cs[i,all_crops]
     # max value of the row
-    row_max_si <- df_cs[i,"max_si"]
-
+    row_max_si <- working_df_cs[i,"max_si"]
+    
     # second max value
-    row_max_si_2nd <- max(x[x<row_max_si])    
-
-    # handle cases with more than one max values 
-    if(length(which(x == row_max_si))==1){# i.e. if there is only one crop with the highest value 
-      df_cs[i,"max_si_2nd"] <-  row_max_si_2nd     
-    }else{
-      df_cs[i,"max_si_2nd"] <- row_max_si     
-    }
+    # we want to include 2 highest values even if there are more than one crop that have the max value and the 2nd max value, hence the lines below are commented out
+    working_df_cs[i,"max_si_2nd"] <- max(x[x<row_max_si])
+    # if we wanted to handle cases with more than one max values
+    #   if(length(which(x == row_max_si))==1){# i.e. if there is only one crop with the highest value
+    #     df_cs[i,"max_si_2nd"] <-  row_max_si_2nd
+    #   }else{
+    #     df_cs[i,"max_si_2nd"] <- row_max_si
+    #   }
     
-    # /!\ modify SI value (to 0) for all the crops that are not in the top N
-    df_cs[i,names(x[which(x < df_cs[i,"max_si_2nd"])])] <- 0
-    
-    rm(x, row_max_si, row_max_si_2nd)
+    # /!\ modify SI values (to 0) for all the crops that are not in the top 2 - this is equivalent to weighting by 1 if crop is in top 2, and by 0 if not. 
+    working_df_cs[i,names(x[which(x < working_df_cs[i,"max_si_2nd"])])] <- 0
   }
+  rm(row_max_si, x)
   
-  df_cs <- dplyr::mutate(df_cs, sum_2_max_si = rowSums(across(.cols = c(max_si, max_si_2nd))))#contains("_crops") |
-  
-  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(indivcrops_to_std)),#contains("_crops") | 
-                                       .fns = ~./(sum_2_max_si), 
+  # then we are able to sum over all crops with weights = 1 if crop is in top 2, 0 if not. 
+  working_df_cs <- dplyr::mutate(working_df_cs, si_sum_top2wgted = rowSums(across(.cols = (any_of(all_crops)))))
+  # and standardize 
+  working_df_cs <- dplyr::mutate(working_df_cs, across(.cols = (any_of(all_crops)),
+                                       .fns = ~./(si_sum_top2wgted), 
                                        .names = paste0("{.col}", "_std2")))
   
+  # w <- working_df_cs
+  # df_cs[875,all_crops]
+  # df_cs[875, c(indivcrops_to_std,"si_sum")]
+  # df_cs[875, c(paste0(indivcrops_to_std,"_std"),"si_sum")]
+  # w[875, c(all_crops,"max_si", "max_si_2nd", "si_sum_top2wgted")]
+  # w[875, paste0(all_crops, "_std1")] %>% sum()
+  # working_df_cs <- dplyr::mutate(working_df_cs, sum_2_max_si = rowSums(across(.cols = c(max_si, max_si_2nd))))#contains("_crops") |
+  
+
+
+  # working_df_cs <- dplyr::mutate(working_df_cs, across(.cols = (any_of(all_crops)),#contains("_crops") |
+  #                                      .fns = ~./(sum_2_max_si),
+  #                                      .names = paste0("{.col}", "_std2")))
+
   # Add standardized variables to the initial data
-  std2_var_names <- names(df_cs)[grepl(pattern = "_std2", x = names(df_cs))]
-  df_cs_saved <- inner_join(df_cs_saved, df_cs[,c("grid_id",std2_var_names)], by = "grid_id")
+  std2_var_names <- names(working_df_cs)[grepl(pattern = "_std2", x = names(working_df_cs))]
+  df_cs <- inner_join(df_cs, working_df_cs[,c("grid_id",std2_var_names)], by = "grid_id")
+  
+  ## Crops we need a standardized version of SI: those that can be matched with a price
+  indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder",
+                         "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber",
+                         "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
+  # Adding up the *_std2 over indivcrops_to_std won't equal 1, but this is not an issue. 
   
   # Select variables to save: only newly constructed variables (not grouped crops), and id
-  var_names <- names(df_cs_saved)[grepl(pattern = "_std", x = names(df_cs_saved))] #  & !grepl(pattern = "_crops", x = names(df_cs_saved)) not necessary bc we selected the crops to standardize, so _crops* vars have not been stded. 
+  var_names <- c(paste0(indivcrops_to_std, "_std"), paste0(indivcrops_to_std, "_std1"), paste0(indivcrops_to_std, "_std2"))
   # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs_saved))
-  # and this is if we want the new variables in non std format too | names(df_cs_saved) %in% c("Fodder", "Rice", "Sugar", "Sorghum2")
-  df_cs_saved <- df_cs_saved[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2", var_names)]
+  # and we want the new variables in non std format too 
+  df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2", var_names)]
   
-  saveRDS(df_cs_saved, paste0(here(origindir, name), "_stdsi.Rdata"))  
-  rm(df_cs, df_cs_saved, path)
+  saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))  
+  rm(df_cs, working_df_cs, path)
 }
 
 
