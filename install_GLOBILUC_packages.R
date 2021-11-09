@@ -33,7 +33,8 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
                     "doParallel", "foreach", "snow", 
                     "knitr", "kableExtra",
                     "DataCombine", 
-                    "fixest",
+                    "fixest", 
+                    "boot", "fwildclusterboot", "sandwich",
                     "ggplot2", "leaflet", "tmap", "dotwhisker")
 
 
@@ -119,6 +120,9 @@ if(FALSE){
   #library(ExPanDaR)
   library(DataCombine)
   library(fixest)
+  library(boot)
+  library(sandwich)
+  library(fwildclusterboot)
   library(stars)
   library(ggplot2)
   #library(doBy)
@@ -136,7 +140,7 @@ if(renv:::renv_download_method() != getOption("download.file.method")){
 }
 
 # If new packages are needed along the project data processing workflow, one should: 
-new_pck <- c("devtools")
+new_pck <- c("fwildclusterboot")
 # 1. install the packages in the project library (the default if you are within the project)
 install.packages(new_pck)
 # devtools::install_github("julianhinz/R_glmhdfe")

@@ -217,6 +217,11 @@ imf[imf$year < 1992,] <- mutate(imf[imf$year < 1992,], Oat = as.numeric(Oat)/(MU
 class(imf[,2])
 
 
+#### USDA DATA #### 
+
+psd <- read.csv(here("input_data", "USDA", "psd_alldata_csv", "psd_alldata.csv"))
+
+
 
 #### Consolidate international price annual time series data frame #### 
 # keep all years from each sources
