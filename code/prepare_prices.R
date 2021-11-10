@@ -221,6 +221,91 @@ class(imf[,2])
 
 psd <- read.csv(here("input_data", "USDA", "psd_alldata_csv", "psd_alldata.csv"))
 
+## What countries are there
+sort(unique(psd$Country_Name))
+
+uspsd <- psd[psd$Country_Name == "United States",]
+
+## What agregate to use? 
+unique(uspsd$Attribute_Description)
+# Total Use = domestic consumption + exports + ending stocks
+uspsd_TU <- uspsd[uspsd$Attribute_Description == "Total Use",]
+uspsd_TU$Calendar_Year%>%unique()%>% sort()# - misses years 2001-2007
+uspsd_TU$Market_Year%>%unique()%>% sort()
+unique(uspsd_TU$Commodity_Description) # only very few commodities
+# Total Supply = beginning stocks + domestic production + imports
+uspsd_TS <- uspsd[uspsd$Attribute_Description == "Total Supply",]
+uspsd_TS$Calendar_Year%>%unique()%>% sort()
+uspsd_TS$Market_Year%>%unique()%>% sort()
+unique(uspsd_TS$Commodity_Description)
+# Domestic Consumption = all possible uses of the commodity: food, feed, seed, waste, and industrial processing
+uspsd_DC <- uspsd[uspsd$Attribute_Description == "Domestic Consumption",]
+uspsd_DC$Calendar_Year%>%unique()%>% sort()# - misses years 2001-2005
+uspsd_DC$Market_Year%>%unique()%>% sort()
+unique(uspsd_DC$Commodity_Description)
+
+# Area Harvested
+uspsd_AH <- uspsd[uspsd$Attribute_Description == "Area Harvested",]
+uspsd_AH$Calendar_Year%>%unique()%>% sort() # only since 2006
+uspsd_AH$Market_Year%>%unique()%>% sort()
+unique(uspsd_AH$Commodity_Description) # main crops (by crop, not commodity, for instance only one category for soy)
+
+# they all have all years of information, conditional on using marketing year and not calendar year. 
+
+## What commodities?
+unique(uspsd$Commodity_Description)
+
+# select those we want
+focal_commodities <- c("Animal Numbers, Cattle", "Corn",
+                       "Meal, Rapeseed", "Meal, Soybean", "Meal, Sunflowerseed", # these categories are only in TS and DC, not in AH
+                       "Oil, Rapeseed", "Oil, Soybean", "Oil, Sunflowerseed", # these categories are only in TS and DC, not in AH
+                       "Oilseed, Rapeseed", "Oilseed, Soybean", "Oilseed, Sunflowerseed", 
+                       "Rice, Milled", "Sugar, Centrifugal", "Wheat")
+
+
+## format data 
+uspsd_list <- list()
+elm <- 1
+for(country in c("United States", "EU-25", "China")){
+  for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption")){
+    
+     tmpd<- uspsd %>% dplyr::filter(Attribute_Description == attribute_des & 
+                                                           Commodity_Description %in% focal_commodities & 
+                                                           Market_Year >= 1980 & 
+                                                           Market_Year <= 2021) %>%
+                                              dplyr::select(Commodity_Description, Market_Year, Value)
+     
+     tmpd[tmpd$Commodity_Description == "Animal Numbers, Cattle","Commodity_Description"] <- "Cattle"
+     tmpd[tmpd$Commodity_Description == "Corn","Commodity_Description"] <- "Maize" 
+     tmpd[tmpd$Commodity_Description == "Meal, Rapeseed","Commodity_Description"] <- "Rapeseed_meal"
+     tmpd[tmpd$Commodity_Description == "Meal, Soybean","Commodity_Description"] <- "Soybean_meal"
+     tmpd[tmpd$Commodity_Description == "Meal, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_meal"
+     tmpd[tmpd$Commodity_Description == "Oil, Rapeseed","Commodity_Description"] <- "Rapeseed_oil"
+     tmpd[tmpd$Commodity_Description == "Oil, Soybean","Commodity_Description"] <- "Soybean_oil"
+     tmpd[tmpd$Commodity_Description == "Oil, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_oil"
+     tmpd[tmpd$Commodity_Description == "Oilseed, Rapeseed","Commodity_Description"] <- "Rapeseed_oilseed"
+     tmpd[tmpd$Commodity_Description == "Oilseed, Soybean","Commodity_Description"] <- "Soybean_oilseed"
+     tmpd[tmpd$Commodity_Description == "Oilseed, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_oilseed"
+     tmpd[tmpd$Commodity_Description == "Rice, Milled","Commodity_Description"] <- "Rice"
+     tmpd[tmpd$Commodity_Description == "Sugar, Centrifugal","Commodity_Description"] <- "Sugar"
+     
+     names(tmpd)[names(tmpd)=="Market_Year"] <- "year"
+     names(tmpd)[names(tmpd)=="Value"] <-  gsub(" ", "_", attribute_des)
+  
+     as.list(unique(tmpd$Commodity_Description))
+     
+    tmpd <- reshape(tmpd, direction = "wide", 
+                     v.names = gsub(" ", "_", attribute_des),
+                     timevar = "Commodity_Description",
+                     idvar = "year")
+    
+    uspsd_list[[attribute_des]]  <- tmpd                                       
+  }
+}
+uspsd <- bind_cols(uspsd_list)
+
+# transform transformed commodities back to quantities of a single crop.
+
 
 
 #### Consolidate international price annual time series data frame #### 
