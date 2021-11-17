@@ -255,26 +255,30 @@ unique(uspsd_AH$Commodity_Description) # main crops (by crop, not commodity, for
 ## What commodities?
 unique(uspsd$Commodity_Description)
 
+
+
+
 # select those we want
 focal_commodities <- c("Animal Numbers, Cattle", "Corn",
                        "Meal, Rapeseed", "Meal, Soybean", "Meal, Sunflowerseed", # these categories are only in TS and DC, not in AH
                        "Oil, Rapeseed", "Oil, Soybean", "Oil, Sunflowerseed", # these categories are only in TS and DC, not in AH
                        "Oilseed, Rapeseed", "Oilseed, Soybean", "Oilseed, Sunflowerseed", 
                        "Rice, Milled", "Sugar, Centrifugal", "Wheat")
-
-
 ## format data 
-uspsd_list <- list()
+psd_list <- list()
 elm <- 1
-for(country in c("United States", "EU-25", "China")){
+for(country in c("United States", "European Union", "China")){
   for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption")){
     
-     tmpd<- uspsd %>% dplyr::filter(Attribute_Description == attribute_des & 
-                                                           Commodity_Description %in% focal_commodities & 
-                                                           Market_Year >= 1980 & 
-                                                           Market_Year <= 2021) %>%
-                                              dplyr::select(Commodity_Description, Market_Year, Value)
+     # select observations and variables we want
+     tmpd<- psd %>% dplyr::filter(Country_Name == country &
+                                  Attribute_Description == attribute_des & 
+                                  Commodity_Description %in% focal_commodities & 
+                                  Market_Year >= 1980 & 
+                                  Market_Year <= 2021) %>%
+                    dplyr::select(Commodity_Description, Market_Year, Value)
      
+     # rename some commodities and variables
      tmpd[tmpd$Commodity_Description == "Animal Numbers, Cattle","Commodity_Description"] <- "Cattle"
      tmpd[tmpd$Commodity_Description == "Corn","Commodity_Description"] <- "Maize" 
      tmpd[tmpd$Commodity_Description == "Meal, Rapeseed","Commodity_Description"] <- "Rapeseed_meal"
@@ -292,19 +296,38 @@ for(country in c("United States", "EU-25", "China")){
      names(tmpd)[names(tmpd)=="Market_Year"] <- "year"
      names(tmpd)[names(tmpd)=="Value"] <-  gsub(" ", "_", attribute_des)
   
-     as.list(unique(tmpd$Commodity_Description))
-     
-    tmpd <- reshape(tmpd, direction = "wide", 
+
+     tmpd <- reshape(tmpd, direction = "wide", 
                      v.names = gsub(" ", "_", attribute_des),
                      timevar = "Commodity_Description",
                      idvar = "year")
     
-    uspsd_list[[attribute_des]]  <- tmpd                                       
+    # add the country in the variable name
+    names(tmpd)[names(tmpd)!="year"] <- paste0(gsub(" ", "", country), ".", names(tmpd)[names(tmpd)!="year"]) 
+    
+
+    # and lines if there are not as many as in other time series
+    min_year <- min(tmpd$year, na.rm = TRUE) 
+    if(min_year>1980){
+      tmpd <- rbind(matrix(NA, nrow = min_year - 1980, ncol = ncol(tmpd), dimnames = list(NULL, colnames(tmpd)) ), tmpd)#rep(NA, ncol(tmpd))
+      tmpd[is.na(tmpd$year),"year"] <- (1980 : (min_year - 1))
+    }
+    
+    psd_list[[paste0(country, " ", attribute_des)]]  <- tmpd   
+
   }
 }
-uspsd <- bind_cols(uspsd_list)
+
+psd <- bind_cols(psd_list)
+names(psd)[1] <- "year"
+psd <- psd[, !grepl("year.", names(psd))]
+
 
 # transform transformed commodities back to quantities of a single crop.
+
+# and quantities of interest (ratios?)
+
+
 
 
 
@@ -313,6 +336,15 @@ uspsd <- bind_cols(uspsd_list)
 ip <- full_join(x = ps2, y = imf, by = "year") 
 
 ip <- ip %>% dplyr::select(-MUV_index, -FPI, -MUV_index_10, - MUV_index_2014_16)
+
+macro_vars <- ip
+for(country in c("United States", "EU-25", "China")){
+  for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption")){
+    macro_vars <- full_join(macro_vars, psd_list[[paste0(country, " ", attribute_des)]], by = "year")
+  }
+}
+
+
 
 ### PREPARE ADDITIONAL INTERNATIONAL PRICE VARIABLES #### 
 

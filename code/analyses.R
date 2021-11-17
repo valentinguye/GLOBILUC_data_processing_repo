@@ -135,46 +135,52 @@ prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 
 ### HELPER FUNCTION TO BOOTSTRAP CLUSTER SE 
 # will tell boot::boot how to sample data at each replicate of statistic
-ran.gen_cluster <- function(original_data, arg_list){
-  
-  cl_boot_dat <- NULL
+ran.gen_cluster_blc <- function(original_data, arg_list){
+  # start <- Sys.time()
+  # to store 
+  cl_boot_dat <- list()
   
   cluster_var <- arg_list[["cluster_variable"]]
   
   # non-unique names of clusters (repeated when there is more than one obs. in a cluster) 
   nu_cl_names <- as.character(original_data[,cluster_var]) 
   
-  for(s in arg_list[["unique_sizes"]]){
-    # sample, in the vector of names of clusters of size s, as many draws as there are clusters of that size, with replacement
-    sample_cl_s <- sample(arg_list[["cluster_names"]][[s]], 
-                          arg_list[["number_clusters"]][[s]], 
-                          replace = TRUE) 
+  # sample, in the vector of names of clusters as many draws as there are clusters, with replacement
+  sample_cl <- sample(arg_list[["cluster_names"]], 
+                      arg_list[["number_clusters"]], 
+                      replace = TRUE) 
+  
+  # because of replacement, some names are sampled more than once
+  # we need to give them a new cluster identifier, otherwise a cluster sampled more than once 
+  # will be "incorrectly treated as one large cluster rather than two distinct clusters" (by the fixed effects) (Cameron and Miller, 2015)    
+  sample_cl_tab <- table(sample_cl)
+  
+  for(n in 1:max(sample_cl_tab)){ # from 1 to the max number of times a cluster was sampled bc of replacement
+    # vector to select obs. that are within the clusters sampled n times. 
+    # seems slightly faster to construct the names_n object beforehand 
+    # start <- Sys.time()
+    names_n <- names(sample_cl_tab[sample_cl_tab == n])
+    sel <- nu_cl_names %in% names_n
+    # end <- Sys.time()
     
-    # because of replacement, some names are sampled more than once
-    sample_cl_s_tab <- table(sample_cl_s)
+    # select data accordingly to the cluster sampling (duplicating n times observations from clusters sampled n times)
+    clda <- original_data[sel,][rep(seq_len(sum(sel)), n), ]
     
-    # we need to give them a new cluster identifier, otherwise a cluster sampled more than once 
-    # will be "incorrectly treated as one large cluster rather than two distinct clusters" (by the fixed effects) (Cameron 2015)    
+    #identify row names without periods, and add ".0" 
+    row.names(clda)[grep("\\.", row.names(clda), invert = TRUE)] <- paste0(grep("\\.", row.names(clda), invert = TRUE, value = TRUE),".0")
     
-    for(n in 1:max(sample_cl_s_tab)){ # from 1 to the max number of times a name was sampled bc of replacement
-      # vector to select obs. that are within the sampled clusters. 
-      sel <- nu_cl_names %in% names(sample_cl_s_tab[sample_cl_s_tab == n])
-      
-      # replicate the selected data n times
-      clda <- original_data[sel,][rep(seq_len(nrow(original_data[sel,])), n), ]
-      
-      #identify row names without periods, and add ".0" 
-      row.names(clda)[grep("\\.", row.names(clda), invert = TRUE)] <- paste0(grep("\\.", row.names(clda), invert = TRUE, value = TRUE),".0")
-      
-      # add the suffix due to the repetition after the existing cluster identifier. 
-      clda[,cluster_var] <- paste0(clda[,cluster_var], sub(".*\\.","_",row.names(clda)))
-      
-      # stack the bootstrap samples iteratively 
-      cl_boot_dat <- rbind(cl_boot_dat, clda) 
-    }
-  }  
-  return(cl_boot_dat)
+    # add the suffix due to the repetition after the existing cluster identifier. 
+    clda[,cluster_var] <- paste0(clda[,cluster_var], sub(".*\\.","_",row.names(clda)))
+    
+    # stack the bootstrap samples iteratively 
+    cl_boot_dat[[n]] <- clda
+  }
+  # end <- Sys.time()
+  return(bind_rows(cl_boot_dat))
 }
+
+
+
 
 ### TEMPORARY OBJECTS 
 outcome_variable = "driven_loss" # "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
@@ -182,10 +188,10 @@ start_year = 2001
 end_year = 2019
 continent = "all"
 further_lu_evidence = "none"
-original_exposures = c("Soybean") # ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+original_exposures = mapmat[,"Crops"] # ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
 
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
-original_treatments <-  c("Beef") # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+original_treatments <-  c("Soybean") # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
 # "Beef" , , , "Cocoa", "Coffee", "Rubber"
 # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum")
 # mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil"
@@ -197,7 +203,7 @@ j_soy = "Soybean"
 fcr = 7.2
 standardization = "_std2"
 price_info = "_lag1"
-estimated_effect = "beta"
+estimated_effect = "alpha"
 # sjpj_lag = "_lag1" # either "" or "_lag1" or "_lag2"
 # skpk_lag = "_lag1" # either "" or "_lag1" or "_lag2"SjPj = TRUE
 # SjPj = TRUE
@@ -205,13 +211,14 @@ estimated_effect = "beta"
 remaining <- TRUE
 # open_path <- FALSE
 # commoXcommo <- "Fodder_X_Beef"
-fe = "grid_id" # + country_year
+fe = "grid_id + country_year" # + country_year
 distribution = "gaussian"
 invhypsin = TRUE
 conley_cutoff <- 100
 se = "twoway"
 boot_cluster ="grid_id"
 #coefstat = "confint"
+coefs_to_aggregate <- c("Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber")
 output = "coef_table"
 glm_iter <- 25 
 
@@ -251,6 +258,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           # old argument: cluster ="grid_id", # the cluster level if se = "cluster" (i.e. one way)
                           # coefstat = "confint", # one of "se", "tstat", "confint"
                           glm_iter = 25,
+                          coefs_to_aggregate = c("Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"),
                           output = "coef_table" # one of "data", or "coef_table" 
 ){
   
@@ -306,7 +314,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
       regressors <- c(regressors, varname)
       # Log them so their variations are comparable
       d <- mutate(d, 
-                  !!as.symbol(varname) := log( (!!as.symbol(Sj)) * (!!as.symbol(Pk)) +1))
+                  !!as.symbol(varname) := (!!as.symbol(Sj)) * log( (!!as.symbol(Pk)) ))#+1
       
     }
   }
@@ -419,7 +427,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
   
   # have remaining forest
-  d <- dplyr::filter(d, remaining_fc > 0)
+  # d <- dplyr::filter(d, remaining_fc > 0)
   
   if(estimated_effect == "alpha"){
     used_vars <- unique(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
@@ -443,18 +451,26 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   # is.na(d$Oilpalm) 
   
-  # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
-  obstormv <- obs2remove(fml = as.formula(paste0(outcome_variable, " ~ ", fe)),
-                         d, 
-                         family = "poisson")
-  # this is necessary to handle cases when there is no obs. to remove
-  if(length(obstormv)>0){
-    d_clean <- d[-obstormv,]
-  } else {
-    d_clean <- d
-  }
+  # stop using obstorm as it is deprecated in the present version of fixest, and did weird things 
+  # removing all obs with outcome_variable == 0 (not only when it's always the case within the fe dimension)
+  # # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
+  # obstormv <- obs2remove(fml = as.formula(paste0(outcome_variable, " ~ ", fe)),
+  #                        d, 
+  #                        family = "poisson")
+  # # this is necessary to handle cases when there is no obs. to remove
+  # if(length(obstormv)>0){
+  #   d_clean <- d[-obstormv,]
+  # } else {
+  #   d_clean <- d
+  # }
+  # rm(d, obstormv)
   
-  rm(d, obstormv)
+  # AND because we don't remove obs that have no remaining forest, d IS A BALANCED PANEL !!
+  if(!nrow(d) == length(unique(d$grid_id))*length(unique(d$year))){
+    stop("data is not balanced")
+  }
+  d_clean <- d
+  rm(d)
   
   ### REGRESSIONS
   
@@ -479,14 +495,28 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                                    notes = TRUE, 
                                    verbose = 4)  
     
+    ## MAKE AGGREGATE RESULTS 
     # select the coefficients to be addep up (code works in cases when there is only one regressor because we investigate specific crop-crop interactions)
     # (I have checked it)
-    df_res[,"estimate"] <- alpha_reg_res$coefficients[regressors] %>% sum()
+    df_res <- summary(alpha_reg_res)$coeftable
+    df_res <- rbind(df_res, rep(NA, ncol(df_res)))
+    
+    row.names(df_res) <- c(rownames(summary(alpha_reg_res)$coeftable), "aggr_J")
+    
+    # select coefficients to aggregate 
+    select_coefs <- paste0(coefs_to_aggregate, "_X_", original_treatments)
+    
+    # if the treatment is also one of the crops we want to aggregate over, remove the term, as it is not an indirect effect
+    select_coefs <- select_coefs[select_coefs != paste0(mapmat[mapmat[,"Prices"]==original_treatments, "Crops"], "_X_", original_treatments)]
+    
+    df_res["aggr_J","Estimate"] <- alpha_reg_res$coefficients[select_coefs] %>% sum()
     # select the part of the VCOV matrix that is to be used to compute the standard error of the sum 
     # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
-    df_res[,"std.error"] <- alpha_reg_res$cov.scaled[regressors,regressors] %>% as.matrix() %>% sum() %>% sqrt()
+    df_res["aggr_J","Std. Error"] <- alpha_reg_res$cov.scaled[select_coefs, select_coefs] %>% as.matrix() %>% sum() %>% sqrt()
     
-    df_res[,"observations"] <- alpha_reg_res$nobs
+    df_res["aggr_J","t value"]  <- (df_res["aggr_J","Estimate"] - 0)/(df_res["aggr_J","Std. Error"])
+    
+    df_res["aggr_J","Pr(>|t|)"]  <- (2*pnorm(abs(df_res["aggr_J","t value"]), lower.tail = FALSE)) 
     
   }else{
     
@@ -538,37 +568,27 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
       # df_res[,"observations"] <- gamma_reg_res$nobs
     }
     
-    # get the different cluster sizeS. This is necessary to cluster bootstraping with clusters of different sizes. 
-    # methodology comes from:
+    # methodology comes from Cameron and Miller (2015), and:
     # https://stats.stackexchange.com/questions/202916/cluster-boostrap-with-unequally-sized-clusters/202924#202924
     
-    # this is a vector of same length as cluster_names. Values are the number of observations (the size) per cluster. 
-    sizes <- table(d_clean[,boot_cluster]) # in original code this was not grid_id but boot_cluster, which was "parcel_id". 
-    u_sizes <- sort(unique(sizes))
-    cl_names <- list()
-    n_clusters <- list()
-    for(s in u_sizes){
-      # names and numbers of clusters of size s
-      cl_names[[s]] <- names(sizes[sizes == s])
-      n_clusters[[s]] <- length(cl_names[[s]])
-    }
-    #sum(unlist(n_clusters)) == length(unique(d_clean[,boot_cluster]))
+    # list of parameters related to the dataset, and the clustering variable
+    # names and numbers of clusters of size s
+    par_list <- list(cluster_variable = boot_cluster, 
+                     cluster_names = unique(d_clean[,boot_cluster]),
+                     number_clusters = length(unique(d_clean[,boot_cluster])))
     
-    # start <- Sys.time()
+    start <- Sys.time()
     set.seed(145)
     bootstraped <- boot(data = d_clean, 
                         statistic = make_estimate, 
-                        ran.gen = ran.gen_cluster,
-                        mle = list(cluster_variable = boot_cluster, 
-                                   unique_sizes = u_sizes, 
-                                   cluster_names = cl_names, 
-                                   number_clusters = n_clusters),
+                        ran.gen = ran.gen_cluster_blc,
+                        mle = par_list,
                         sim = "parametric",
                         # parallel = "multicore",
                         # ncpus = detectCores() - 1,
-                        R = 200)
+                        R = 400)
     
-    # end <- Sys.time()
+    end <- Sys.time()
     
     df_res[,"estimate"] <- bootstraped$t0 
     df_res[,"std.error"] <- sd(bootstraped$t)
@@ -576,9 +596,9 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
   
   # compute t.stat and p-value of the aggregated estimate (yields similar quantities as in alpha_reg_res if only one coeff was aggregated)
-  df_res <- dplyr::mutate(df_res, t.statistic = (estimate - 0)/(std.error))
+  # df_res <- dplyr::mutate(df_res, t.statistic = (estimate - 0)/(std.error))
   
-  df_res <- dplyr::mutate(df_res, p.value =  (2*pnorm(abs(t.statistic), lower.tail = FALSE)) )
+  # df_res <- dplyr::mutate(df_res, p.value =  (2*pnorm(abs(t.statistic), lower.tail = FALSE)) )
   
   # store info on SE method
   if(se == "conley"){
@@ -595,7 +615,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   if(estimated_effect != "alpha"){
     se_info <- paste0("Clustered (",boot_cluster,")")
   }
-  df_res$inference <- se_info  
+  #df_res$inference <- se_info  
   
   
   # output wanted
@@ -615,9 +635,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   rm(toreturn)
 }
 
-
-
-### DEFINE HERE THE VALUES THAT WILL BE PASSED TO SPECIFICATION ARGUMENTS OF REGRESSION FUNCTION ### 
+## DEFINE HERE THE VALUES THAT WILL BE PASSED TO SPECIFICATION ARGUMENTS OF REGRESSION FUNCTION ### 
 est_parameters <- list(outcome_variable  = "driven_loss",
                        standardization = "_std2",
                        price_info = "_lag1",
@@ -634,30 +652,34 @@ est_parameters <- list(outcome_variable  = "driven_loss",
 alpha_disaggr_res_list <- list()
 elm <- 1
 
-for(j_crop in c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber")){#
-  for(k_price in c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil")){
-    # uncomment to prevent estimation from direct effects 
-    # if(mapmat[mapmat$Crops == j_crop, "Prices"] == k_price){ 
-    alpha_disaggr_res_list[[elm]] <- make_main_reg(original_exposures = j_crop, 
-                                                   original_treatments = k_price, 
-                                                   estimated_effect = "alpha", 
-                                                   fe = "grid_id + country_year", 
-                                                   se = "twoway",
-                                                   standardization = est_parameters[["standardization"]],
-                                                   price_info = est_parameters[["price_info"]],
-                                                   distribution = est_parameters[["distribution"]], 
-                                                   pasture_shares = est_parameters[["pasture_shares"]]
-                                                   )
-    
-    names(alpha_disaggr_res_list)[elm] <- paste0(j_crop,"_X_",k_price)
-    elm <- elm + 1
-    # }
-  }
+#for(j_crop in c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber")){#
+for(k_price in c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil")){
+  # uncomment to prevent estimation from direct effects 
+  # if(mapmat[mapmat[,"Crops] == j_crop, "Prices"] != k_price){ 
+  alpha_disaggr_res_list[[elm]] <- make_main_reg(original_exposures = mapmat[,"Crops"], 
+                                                 original_treatments = k_price, 
+                                                 estimated_effect = "alpha", 
+                                                 fe = "grid_id + country_year", 
+                                                 se = "twoway",
+                                                 standardization = est_parameters[["standardization"]],
+                                                 price_info = est_parameters[["price_info"]],
+                                                 distribution = est_parameters[["distribution"]], 
+                                                 pasture_shares = est_parameters[["pasture_shares"]]
+  )
+  
+  names(alpha_disaggr_res_list)[elm] <- paste0("aggr_J_X_",k_price)
+  elm <- elm + 1
+  # }
 }
+#}
 
 est_filename <- paste0(est_parameters, collapse = "_") %>% paste0(".Rdata")
 est_filename <- paste0("disaggr_", est_filename)
 saveRDS(alpha_disaggr_res_list, here("temp_data","reg_results", "alpha", est_filename))
+
+std <- readRDS(here("temp_data","reg_results", "alpha", "disaggr_driven_loss__std__lag1_gaussian_FALSE.Rdata"))
+std1 <- readRDS(here("temp_data","reg_results", "alpha", "disaggr_driven_loss__std1__lag1_gaussian_FALSE.Rdata"))
+std2 <- readRDS(here("temp_data","reg_results", "alpha", "disaggr_driven_loss__std2__lag1_gaussian_FALSE.Rdata"))
 
 # let's plot everything first (insignificant ones are a matter of absence of true effect or precision, but not bias)
 
@@ -878,9 +900,9 @@ beta_disaggr_res_list <- list()
 elm <- 1
 
 for(j_crop in c("Soybean")){#"Fodder", "Oilpalm", , "Cocoa", "Coffee", "Rubber"
-  for(k_price in c("Maize", "Wheat")){#c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil")
+  for(k_price in c("Beef", "Pork", "Maize", "Wheat", "Orange")){#c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil")
     # this makes sure that we estimate only models where cross-commodity terms are in the regressors
-    if(mapmat[mapmat$Crops == j_crop, "Prices"] == k_price){  
+    if(mapmat[mapmat[,"Crops"] == j_crop, "Prices"] != k_price){  
       beta_disaggr_res_list[[elm]] <- make_main_reg(original_exposures = j_crop, 
                                                     original_treatments = k_price, 
                                                     estimated_effect = "beta", 
@@ -890,7 +912,7 @@ for(j_crop in c("Soybean")){#"Fodder", "Oilpalm", , "Cocoa", "Coffee", "Rubber"
                                                     price_info = est_parameters[["price_info"]],
                                                     distribution = est_parameters[["distribution"]], 
                                                     pasture_shares = est_parameters[["pasture_shares"]]
-                                                    )
+      )
       
       names(beta_disaggr_res_list)[elm] <- paste0(j_crop,"_X_",k_price)
       elm <- elm + 1
@@ -900,9 +922,11 @@ for(j_crop in c("Soybean")){#"Fodder", "Oilpalm", , "Cocoa", "Coffee", "Rubber"
 
 est_filename <- paste0(est_parameters, collapse = "_") %>% paste0(".Rdata")
 est_filename <- paste0("disaggr_", est_filename)
-saveRDS(beta_disaggr_res_list, here("temp_data","reg_results", "beta", est_filename))
+saveRDS(beta_disaggr_res_list, )
 
+old_res <- readRDS(here("temp_data","reg_results", "beta", paste0("unblc_",est_filename)))
 
+std2 <- readRDS(here("temp_data","reg_results", "beta", "disaggr_driven_loss__std2__lag1_gaussian_FALSE.Rdata"))
 
 
 

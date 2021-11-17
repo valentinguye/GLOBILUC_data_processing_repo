@@ -362,8 +362,7 @@ for(name in dataset_names){
                                               "Cabbage", "Carrot", "Onion", "Tomato", 
                                               "Flax"))]
   
-  all_crops <- c(all_crops, "Fodder", "Sugar", "Rice", "Sorghum2", 
-                 "bioenergy_crops", "cereal_crops", "pulses_crops", "roots_crops", "vegetables_crops", "industrial_crops")
+  all_crops <- c(all_crops, "Fodder", "Sugar", "Rice", "Sorghum2")#"bioenergy_crops", "cereal_crops", "pulses_crops", "roots_crops", "vegetables_crops", "industrial_crops"
   
   ## First way to standardize, sum (the denominator) over all crops
   # To understand these lines, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
@@ -459,13 +458,13 @@ for(name in dataset_names){
   df_cs <- inner_join(df_cs, working_df_cs[,c("grid_id",std2_var_names)], by = "grid_id")
   
   ## Crops we need a standardized version of SI: those that can be matched with a price
-  indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder",
-                         "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber",
-                         "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
+  # indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder",
+  #                        "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber",
+  #                        "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
   # Adding up the *_std2 over indivcrops_to_std won't equal 1, but this is not an issue. 
   
   # Select variables to save: only newly constructed variables (not grouped crops), and id
-  var_names <- c(paste0(indivcrops_to_std, "_std"), paste0(indivcrops_to_std, "_std1"), paste0(indivcrops_to_std, "_std2"))
+  var_names <- c(paste0(all_crops, "_std"), paste0(all_crops, "_std1"), paste0(all_crops, "_std2"))
   # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs_saved))
   # and we want the new variables in non std format too 
   df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2", var_names)]
