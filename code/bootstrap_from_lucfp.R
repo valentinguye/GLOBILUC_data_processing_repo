@@ -23,6 +23,10 @@ for(s in u_sizes){
   n_clusters[[s]] <- length(cl_names[[s]])
 }
 
+par_list <- list(unique_sizes = u_sizes,
+                 cluster_names = cl_names,
+                 number_clusters = n_clusters)
+
 ## Design the bootstrap sampling function. 
 # It will tell boot::boot how to sample data at each replicate 
 ran.gen_cluster <- function(original_data, arg_list){
@@ -46,10 +50,11 @@ ran.gen_cluster <- function(original_data, arg_list){
     
     for(n in 1:max(sample_cl_s_tab)){ # from 1 to the max number of times a name was sampled bc of replacement
       # vector to select obs. that are within the sampled clusters. 
-      sel <- nu_cl_names %in% names(sample_cl_s_tab[sample_cl_s_tab == n])
-
-      # replicate the selected data n times
-      clda <- original_data[sel,][rep(seq_len(nrow(original_data[sel,])), n), ]
+      names_n <- names(sample_cl_s_tab[sample_cl_s_tab == n])
+      sel <- nu_cl_names %in% names_n
+      
+      # select data accordingly to the cluster sampling (duplicating n times observations from clusters sampled n times)
+      clda <- original_data[sel,][rep(seq_len(sum(sel)), n), ]
       
       #identify row names without periods, and add ".0" 
       row.names(clda)[grep("\\.", row.names(clda), invert = TRUE)] <- paste0(grep("\\.", row.names(clda), invert = TRUE, value = TRUE),".0")
@@ -66,9 +71,7 @@ ran.gen_cluster <- function(original_data, arg_list){
 
 #test that the returned data are the same dimension as input
 test_boot_d <- ran.gen_cluster(original_data = data,
-                               arg_list = list(unique_sizes = u_sizes,
-                                               cluster_names = cl_names,
-                                               number_clusters = n_clusters))
+                               arg_list = par_list)
 dim(test_boot_d)
 dim(data)
 # test new clusters are not duplicated (correct if anyDuplicated returns 0)
@@ -88,9 +91,7 @@ est_fun <- function(est_data){
 boot(data = data, 
       statistic = est_fun, 
       ran.gen = ran.gen_cluster,
-      mle = list(unique_sizes = u_sizes, 
-                 cluster_names = cl_names, 
-                 number_clusters = n_clusters),
+      mle = par_list,
       sim = "parametric",
       parallel = "no",
       R = 200)
@@ -104,13 +105,13 @@ set.seed(1234)
 custom_bs <- boot(data = PetersenCL, 
                   statistic = est_fun, 
                   ran.gen = ran.gen_cluster,
-                  mle = list(unique_sizes = u_sizes, 
-                             cluster_names = cl_names, 
-                             number_clusters = n_clusters),
+                  mle = par_list,
                   sim = "parametric",
                   parallel = "no",
                   R = 200)
 sd(custom_bs$t[,2])
+sdw_bs <- vcovBS(lm(as.formula("y ~ x"), PetersenCL), cluster = ~firm, R=200)#
+sqrt(sdw_bs["x","x"])
 
 # by hand computation of SE changes nothing 
 stat_bar <- mean(custom_bs$t)
