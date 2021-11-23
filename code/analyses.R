@@ -132,6 +132,7 @@ vegetable_oils = c("Palm_oil", "Rapeseed_oil", "Soybean_oil", "Sunflower_oil")
 cereals_feeds = c("Barley", "Maize", "Oat", "Rice", "Soybean", "Soybean_meal", "Wheat")
 biofuel_feedstocks = c("Maize", "Palm_oil", "Rapeseed_oil", "Sorghum", "Soybean_oil", "Sugar")
 
+# gérer depuis ici ce pour quoi on contrôle pour chaque prix, et ce qu'on met ou pas dans les groupes
 maplist <- list(Fodder = list(meats = meats, cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
                               Crude_oil = "Crude_oil"), 
                 Soybean = list(meats = meats, cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
@@ -202,9 +203,9 @@ start_year = 2001
 end_year = 2019
 continent = "all"
 further_lu_evidence = "none"
-original_sj = "Fodder"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+original_sj = "Oilpalm"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
-# original_treatments <-  c("meats", "vegetable_oils", "cereals_feed", "biofuel_feedstocks") # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+original_Pk <- "Palm_oil" # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
 # "Beef" , , , "Cocoa", "Coffee", "Rubber"
 # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum")
 # 
@@ -216,7 +217,7 @@ pasture_shares <- FALSE
 j_soy = "Soybean"
 fcr = 7.2
 standardization = "_std2"
-price_info = "_lag1"
+price_info = "_3pya"
 estimated_effect = "alpha"
 group_prices <- TRUE
 control_interact_sj <- FALSE
@@ -252,14 +253,14 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           original_sj = c("Fodder"),  # in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
                           # , "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"
                           # note that this is the vector that defines what is removed from full_control
-                          original_treatments = c("Soybean"), # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+                          original_Pk = c("Soybean"), # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
                           # , "Palm_oil", "Cocoa", "Coffee", "Rubber", 
                           # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum"
                           focal_j_extra_price = "Soybean", # in GAEZ spelling, the crop of interest if the treatment is price that has no match in GAEZ (an "extra price" in previous saying)
                           # extra_price_k = c(), # "Chicken", "Pork", "Sheep", "Crude_oil" in price spelling. One, part, or all of the full set of commodities NOT having a price-AESI match.
                           pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
                           standardization = "_std2", # one of "", "_std", or "_std2"
-                          price_info = "_lag1", # one of "lag1", "_2pya", "_3pya", "_4pya", "_5pya",
+                          price_info = "_3pya", # one of "lag1", "_2pya", "_3pya", "_4pya", "_5pya",
                           estimated_effect = "alpha",# if "alpha", estimates the (aggregated or not) cross-elasticity effect. If different from "alpha" (e.g. "gamma") it estimates the ILUC effect from price covariation. 
                           group_prices = TRUE,
                           control_interact_sj = FALSE, 
@@ -311,13 +312,15 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   # standardize them
   all_exposures <- paste0(original_all_exposures, standardization)
-  # all_exposures_but_k <- paste0(original_all_exposures_but_k, standardization)
+
   
   ## Price variable names to find in the price data
-  original_treatments <- unlist(maplist[[original_sj]])
+  Pk <- paste0(original_Pk, price_info)
   
-  # this just those for which focus is set in current specification
+  # individual prices mobilized in this specific sj estimation
+  original_treatments <- unlist(maplist[[original_sj]])
   treatments <- paste0(original_treatments, price_info)
+  
   # this is all possible treatments, necessary in every specificaton 
   original_all_treatments <- mapmat[,"Prices"]
   all_treatments <- paste0(original_all_treatments, price_info)
@@ -332,7 +335,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                                  unique(c(sj, all_exposures))))) #
   
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", unique(c(treatments, all_treatments)))], by = c("year"))
+  d <- left_join(d, prices[,c("year", unique(c(treatments)))], by = c("year"))#, all_treatments
   
   
   # If we want the exposure to deforestation for pasture to be proxied with the share of pasture area in 2000, rather than suitability index, 
@@ -347,22 +350,27 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   
   if(group_prices){
-    ## make groups specific to the present sj
+    # remove Pk from crops to group 
+    original_treatments_but_k <- original_treatments[original_treatments != original_Pk]
+    treatments_but_k <- paste0(original_treatments_but_k, price_info)
+    
+    
     # remove Pj from crops to group
     original_Pj <- mapmat[mapmat[,"Crops"]==original_sj, "Prices"]
     Pj <- paste0(original_Pj, price_info)
-    original_all_treatments_but_j <- original_treatments[original_treatments != original_Pj]
-    all_treatments_but_j <- paste0(original_all_treatments_but_j, price_info)
+    original_treatments_but_jk <- original_treatments_but_k[original_treatments_but_k != original_Pj]
+    treatments_but_jk <- paste0(original_treatments_but_jk, price_info)
     
+    # make groups specific to the present sj
     sj_group_list <- list()
     for(sj_grp in names(maplist[[original_sj]])){
-      sj_group_list[[sj_grp]] <- all_treatments_but_j[original_all_treatments_but_j %in% maplist[[original_sj]][[sj_grp]]]
+      sj_group_list[[sj_grp]] <- treatments_but_jk[original_treatments_but_jk %in% maplist[[original_sj]][[sj_grp]]]
     }
     
-    # sj_group_list <- list(meats = all_treatments_but_j[original_all_treatments_but_j %in% maplist[[original_sj]][["meats"]]], 
-    #                       cereals_feeds = all_treatments_but_j[original_all_treatments_but_j %in% maplist[[original_sj]][["cereals_feeds"]]], 
-    #                       vegetable_oils = all_treatments_but_j[original_all_treatments_but_j %in% maplist[[original_sj]][["vegetable_oils"]]], 
-    #                       biofuel_feedstocks = all_treatments_but_j[original_all_treatments_but_j %in% maplist[[original_sj]][["biofuel_feedstocks"]]],
+    # sj_group_list <- list(meats = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["meats"]]], 
+    #                       cereals_feeds = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["cereals_feeds"]]], 
+    #                       vegetable_oils = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["vegetable_oils"]]], 
+    #                       biofuel_feedstocks = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["biofuel_feedstocks"]]],
                             
     
     used_group_names <- names(sj_group_list[lengths(sj_group_list)>0]) # currently useless
@@ -377,36 +385,40 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                   !!as.symbol(paste0(grp,price_info)) := rowMeans(across(.cols = (any_of(sj_group_list[[grp]])))))
     }
     
-    # log Pj 
-    d <- mutate(d, !!as.symbol(Pj) := log(!!as.symbol(Pj)))
-    
-    original_grouped_treatments <- c(original_Pj, used_group_names)
-    grouped_treatments <- paste0(original_grouped_treatments, price_info)
+    # log Pj and Pk 
+    if(Pj != Pk){
+      d <- mutate(d, !!as.symbol(Pk) := log(!!as.symbol(Pk)), 
+                     !!as.symbol(Pj) := log(!!as.symbol(Pj)))
+    }else{
+      d <- mutate(d, !!as.symbol(Pk) := log(!!as.symbol(Pk)))
+    }    
+    # interact all the final treatments with the exposure (unique is for cases when Pj = Pk)
+    original_final_treatments <- unique(c(original_Pj, original_Pk, used_group_names))
+    final_treatments <- paste0(original_final_treatments, price_info)
     
     regressors <- c()
-    for(Pk in grouped_treatments){
-      varname <- paste0(original_sj, "_X_", original_grouped_treatments[match(Pk, grouped_treatments)])
+    for(ft in final_treatments){
+      varname <- paste0(original_sj, "_X_", original_final_treatments[match(ft, final_treatments)])
       regressors <- c(regressors, varname)
       # Log prices so their variations are comparable
       d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sj)) * (!!as.symbol(Pk)) )# don't loge Pk again, it as been pre logged above. 
+                  !!as.symbol(varname) := (!!as.symbol(sj)) * (!!as.symbol(ft)) )# don't log Pk again, it as been pre logged above. 
       
     }
+    rm(varname, ft)
     
-  }else{
+  }else{ # i.e. if we do not group terms of interaction between sj and other prices 
     
-    ### Main regressors
-    # code if we consider there are several regressors, not coded like this currently
     regressors <- c()
-    for(Pk in treatments){
-      varname <- paste0(original_sj, "_X_", original_treatments[match(Pk, treatments)])
+    for(tr in treatments){
+      varname <- paste0(original_sj, "_X_", original_treatments[match(tr, treatments)])
       regressors <- c(regressors, varname)
       # Log prices so their variations are comparable
       d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sj)) * log( (!!as.symbol(Pk)) ))#+1
+                  !!as.symbol(varname) := (!!as.symbol(sj)) * log( (!!as.symbol(tr)) ))#+1
   
     }
-    rm(varname, Pk)
+    rm(varname, tr)
     
     # regressors <- paste0(original_sj, "_X_", original_treatments)
     # d <- mutate(d, !!as.symbol(regressors) := (!!as.symbol(sj)) * log( (!!as.symbol(treatments)) ))#+1
@@ -425,17 +437,17 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     delta_controls <- c(delta_controls, "remaining_fc")
   }
   
-    # if we are to group these controls in one single variable
+  # if we are to group these controls in one single variable
   if(control_interact_sj){
     sj_interactions <- c()
-    for(Pk in all_treatments[all_treatments!=treatments]){
-      varname <- paste0(original_sj, "_X_", original_all_treatments[match(Pk, all_treatments)])
+    for(at in all_treatments[all_treatments!=treatments]){
+      varname <- paste0(original_sj, "_X_", original_all_treatments[match(at, all_treatments)])
       sj_interactions <- c(sj_interactions, varname)
       # Log prices so their variations are comparable
       d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sj)) * log( (!!as.symbol(Pk)) ))#+1
+                  !!as.symbol(varname) := (!!as.symbol(sj)) * log( (!!as.symbol(at)) ))#+1
       }
-    rm(varname, Pk)
+    rm(varname, at)
     
     d <- mutate(d, one_ctrl = rowSums(across(.cols = (any_of(sj_interactions)))))
     alpha_controls <- c(alpha_controls, "one_ctrl")
@@ -529,9 +541,9 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     # construct all interaction variables
     indiv_controls <- c()
     d$full_control <- 0
-    for(Pk in all_treatments){
+    for(at in all_treatments){
       for(si in all_exposures){
-        varname <- paste0(original_all_exposures[match(si, all_exposures)], "_X_", original_all_treatments[match(Pk, all_treatments)])
+        varname <- paste0(original_all_exposures[match(si, all_exposures)], "_X_", original_all_treatments[match(at, all_treatments)])
         # indiv_controls <- c(indiv_controls, varname)
         # d <- mutate(d, 
         #             !!as.symbol(varname) := log( (!!as.symbol(si)) * (!!as.symbol(Pk)) +1))
@@ -539,14 +551,14 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
         
         # we need to add up the new terms together as we create them, otherwise there are 529 new columns added to the 4M+ rows dataframe and this is memory intensive
         if(!(varname%in%regressors)){ # add the interaction term if it's not a regressor already
-          d <- mutate(d, full_control := ( full_control + log( (!!as.symbol(si)) * (!!as.symbol(Pk)) +1 ) ) )
+          d <- mutate(d, full_control := ( full_control + log( (!!as.symbol(si)) * (!!as.symbol(at)) +1 ) ) )
         }
       }
     }
     
     # c(log(d[1,"Banana_lag1"]*d[1,"Barley_std2"] +1), log(d[1,"Barley_lag1"]*d[1,"Barley_std2"] +1))%>%sum()
     
-    rm(varname, Pk, si)
+    rm(varname, at, si)
     
     delta_controls <- c(delta_controls, "full_control")
     
@@ -832,20 +844,20 @@ est_parameters <- list(outcome_variable  = "driven_loss",
 alpha_disaggr_res_list <- list()
 elm <- 1
 
-for(j_crop in c("Fodder", "Soybean", "Oilpalm")){#, "Cocoa", "Coffee", "Rubber"
-  for(k_price in c(mapmat[,"Prices"])){#"Chicken", "Pork", "Sheep", "Crude_oil", 
+for(j_crop in c("Oilpalm")){#, "Cocoa", "Coffee", "Rubber""Fodder", "Soybean", 
+  for(k_price in unlist(maplist[[j_crop]])){#"Chicken", "Pork", "Sheep", "Crude_oil", 
     # uncomment to prevent estimation from direct effects 
     # if(mapmat[mapmat[,"Crops] == j_crop, "Prices"] != k_price){ 
     alpha_disaggr_res_list[[elm]] <- make_main_reg(original_sj = j_crop, 
-                                                   original_treatments = k_price, 
+                                                   original_Pk = k_price, 
                                                    estimated_effect = "alpha", 
                                                    fe = "grid_id + country_year", # 
                                                    se = "twoway",
-                                                   control_interact_sj = TRUE,
+                                                   control_interact_sj = FALSE,
                                                    control_interact_Pk = FALSE,
                                                    # reference_crop = c("Oat"),#, "Olive"
                                                    control_direct = FALSE,
-                                                   sjpos = FALSE,
+                                                   sjpos = TRUE,
                                                    standardization = est_parameters[["standardization"]],
                                                    price_info = est_parameters[["price_info"]],
                                                    distribution = est_parameters[["distribution"]], 
