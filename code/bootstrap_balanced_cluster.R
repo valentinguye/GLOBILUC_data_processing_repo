@@ -25,8 +25,8 @@ ran.gen_cluster_blc <- function(original_data, arg_list){
   nu_cl_names <- as.character(original_data[,cluster_var]) 
   
   # sample, in the vector of names of clusters as many draws as there are clusters, with replacement
-  sample_cl <- sample(arg_list[["cluster_names"]], 
-                      arg_list[["number_clusters"]], 
+  sample_cl <- sample(x = arg_list[["cluster_names"]], 
+                      size = arg_list[["number_clusters"]], 
                       replace = TRUE) 
   
   # because of replacement, some names are sampled more than once
@@ -89,3 +89,22 @@ sqrt(sdw_bs["x","x"])
 
 sdw_cl <- vcovCL(lm(as.formula("y ~ x"), data), cluster = ~firm)
 sqrt(sdw_cl["x","x"])
+
+ran.gen_blc <- function(original_data, arg_list){
+  rowids <- row.names(original_data)
+  
+  new_rowids <- sample(x = rowids, 
+                       size = nrow(original_data), 
+                       replace = TRUE)
+  
+  return(original_data[new_rowids,])
+}
+
+set.seed(1234)
+boot(data = data, 
+     statistic = est_fun, 
+     ran.gen = ran.gen_blc,
+     mle = list(),
+     sim = "parametric",
+     parallel = "no",
+     R = 400)
