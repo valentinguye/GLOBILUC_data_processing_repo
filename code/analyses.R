@@ -323,14 +323,14 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   ## Price variable names to find in the price data
   if(price_dyn == "main"){
-    if(original_Pj %in% c("Fodder", "Soybean")){
+    if(original_sj %in% c("Fodder", "Soybean")){
       price_info <- "_lag1"
     }else{
       price_info <- "_3pya"
     }
   }
   if(price_dyn == "alt"){
-    if(original_Pj %in% c("Fodder", "Soybean")){
+    if(original_sj %in% c("Fodder", "Soybean")){
       price_info <- "_3pya"
     }else{
       price_info <- "_lag1"
@@ -361,9 +361,9 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   
   # If we want the exposure to deforestation for pasture to be proxied with the share of pasture area in 2000, rather than suitability index, 
-  # if(pasture_shares){
-  #   d[,grepl("Fodder", names(d))] <- d$pasture_share
-  # }
+  if(pasture_shares){
+    d[,grepl("Fodder", names(d))] <- d$pasture_share
+  }
   
   # transform dependent variable, if gaussian GLM
   if(distribution == "gaussian" & invhypsin){
@@ -649,7 +649,6 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   # Store only information necessary, in a dataframe. otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
   # either there are several elemnts in regressors, and then we want to aggregate them, or there is only one. 
   # In both cases, we are interested in a one-line output
-  df_res <- data.frame(estimate = NA, std.error = NA, t.statistic = NA, p.value = NA, observations = NA, inference = NA)  
   
   # handle SE computation flexibly within feglm now, through argument vcov
   if(estimated_effect == "alpha"){
@@ -701,6 +700,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     #}
   }else{
     
+    df_res <- data.frame(estimate = NA, std.error = NA, t.statistic = NA, p.value = NA, observations = NA, inference = NA)  
     
     ## START A BOOTSTRAP PROCEDURE FROM HERE
     
@@ -753,17 +753,20 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     
     # methodology comes from Cameron and Miller (2015), and:
     # https://stats.stackexchange.com/questions/202916/cluster-boostrap-with-unequally-sized-clusters/202924#202924
-    
+    start <- Sys.time()
     # for two way clustered SE, we need to do 3 bootstrap estimations: by first-way clustering, 2nd way clustering, and without clustering (i.e. by 1st way x 2nd way)
     
-    for(cluster_dim in c("grid_id", "country_year")){
+    # store these 3 SE
+    SEs <- c(grid_id = NA, country_year = NA, grid_id_X_country_year = NA)
+    
+    for(boot_cluster in c("grid_id", "country_year")){
       # list of parameters related to the dataset, and the clustering variable
       # names and numbers of clusters of size s
       par_list <- list(cluster_variable = boot_cluster, 
                        cluster_names = unique(d_clean[,boot_cluster]),
                        number_clusters = length(unique(d_clean[,boot_cluster])))
       
-      start <- Sys.time()
+      
       set.seed(145)
       bootstraped <- boot(data = d_clean, 
                           statistic = make_estimate, 
@@ -772,21 +775,38 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           sim = "parametric",
                           # parallel = "multicore",
                           # ncpus = detectCores() - 1,
-                          R = 4)
+                          R = 500)
       
-      end <- Sys.time()
-      end - start
       
-      df_res[,"estimate"] <- bootstraped$t0 
-      df_res[,"std.error"] <- sd(bootstraped$t)
-      df_res[,"observations"] <- nrow(d_clean)
+      
+      SEs[boot_cluster] <- sd(bootstraped$t)
       
     }
+    
+    set.seed(145)
+    bootstraped <- boot(data = d_clean, 
+                        statistic = make_estimate, 
+                        ran.gen = ran.gen_blc,
+                        mle = list(size = nrow(d_clean)),
+                        sim = "parametric",
+                        # parallel = "multicore",
+                        # ncpus = detectCores() - 1,
+                        R = 500)
+    SEs["grid_id_X_country_year"] <- sd(bootstraped$t) 
+    
+    df_res[,"estimate"] <- bootstraped$t0 
+    df_res[,"std.error"] <- SEs["grid_id"] + SEs["country_year"] - SEs["grid_id_X_country_year"]
+    df_res[,"observations"] <- nrow(d_clean)
+    
+    end <- Sys.time()
+    end - start
+    
+    # compute t.stat and p-value of the aggregated estimate (yields similar quantities as in alpha_reg_res if only one coeff was aggregated)
+    df_res <- dplyr::mutate(df_res, t.statistic = (estimate - 0)/(std.error))
+    
+    df_res <- dplyr::mutate(df_res, p.value =  (2*pnorm(abs(t.statistic), lower.tail = FALSE)) )
   }
-  # compute t.stat and p-value of the aggregated estimate (yields similar quantities as in alpha_reg_res if only one coeff was aggregated)
-  # df_res <- dplyr::mutate(df_res, t.statistic = (estimate - 0)/(std.error))
   
-  # df_res <- dplyr::mutate(df_res, p.value =  (2*pnorm(abs(t.statistic), lower.tail = FALSE)) )
   
   # store info on SE method
   if(se == "conley"){
@@ -818,7 +838,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
   
   
-  rm(d_clean, reg_res, df_res)
+  rm(d_clean, df_res)
   return(toreturn)
   rm(toreturn)
 }
@@ -826,10 +846,10 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
 ## DEFINE HERE THE VALUES THAT WILL BE PASSED TO SPECIFICATION ARGUMENTS OF REGRESSION FUNCTION ### 
 est_parameters <- list(outcome_variable  = "driven_loss",
                        sjpos = TRUE,
-                       standardization = "_std",
-                       price_info = "_lag1",
+                       standardization = "_std2",
+                       price_dyn = "main",
                        distribution = "gaussian", 
-                       pasture_shares = FALSE)
+                       pasture_shares = TRUE)
 
 #### ALPHA EFFECTS #### 
 
@@ -841,7 +861,7 @@ est_parameters <- list(outcome_variable  = "driven_loss",
 alpha_disaggr_res_list <- list()
 elm <- 1
 
-for(j_crop in c("Fodder", "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber")){#
+for(j_crop in c("Fodder")){#, "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber"
   for(k_price in unlist(maplist[[j_crop]])){#"Chicken", "Pork", "Sheep", "Crude_oil", 
     # uncomment to prevent estimation from direct effects 
     # if(mapmat[mapmat[,"Crops] == j_crop, "Prices"] != k_price){ 
@@ -857,7 +877,7 @@ for(j_crop in c("Fodder", "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber")){#
                                                    control_direct = FALSE,
                                                    sjpos = est_parameters[["sjpos"]],
                                                    standardization = est_parameters[["standardization"]],
-                                                   price_info = est_parameters[["price_info"]],
+                                                   price_dyn = est_parameters[["price_dyn"]],
                                                    distribution = est_parameters[["distribution"]], 
                                                    pasture_shares = est_parameters[["pasture_shares"]]
     )
@@ -881,17 +901,18 @@ df <- bind_rows(alpha_disaggr_res_list) %>% as.data.frame()
 row.names(df) <- paste0(names(alpha_disaggr_res_list))
 
 
-s <- d_clean[1:999,]
-s$first <- c(rep(1, 333), rep(0, 666))
-s$second <- c(rep(0, 333), rep(1, 333), rep(0, 333))
-s$third <- c(rep(0, 666), rep(1, 333))
+std <- readRDS(here("temp_data","reg_results", "alpha", "grouped_driven_loss_TRUE__std_main_gaussian_FALSE.Rdata"))
+std1 <- readRDS(here("temp_data","reg_results", "alpha", "grouped_driven_loss_TRUE__std1_main_gaussian_FALSE.Rdata"))
+std2 <- readRDS(here("temp_data","reg_results", "alpha", "grouped_driven_loss_TRUE__std2_main_gaussian_FALSE.Rdata"))
 
-feols(fml = as.formula("driven_loss ~ first + third"), data = s)
+df <- bind_rows(std[lengths(std)==4]) %>% as.data.frame()
+row.names(df) <- paste0(names(std[lengths(std)==4]))
+df
 
-std <- readRDS(here("temp_data","reg_results", "alpha", "disaggr_driven_loss__std__lag1_gaussian_FALSE.Rdata"))
-std1 <- readRDS(here("temp_data","reg_results", "alpha", "grouped_driven_loss_TRUE__std1__lag1_gaussian_FALSE.Rdata"))
-std2 <- readRDS(here("temp_data","reg_results", "alpha", "disaggr_driven_loss__std2__lag1_gaussian_FALSE.Rdata"))
-
+df <- bind_rows(std2[lengths(std2)==4]) %>% as.data.frame()
+row.names(df) <- paste0(names(std2[lengths(std2)==4]))
+df
+std2[lengths(std2)>4]
 # let's plot everything first (insignificant ones are a matter of absence of true effect or precision, but not bias)
 
 # prepare regression outputs in a tidy data frame readable by dwplot
