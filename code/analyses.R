@@ -156,6 +156,18 @@ prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 
 ### HELPER FUNCTION TO BOOTSTRAP CLUSTER SE 
 # will tell boot::boot how to sample data at each replicate of statistic
+
+# without clustering
+ran.gen_blc <- function(original_data, arg_list){
+  
+  new_rowids <- sample(x = row.names(original_data), 
+                       size = arg_list[["size"]], 
+                       replace = TRUE)
+  
+  return(original_data[new_rowids,])
+}
+
+# with clustering
 ran.gen_cluster_blc <- function(original_data, arg_list){
   # start <- Sys.time()
   # to store 
@@ -226,10 +238,11 @@ standardization = "_std2"
 price_dyn <- "main"
 estimated_effect = "alpha"
 group_prices <- TRUE
+aggregate_K = "vegetable_oils"
 control_interact_sj <- FALSE
 control_interact_Pk <- FALSE
 reference_crop = c("Oat", "Olive")#
-control_direct = FALSE
+control_direct = TRUE
 # sjpj_lag = "_lag1" # either "" or "_lag1" or "_lag2"
 # skpk_lag = "_lag1" # either "" or "_lag1" or "_lag2"SjPj = TRUE
 # SjPj = TRUE
@@ -270,6 +283,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           # available price dynamics are "_lag1", "_2pya", "_3pya", "_4pya", "_5pya",
                           estimated_effect = "alpha",# if "alpha", estimates the (aggregated or not) cross-elasticity effect. If different from "alpha" (e.g. "gamma") it estimates the ILUC effect from price covariation. 
                           group_prices = TRUE,
+                          aggregate_K = NULL, # if not NULL, either "meats", "cereals_feeds", "vegetable_oils", or "biofuel_feedstocks"
                           control_interact_sj = FALSE, 
                           control_interact_Pk = FALSE,
                           reference_crop = "Olive",
@@ -357,7 +371,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                                  unique(c(sj, all_exposures))))) #
   
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", unique(c(treatments)))], by = c("year"))#, all_treatments
+  d <- left_join(d, prices[,c("year", unique(c(treatments, all_treatments)))], by = c("year"))#, all_treatments
   
   
   # If we want the exposure to deforestation for pasture to be proxied with the share of pasture area in 2000, rather than suitability index, 
@@ -422,9 +436,9 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     for(ft in final_treatments){
       varname <- paste0(original_sj, "_X_", original_final_treatments[match(ft, final_treatments)])
       regressors <- c(regressors, varname)
-      # Log prices so their variations are comparable
+
       d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sj)) * (!!as.symbol(ft)) )# don't log Pk again, it as been pre logged above. 
+                  !!as.symbol(varname) := (!!as.symbol(sj)) * (!!as.symbol(ft)) )# don't log Pk here, it as been pre logged above. 
       
     }
     rm(varname, ft)
@@ -445,6 +459,23 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     # regressors <- paste0(original_sj, "_X_", original_treatments)
     # d <- mutate(d, !!as.symbol(regressors) := (!!as.symbol(sj)) * log( (!!as.symbol(treatments)) ))#+1
   }  
+  
+  if(length(aggregate_K)>0){
+    original_Pks <- unlist(maplist[[original_sj]][[aggregate_K]])
+    # Pks to aggregate over include the Pk of interest (as specified in original_Pk). Remove it to not compute sjPk again
+    original_Pks_but_k <- original_Pks[original_Pks != original_Pk]
+    for(op in original_Pks_but_k){
+      varname <- paste0(original_sj,  "_X_", op)
+      regressors <- c(regressors, varname)
+      Pks <- paste0(op, price_info)
+      d <- mutate(d,
+                  !!as.symbol(varname) := (!!as.symbol(sj)) * (!!as.symbol(Pks)) )# don't log Pk here, it as been pre logged above. 
+    }
+    rm(varname, Pks, op)
+    
+    # remove the group variable
+    regressors <- regressors[regressors != paste0(original_sj, "_X_", aggregate_K)]
+  }
   
   ### Controls - mechanisms
   # it's important that this is not conditioned on anything so these objects exist
@@ -527,17 +558,33 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   # add direct interactions
   if(control_direct){
-    for(Pm in all_treatments[all_treatments != treatments]){ # do not put the direct interaction with the treatment of interest, otherwise perfect colinearity
+    # this is to control for direct interactions for main drivers of tropical deforestation
+    # main_drivers <- c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber")
+    # for(original_sm in main_drivers[main_drivers != original_sj]){
+    #   original_Pm <- mapmat[mapmat[,"Crops"]==original_sm, "Prices"]
+    #   Pm <- paste0(original_Pm, price_info)
+    #   sm <- paste0(original_sm, standardization)
+    #   varname <- paste0(original_sm, "_X_", original_Pm)
+    #   alpha_controls <- c(alpha_controls, varname)
+    #   d <- mutate(d,
+    #               !!as.symbol(varname) := (!!as.symbol(sm)) * (!!as.symbol(Pm)) )# if group_price (the only way currently), prices are already logged. 
+    # }
+  
+  # this is to control for direct interactions from all treatments 
+    direct_controls <- c()
+    for(Pm in treatments[original_treatments != original_Pk & original_treatments %in% mapmat[,"Prices"]]){ # do not put the direct interaction with the treatment of interest, otherwise perfect colinearity
       # find the suitability index that matches Pm
-      original_Pm <- original_all_treatments[match(Pm, all_treatments)]
+      original_Pm <- original_treatments[match(Pm, treatments)]
       original_sm <- mapmat[mapmat[,"Prices"]==original_Pm, "Crops"]
       sm <- paste0(original_sm, standardization)
       varname <- paste0(original_sm, "_X_", original_Pm)
-      alpha_controls <- c(alpha_controls, varname)
-      # Log prices so their variations are comparable
+      direct_controls <- c(direct_controls, varname)
       d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sm)) * log( (!!as.symbol(Pm)) ))#+1
+                  !!as.symbol(varname) := (!!as.symbol(sm)) * (!!as.symbol(Pm)) )# if group_price (the only way currently), prices are already logged.
     }
+    d <- mutate(d, dir_ctrl_grp = rowSums(across(.cols = (any_of(direct_controls)))))
+    alpha_controls <- c(alpha_controls, "dir_ctrl_grp")
+    
     rm(varname, original_Pm, original_sm, sm, Pm)
   }
   
@@ -668,14 +715,31 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     
     # keep only the coeff estimate for the sjPk term of interest
     if(Pj != Pk){
-      df_res <- summary(alpha_reg_res)$coeftable[paste0(original_sj, "_X_", original_Pk), ]
-    }else{
-      df_res <- summary(alpha_reg_res)$coeftable[regressors, ]
+      df_res <- summary(alpha_reg_res)$coeftable#[paste0(original_sj, "_X_", original_Pk), ]
+    }
+    if(Pj==Pk){
+      df_res <- summary(alpha_reg_res)$coeftable
     }
     
-    
-    
     ## MAKE AGGREGATE RESULTS 
+    if(length(aggregate_K)>0){
+      # coefficients to aggregate 
+      sjPks <- paste0(original_sj, "_X_", original_Pks)
+      
+      df_res <- rbind(df_res, rep(NA, ncol(df_res)))
+
+      row.names(df_res)[nrow(df_res)] <- "aggr_J"
+
+      df_res["aggr_J","Estimate"] <- alpha_reg_res$coefficients[sjPks] %>% sum()
+      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+      df_res["aggr_J","Std. Error"] <- alpha_reg_res$cov.scaled[sjPks, sjPks] %>% as.matrix() %>% sum() %>% sqrt()
+      
+      df_res["aggr_J","t value"]  <- (df_res["aggr_J","Estimate"] - 0)/(df_res["aggr_J","Std. Error"])
+
+      df_res["aggr_J","Pr(>|t|)"]  <- (2*pnorm(abs(df_res["aggr_J","t value"]), lower.tail = FALSE))
+      
+    }
     #if(aggr_J){
     # select the coefficients to be addep up (code works in cases when there is only one regressor because we investigate specific crop-crop interactions)
     # (I have checked it)
@@ -849,7 +913,7 @@ est_parameters <- list(outcome_variable  = "driven_loss",
                        standardization = "_std2",
                        price_dyn = "main",
                        distribution = "gaussian", 
-                       pasture_shares = TRUE)
+                       pasture_shares = FALSE)
 
 #### ALPHA EFFECTS #### 
 
@@ -861,7 +925,7 @@ est_parameters <- list(outcome_variable  = "driven_loss",
 alpha_disaggr_res_list <- list()
 elm <- 1
 
-for(j_crop in c("Fodder")){#, "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber"
+for(j_crop in c("Fodder", "Soybean","Oilpalm")){#, "Cocoa", "Coffee", "Rubber"
   for(k_price in unlist(maplist[[j_crop]])){#"Chicken", "Pork", "Sheep", "Crude_oil", 
     # uncomment to prevent estimation from direct effects 
     # if(mapmat[mapmat[,"Crops] == j_crop, "Prices"] != k_price){ 
@@ -869,12 +933,12 @@ for(j_crop in c("Fodder")){#, "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber"
                                                    original_Pk = k_price, 
                                                    estimated_effect = "alpha", 
                                                    fe = "grid_id + country_year", # 
-                                                   se = "twoway",
+                                                   se = "twoway", #vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical"),
                                                    group_prices = TRUE,
                                                    control_interact_sj = FALSE,
                                                    control_interact_Pk = FALSE,
                                                    # reference_crop = c("Oat"),#, "Olive"
-                                                   control_direct = FALSE,
+                                                   control_direct = TRUE,
                                                    sjpos = est_parameters[["sjpos"]],
                                                    standardization = est_parameters[["standardization"]],
                                                    price_dyn = est_parameters[["price_dyn"]],
@@ -890,7 +954,7 @@ for(j_crop in c("Fodder")){#, "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber"
 
 
 est_filename <- paste0(est_parameters, collapse = "_") %>% paste0(".Rdata")
-est_filename <- paste0("grouped_", est_filename)
+est_filename <- paste0("grouped_6direct_", est_filename)
 saveRDS(alpha_disaggr_res_list, here("temp_data","reg_results", "alpha", est_filename))
 
 
@@ -968,83 +1032,6 @@ title <- paste0("Moderation effects of commodity prices on the influence of agro
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank())}  
 
-
-### EFFECTS AGGREGATED OVER J MAIN DRIVERS #### 
-# Here, we run the regression over every J-k combinations of interest, and store and plot the estimates 
-
-# infrastructure to store results
-alpha_aggr_J_res_list <- list()
-elm <- 1
-
-for(k_price in c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil")){
-  
-  alpha_aggr_J_res_list[[elm]] <- make_main_reg(original_sj = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"), 
-                                                original_treatments = k_price)
-  
-  names(alpha_aggr_J_res_list)[elm] <- paste0("6 main drivers_X_",k_price)
-  elm <- elm + 1
-}
-
-est_filename <- paste0(est_parameters, collapse = "_") %>% paste0(".Rdata")
-est_filename <- paste0("aggr_J", est_filename)
-saveRDS(alpha_aggr_J_res_list, here("temp_data","reg_results", "alpha", est_filename))
-
-# let's plot everything first (insignificant ones are a matter of absence of true effect or precision, but not bias)
-
-# prepare regression outputs in a tidy data frame readable by dwplot
-df <- bind_rows(alpha_aggr_J_res_list)
-
-df$model <- gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
-df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
-
-# necessary for dotwhisker to recognize those columns
-names(df)[names(df)=="Estimate"] <- "estimate"
-names(df)[names(df)=="Std. Error"] <- "std.error"
-
-title <- paste0("Moderation effects of commodity prices on the influence of agro-ecological suitability on pan-tropical deforestation, 2001-2019, aggregated over the 6 main drivers") # Cross-effects
-
-# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
-# %>%  add_brackets(brackets)
-# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
-#                  c("Biofuel feedstock", "Sugar", "Maize"))
-
-{dwplot(df,
-        dot_args = list(size = 2),
-        whisker_args = list(size = 0.5),
-        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
-    relabel_predictors(c(Beef = "Beef",
-                         Chicken = "Chicken",
-                         Cocoa = "Cocoa", 
-                         Coconut_oil = "Coconut oil", 
-                         Coffee = "Coffee", 
-                         Crude_oil = "Crude oil",
-                         Maize = "Maize",
-                         Olive_oil = "Olive oil", 
-                         Palm_oil = "Palm oil",
-                         Pork = "Pork", 
-                         Rapeseed_oil = "Rapeseed oil", 
-                         Rice = "Rice",
-                         Rubber = "Rubber",
-                         Sheep = "Sheep", 
-                         Sorghum = "Sorghum",
-                         Soybean = "Soybean",
-                         Soybean_meal = "Soybean meal", 
-                         Sugar = "Sugar", 
-                         Sunflower_oil = "Sunflower oil", 
-                         Tea = "Tea", 
-                         Tobacco = "Tobacco",
-                         Wheat = "Wheat"
-    )) +
-    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
-    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
-    ggtitle(title) +
-    theme(plot.title = element_text(face="bold", size=c(10)),
-          legend.position = c(0.007, 0.001),
-          legend.justification = c(0, 0), 
-          legend.background = element_rect(colour="grey80"),
-          legend.title = element_blank())}  
-
-
 ### EFFECTS AGGREGATED OVER K PRICES ####
 # Here, we run the regression over every j-K combinations of interest, and store and plot the estimates 
 
@@ -1120,6 +1107,83 @@ title <- paste0("Moderation effects of commodity prices on the influence of agro
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank())}  
 
+
+
+
+### Deprecated: EFFECTS AGGREGATED OVER J MAIN DRIVERS #### 
+# Here, we run the regression over every J-k combinations of interest, and store and plot the estimates 
+
+# infrastructure to store results
+alpha_aggr_J_res_list <- list()
+elm <- 1
+
+for(k_price in c(mapmat[,"Prices"], "Chicken", "Pork", "Sheep", "Crude_oil")){
+  
+  alpha_aggr_J_res_list[[elm]] <- make_main_reg(original_sj = c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber"), 
+                                                original_treatments = k_price)
+  
+  names(alpha_aggr_J_res_list)[elm] <- paste0("6 main drivers_X_",k_price)
+  elm <- elm + 1
+}
+
+est_filename <- paste0(est_parameters, collapse = "_") %>% paste0(".Rdata")
+est_filename <- paste0("aggr_J", est_filename)
+saveRDS(alpha_aggr_J_res_list, here("temp_data","reg_results", "alpha", est_filename))
+
+# let's plot everything first (insignificant ones are a matter of absence of true effect or precision, but not bias)
+
+# prepare regression outputs in a tidy data frame readable by dwplot
+df <- bind_rows(alpha_aggr_J_res_list)
+
+df$model <- gsub(pattern = "_X_.*$", x = row.names(df), replacement = "") # replace everything after the first underscore with nothing
+df$term <- sub(pattern = ".+?(_X_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+# necessary for dotwhisker to recognize those columns
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+
+title <- paste0("Moderation effects of commodity prices on the influence of agro-ecological suitability on pan-tropical deforestation, 2001-2019, aggregated over the 6 main drivers") # Cross-effects
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+
+{dwplot(df,
+        dot_args = list(size = 2),
+        whisker_args = list(size = 0.5),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Beef = "Beef",
+                         Chicken = "Chicken",
+                         Cocoa = "Cocoa", 
+                         Coconut_oil = "Coconut oil", 
+                         Coffee = "Coffee", 
+                         Crude_oil = "Crude oil",
+                         Maize = "Maize",
+                         Olive_oil = "Olive oil", 
+                         Palm_oil = "Palm oil",
+                         Pork = "Pork", 
+                         Rapeseed_oil = "Rapeseed oil", 
+                         Rice = "Rice",
+                         Rubber = "Rubber",
+                         Sheep = "Sheep", 
+                         Sorghum = "Sorghum",
+                         Soybean = "Soybean",
+                         Soybean_meal = "Soybean meal", 
+                         Sugar = "Sugar", 
+                         Sunflower_oil = "Sunflower oil", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco",
+                         Wheat = "Wheat"
+    )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
 
 
 #### BETA EFFECTS #### 
