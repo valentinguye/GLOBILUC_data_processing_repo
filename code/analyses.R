@@ -138,64 +138,64 @@ vegetable_oils_wosoy <- vegetable_oils[!grepl("Soybean", vegetable_oils)]
 
 # gérer depuis ici ce pour quoi on contrôle pour chaque prix, et ce qu'on met ou pas dans les groupes
 no_biofuel_focus_groups <- list(Fodder = list(meats = meats, cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
-                                    Crude_oil = "Crude_oil"), 
-                      # price groups WITHOUT biofuel focus
-                      Soybean = list(soy = soy, meats = meats,
-                                     cereals_feeds = cereals_feeds_wosoy,
-                                     vegetable_oils = vegetable_oils_wosoy,
-                                     Crude_oil = "Crude_oil", Sorghum = "Sorghum", Sugar = "Sugar"),
-                      Oilpalm = list(meats = meats,
-                                     cereals_feeds = cereals_feeds, # these 2 include all three soy commodities.
-                                     vegetable_oils = vegetable_oils,
-                                     Crude_oil = "Crude_oil", Sorghum = "Sorghum", Sugar = "Sugar"),
-                      
-                      Cocoa = list(Cocoa = "Cocoa", Coffee = "Coffee", vegetable_oils = vegetable_oils, Sugar = "Sugar", Crude_oil = "Crude_oil"), 
-                      
-                      Coffee = list(cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, Coffee = "Coffee", Cocoa = "Cocoa", Tea = "Tea", Tobacco = "Tobacco", Crude_oil = "Crude_oil"), 
-                      
-                      Rubber = list(cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, Rubber = "Rubber", Cotton = "Cotton", Crude_oil = "Crude_oil")
-                      )
+                                              Crude_oil = "Crude_oil"), 
+                                # price groups WITHOUT biofuel focus
+                                Soybean = list(soy = soy, meats = meats,
+                                               cereals_feeds = cereals_feeds_wosoy,
+                                               vegetable_oils = vegetable_oils_wosoy,
+                                               Crude_oil = "Crude_oil", Sorghum = "Sorghum", Sugar = "Sugar"),
+                                Oilpalm = list(meats = meats,
+                                               cereals_feeds = cereals_feeds, # these 2 include all three soy commodities.
+                                               vegetable_oils = vegetable_oils,
+                                               Crude_oil = "Crude_oil", Sorghum = "Sorghum", Sugar = "Sugar"),
+                                
+                                Cocoa = list(Cocoa = "Cocoa", Coffee = "Coffee", vegetable_oils = vegetable_oils, Sugar = "Sugar", Crude_oil = "Crude_oil"), 
+                                
+                                Coffee = list(cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, Coffee = "Coffee", Cocoa = "Cocoa", Tea = "Tea", Tobacco = "Tobacco", Crude_oil = "Crude_oil"), 
+                                
+                                Rubber = list(cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, Rubber = "Rubber", Cotton = "Cotton", Crude_oil = "Crude_oil")
+)
 
 # this is used in both disaggr and aggr procedures (only as a robustness check for the former)
 biofuel_focus_groups <- list(Soybean = list(soy = soy, meats = meats,
                                             biofuel_feedstocks = biofuel_feedstocks[!grepl("Soybean", biofuel_feedstocks)], # remove soybean here because we want biofuel_feedstocks to have only different Pks than Pj
                                             Crude_oil = "Crude_oil", Barley = "Barley", Oat = "Oat", Rice = "Rice"),
-                
-                              Oilpalm = list(soy = c("Soybean", "Soybean_meal"), meats = meats,
-                                             biofuel_feedstocks = biofuel_feedstocks, # hence, not necessary to remove soybean here, but then remove from soy above to not doubling it.
-                                             Crude_oil = "Crude_oil", Barley = "Barley", Oat = "Oat", Rice = "Rice")
-                             )
+                             
+                             Oilpalm = list(soy = c("Soybean", "Soybean_meal"), meats = meats,
+                                            biofuel_feedstocks = biofuel_feedstocks, # hence, not necessary to remove soybean here, but then remove from soy above to not doubling it.
+                                            Crude_oil = "Crude_oil", Barley = "Barley", Oat = "Oat", Rice = "Rice")
+)
 
 
 # this is used only when aggregating effects of soy commodities, without a focus on biofuels
 soy_focus_groups <- list(Fodder = list(soy = soy, meats = meats,  
+                                       cereals_feeds = cereals_feeds_wosoy, 
+                                       vegetable_oils = vegetable_oils_wosoy, 
+                                       Crude_oil = "Crude_oil"), 
+                         Soybean = list(soy = soy, meats = meats,
+                                        cereals_feeds = cereals_feeds_wosoy,
+                                        vegetable_oils = vegetable_oils_wosoy,
+                                        Crude_oil = "Crude_oil", Sorghum = "Sorghum", Sugar = "Sugar"),
+                         Oilpalm = list(soy = soy, meats = meats,
                                         cereals_feeds = cereals_feeds_wosoy, 
-                                        vegetable_oils = vegetable_oils_wosoy, 
-                                        Crude_oil = "Crude_oil"), 
-                            Soybean = list(soy = soy, meats = meats,
-                                           cereals_feeds = cereals_feeds_wosoy,
-                                           vegetable_oils = vegetable_oils_wosoy,
-                                           Crude_oil = "Crude_oil", Sorghum = "Sorghum", Sugar = "Sugar"),
-                            Oilpalm = list(soy = soy, meats = meats,
-                                           cereals_feeds = cereals_feeds_wosoy, 
-                                           vegetable_oils = vegetable_oils_wosoy,
-                                           Crude_oil = "Crude_oil", Sorghum = "Sorghum", Sugar = "Sugar"),
-                            
-                            Cocoa = list(Cocoa = "Cocoa", Coffee = "Coffee", 
-                                         cereals_feeds = cereals_feeds_wosoy,
-                                         vegetable_oils = vegetable_oils_wosoy, 
-                                         Sugar = "Sugar", Crude_oil = "Crude_oil"), 
-                            
-                            Coffee = list(Coffee = "Coffee", Cocoa = "Cocoa",
-                                          cereals_feeds = cereals_feeds_wosoy, 
-                                          vegetable_oils = vegetable_oils_wosoy,  
-                                          Tea = "Tea", Tobacco = "Tobacco", Crude_oil = "Crude_oil"), 
-                            
-                            Rubber = list(Rubber = "Rubber", 
-                                          cereals_feeds = cereals_feeds_wosoy, 
-                                          vegetable_oils = vegetable_oils_wosoy, 
-                                          Cotton = "Cotton", Crude_oil = "Crude_oil")
-                            )
+                                        vegetable_oils = vegetable_oils_wosoy,
+                                        Crude_oil = "Crude_oil", Sorghum = "Sorghum", Sugar = "Sugar"),
+                         
+                         Cocoa = list(Cocoa = "Cocoa", Coffee = "Coffee", 
+                                      cereals_feeds = cereals_feeds_wosoy,
+                                      vegetable_oils = vegetable_oils_wosoy, 
+                                      Sugar = "Sugar", Crude_oil = "Crude_oil"), 
+                         
+                         Coffee = list(Coffee = "Coffee", Cocoa = "Cocoa",
+                                       cereals_feeds = cereals_feeds_wosoy, 
+                                       vegetable_oils = vegetable_oils_wosoy,  
+                                       Tea = "Tea", Tobacco = "Tobacco", Crude_oil = "Crude_oil"), 
+                         
+                         Rubber = list(Rubber = "Rubber", 
+                                       cereals_feeds = cereals_feeds_wosoy, 
+                                       vegetable_oils = vegetable_oils_wosoy, 
+                                       Cotton = "Cotton", Crude_oil = "Crude_oil")
+)
 
 
 ### MAIN DATA SET ### 
@@ -271,13 +271,15 @@ start_year = 2001
 end_year = 2019
 continent = "all"
 further_lu_evidence = "none"
-original_sj = "Soybean"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+original_sj = "Oilpalm"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
 original_Pk <- "Soybean" # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
 # "Beef" , , , "Cocoa", "Coffee", "Rubber"
 # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum")
 # 
-aggregate_K = "vegetable_oils"
+aggregate_K = ""
+
+control_interact_sj <- FALSE
 
 group_prices <- TRUE
 biofuel_focus <- FALSE
@@ -294,7 +296,6 @@ price_dyn <- "main"
 
 estimated_effect = "alpha"
 
-control_interact_sj <- FALSE
 control_interact_Pk <- FALSE
 reference_crop = c("Oat", "Olive")#
 control_direct = TRUE
@@ -324,9 +325,9 @@ rm(outcome_variable, start_year, end_year, continent, further_lu_evidence, origi
    standardization, price_dyn, estimated_effect, group_prices, biofuel_focus, aggregate_K, control_interact_sj, control_interact_Pk,
    reference_crop, control_direct, remaining, sjpos, fe, distribution, invhypsin, conley_cutoff, se, boot_cluster, coefs_to_aggregate, 
    output, glm_iter)
-   
-   
-   
+
+
+
 make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2001, 
                           end_year = 2020, 
@@ -347,7 +348,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
                           estimated_effect = "alpha",# if "alpha", estimates the (aggregated or not) cross-elasticity effect. If different from "alpha" (e.g. "gamma") it estimates the ILUC effect from price covariation. 
                           group_prices = TRUE,
                           biofuel_focus = FALSE, # how to group prices? With a focus on biofuel feedstocks or rather on cereals/feeds and vegetable oils? 
-                          aggregate_K = NULL, # if not NULL, either "meats", "cereals_feeds", "vegetable_oils", or "biofuel_feedstocks"
+                          aggregate_K = "", # if not "", either "meats", "cereals_feeds", "vegetable_oils", or "biofuel_feedstocks"
                           control_interact_sj = FALSE, 
                           control_interact_Pk = FALSE,
                           reference_crop = "Olive",
@@ -468,95 +469,99 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     d <- dplyr::mutate(d, !!as.symbol(outcome_variable) := asinh(!!as.symbol(outcome_variable)))
   }
   
-  
-  if(group_prices){
-    # remove Pk from crops to group 
-    original_treatments_but_k <- original_treatments[original_treatments != original_Pk]
-    treatments_but_k <- paste0(original_treatments_but_k, price_info)
-    
-    if(original_sj != "Soybean"){
-      # remove Pj from crops to group
-      original_treatments_but_jk <- original_treatments_but_k[original_treatments_but_k != original_Pj]
-      treatments_but_jk <- paste0(original_treatments_but_jk, price_info)
-    }else{
-      # in this case, do not remove Soybean from the soy group (but remove it from the regressors below)
-      original_treatments_but_jk <- original_treatments_but_k
-      treatments_but_jk <- treatments_but_k
-    }    
-    
-    # make groups specific to the present sj
-    sj_group_list <- list()
-    for(sj_grp in names(maplist[[original_sj]])){
-      sj_group_list[[sj_grp]] <- treatments_but_jk[original_treatments_but_jk %in% maplist[[original_sj]][[sj_grp]]]
-    }
-    
-    # sj_group_list <- list(meats = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["meats"]]], 
-    #                       cereals_feeds = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["cereals_feeds"]]], 
-    #                       vegetable_oils = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["vegetable_oils"]]], 
-    #                       biofuel_feedstocks = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["biofuel_feedstocks"]]],
-    
-    
-    used_group_names <- names(sj_group_list[lengths(sj_group_list)>0]) # currently useless
-    for(grp in used_group_names){
-      # log the prices before grouping them
-      for(commo in sj_group_list[[grp]]){
-        d <- mutate(d, 
-                    !!as.symbol(commo) := log(!!as.symbol(commo)))
-      }
-      # average the logarithms of prices (preserving the price info in the name, and thus replacing non-grouped crops)
-      grp_commodities <- sj_group_list[[grp]]
-      d <- mutate(d, 
-                  !!as.symbol(paste0(grp,price_info)) := rowMeans(across(.cols = (any_of(grp_commodities)))))
-    }
-    
-    # log Pj and Pk 
-    if(Pj != Pk){
-      d <- mutate(d, !!as.symbol(Pk) := log(!!as.symbol(Pk)), 
-                  !!as.symbol(Pj) := log(!!as.symbol(Pj)))
-    }else{
-      d <- mutate(d, !!as.symbol(Pk) := log(!!as.symbol(Pk)))
-    }    
-    
-    # interact all the final treatments with the exposure (unique is for cases when Pj = Pk)
-    # the condition handles cases when original_Pk is one of the 3 soy commodities and the group "soy" replaces Pj  
-    if(original_sj=="Soybean"){ #(grepl(pattern = "Soybean", x = original_Pk))
-      original_final_treatments <- unique(c(original_Pk, used_group_names))
-      final_treatments <- paste0(original_final_treatments, price_info)
-    }else{
-      original_final_treatments <- unique(c(original_Pj, original_Pk, used_group_names))
-      final_treatments <- paste0(original_final_treatments, price_info)
-    }
-    
-    regressors <- c()
-    for(ft in final_treatments){
-      varname <- paste0(original_sj, "_X_", original_final_treatments[match(ft, final_treatments)])
-      regressors <- c(regressors, varname)
+  if(control_interact_sj){
+    if(group_prices){
+      # remove Pk from crops to group 
+      original_treatments_but_k <- original_treatments[original_treatments != original_Pk]
+      treatments_but_k <- paste0(original_treatments_but_k, price_info)
       
-      d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sj)) * (!!as.symbol(ft)) )# don't log Pk here, it as been pre logged above. 
-    }
-    rm(varname, ft)
-    
-  }else{ # i.e. if we do not group terms of interaction between sj and other prices 
-    
-    regressors <- c()
-    for(tr in treatments){
-      varname <- paste0(original_sj, "_X_", original_treatments[match(tr, treatments)])
-      regressors <- c(regressors, varname)
-      # Log prices so their variations are comparable
-      d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sj)) * log( (!!as.symbol(tr)) ))#+1
-    }
-    rm(varname, tr)
-    
-    # regressors <- paste0(original_sj, "_X_", original_treatments)
-    # d <- mutate(d, !!as.symbol(regressors) := (!!as.symbol(sj)) * log( (!!as.symbol(treatments)) ))#+1
-  }  
-  
+      if(original_sj != "Soybean"){
+        # remove Pj from crops to group
+        original_treatments_but_jk <- original_treatments_but_k[original_treatments_but_k != original_Pj]
+        treatments_but_jk <- paste0(original_treatments_but_jk, price_info)
+      }else{
+        # in this case, do not remove Soybean from the soy group (but remove it from the regressors below)
+        original_treatments_but_jk <- original_treatments_but_k
+        treatments_but_jk <- treatments_but_k
+      }    
+      
+      # make groups specific to the present sj
+      sj_group_list <- list()
+      for(sj_grp in names(maplist[[original_sj]])){
+        sj_group_list[[sj_grp]] <- treatments_but_jk[original_treatments_but_jk %in% maplist[[original_sj]][[sj_grp]]]
+      }
+      
+      # sj_group_list <- list(meats = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["meats"]]], 
+      #                       cereals_feeds = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["cereals_feeds"]]], 
+      #                       vegetable_oils = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["vegetable_oils"]]], 
+      #                       biofuel_feedstocks = treatments_but_j[original_treatments_but_j %in% maplist[[original_sj]][["biofuel_feedstocks"]]],
+      
+      
+      used_group_names <- names(sj_group_list[lengths(sj_group_list)>0]) # currently useless
+      for(grp in used_group_names){
+        # log the prices before grouping them
+        for(commo in sj_group_list[[grp]]){
+          d <- mutate(d, 
+                      !!as.symbol(commo) := log(!!as.symbol(commo)))
+        }
+        # average the logarithms of prices (preserving the price info in the name, and thus replacing non-grouped crops)
+        grp_commodities <- sj_group_list[[grp]]
+        d <- mutate(d, 
+                    !!as.symbol(paste0(grp,price_info)) := rowMeans(across(.cols = (any_of(grp_commodities)))))
+      }
+      
+      # log Pj and Pk 
+      if(Pj != Pk){
+        d <- mutate(d, !!as.symbol(Pk) := log(!!as.symbol(Pk)), 
+                    !!as.symbol(Pj) := log(!!as.symbol(Pj)))
+      }else{
+        d <- mutate(d, !!as.symbol(Pk) := log(!!as.symbol(Pk)))
+      }    
+      
+      # interact all the final treatments with the exposure (unique is for cases when Pj = Pk)
+      # the condition handles cases when original_Pk is one of the 3 soy commodities and the group "soy" replaces Pj  
+      if(original_sj=="Soybean"){ #(grepl(pattern = "Soybean", x = original_Pk))
+        original_final_treatments <- unique(c(original_Pk, used_group_names))
+        final_treatments <- paste0(original_final_treatments, price_info)
+      }else{
+        original_final_treatments <- unique(c(original_Pj, original_Pk, used_group_names))
+        final_treatments <- paste0(original_final_treatments, price_info)
+      }
+      
+      regressors <- c()
+      for(ft in final_treatments){
+        varname <- paste0(original_sj, "_X_", original_final_treatments[match(ft, final_treatments)])
+        regressors <- c(regressors, varname)
+        
+        d <- mutate(d,
+                    !!as.symbol(varname) := (!!as.symbol(sj)) * (!!as.symbol(ft)) )# don't log Pk here, it as been pre logged above. 
+      }
+      rm(varname, ft)
+      
+    }else{ # i.e. if we do not group terms of interaction between sj and other prices 
+      
+      regressors <- c()
+      for(tr in treatments){
+        varname <- paste0(original_sj, "_X_", original_treatments[match(tr, treatments)])
+        regressors <- c(regressors, varname)
+        # Log prices so their variations are comparable
+        d <- mutate(d,
+                    !!as.symbol(varname) := (!!as.symbol(sj)) * log( (!!as.symbol(tr)) ))#+1
+      }
+      rm(varname, tr)
+      
+      # regressors <- paste0(original_sj, "_X_", original_treatments)
+      # d <- mutate(d, !!as.symbol(regressors) := (!!as.symbol(sj)) * log( (!!as.symbol(treatments)) ))#+1
+    }  
+  }else{
+    regressors <- paste0(original_sj, "_X_", original_Pk)
+    d <- mutate(d,
+                !!as.symbol(regressors) := (!!as.symbol(sj)) * log( (!!as.symbol(Pk)) ))#+1
+  }
   
   
   ### HANDLE SPECIFICATION TO AGGREGATE EFFECTS ####
-  if(length(aggregate_K)>0){
+  if(aggregate_K!=""){
     original_Pks <- unlist(maplist[[original_sj]][[aggregate_K]])
     
     # In any case, we may need these objects
@@ -682,20 +687,20 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   }
   
   # if we are to group these controls in one single variable
-  if(control_interact_sj){
-    sj_interactions <- c()
-    for(at in all_treatments[all_treatments!=treatments]){
-      varname <- paste0(original_sj, "_X_", original_all_treatments[match(at, all_treatments)])
-      sj_interactions <- c(sj_interactions, varname)
-      # Log prices so their variations are comparable
-      d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sj)) * log( (!!as.symbol(at)) ))#+1
-    }
-    rm(varname, at)
-    
-    d <- mutate(d, one_ctrl = rowSums(across(.cols = (any_of(sj_interactions)))))
-    alpha_controls <- c(alpha_controls, "one_ctrl")
-  }
+  # if(define_an_option_name){
+  #   sj_interactions <- c()
+  #   for(at in all_treatments[all_treatments!=treatments]){
+  #     varname <- paste0(original_sj, "_X_", original_all_treatments[match(at, all_treatments)])
+  #     sj_interactions <- c(sj_interactions, varname)
+  #     # Log prices so their variations are comparable
+  #     d <- mutate(d,
+  #                 !!as.symbol(varname) := (!!as.symbol(sj)) * log( (!!as.symbol(at)) ))#+1
+  #   }
+  #   rm(varname, at)
+  #   
+  #   d <- mutate(d, one_ctrl = rowSums(across(.cols = (any_of(sj_interactions)))))
+  #   alpha_controls <- c(alpha_controls, "one_ctrl")
+  # }
   
   
   # add indirect interactions with sj
@@ -770,8 +775,15 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
       sm <- paste0(original_sm, standardization)
       varname <- paste0(original_sm, "_X_", original_Pm)
       direct_controls <- c(direct_controls, varname)
-      d <- mutate(d,
-                  !!as.symbol(varname) := (!!as.symbol(sm)) * (!!as.symbol(Pm)) )# if group_price (the only way currently), prices are already logged.
+      if(control_interact_sj & group_prices){
+        d <- mutate(d,
+                    !!as.symbol(varname) := (!!as.symbol(sm)) * (!!as.symbol(Pm)) )# if group_price, prices are already logged.
+
+      }else{
+        d <- mutate(d,
+                    !!as.symbol(varname) := (!!as.symbol(sm)) * log(!!as.symbol(Pm)) )
+      }
+      
     }
     d <- mutate(d, dir_ctrl_grp = rowSums(across(.cols = (any_of(direct_controls)))))
     alpha_controls <- c(alpha_controls, "dir_ctrl_grp")
@@ -913,7 +925,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     }
     
     ## MAKE AGGREGATE RESULTS 
-    if(length(aggregate_K)>0){
+    if(aggregate_K != ""){
       # coefficients to aggregate 
       sjPks <- paste0(original_sj, "_X_", original_Pks)
       
@@ -1105,7 +1117,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
 
 ## DEFINE HERE THE VALUES THAT WILL BE PASSED TO SPECIFICATION ARGUMENTS OF REGRESSION FUNCTION ### 
 est_parameters <- list(outcome_variable  = "driven_loss",
-                       sjpos = TRUE,
+                       sjpos = FALSE,
                        standardization = "_std2",
                        price_dyn = "main",
                        distribution = "gaussian", 
@@ -1121,7 +1133,8 @@ for(j_crop in c("Fodder", "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber")){#
     alpha_disaggr_res_list[[elm]] <- make_main_reg(original_sj = j_crop, 
                                                    original_Pk = k_price, 
                                                    estimated_effect = "alpha", 
-                                                   aggregate_K = NULL,
+                                                   aggregate_K = "",
+                                                   control_interact_sj = FALSE,
                                                    biofuel_focus = FALSE, 
                                                    sjpos = est_parameters[["sjpos"]],
                                                    standardization = est_parameters[["standardization"]],
@@ -1137,12 +1150,12 @@ for(j_crop in c("Fodder", "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber")){#
 }
 
 est_filename <- paste0(est_parameters, collapse = "_") %>% paste0(".Rdata")
-est_filename <- paste0("grouped_alldirect_", est_filename)
+est_filename <- paste0("no_interact_sj_alldirect_", est_filename)
 saveRDS(alpha_disaggr_res_list, here("temp_data","reg_results", "alpha", est_filename))
 
-extr_alpha_aggr_K_res_list <- lapply(alpha_disaggr_res_list, FUN = function(x){return(x[,])})
+alpha_disaggr_res_list[grepl("Rubber_X", names(alpha_disaggr_res_list))]
 
-std2 <- readRDS(here("temp_data","reg_results", "alpha", "grouped_driven_loss_TRUE__std2__lag1_gaussian_FALSE.Rdata"))
+std2 <- readRDS(here("temp_data","reg_results", "alpha", "no_interact_sj_alldirect_driven_loss_TRUE__std2_main_gaussian_FALSE.Rdata"))
 dir <- readRDS(here("temp_data","reg_results", "alpha", "indctrl_dirctrl_driven_loss__std2__lag1_gaussian_FALSE.Rdata"))
 
 df <- bind_rows(alpha_disaggr_res_list) %>% as.data.frame()
@@ -1224,22 +1237,25 @@ alpha_disaggr_res_list_continents <- list(America = list(),
                                           Asia = list())
 for(CNT in c("America", "Africa", "Asia")){
   elm <- 1
-  for(j_crop in c("Fodder", "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber")){#
-    for(k_price in unlist(maplist[[j_crop]])){#"Chicken", "Pork", "Sheep", "Crude_oil", 
+  for(j_crop in c("Fodder", "Soybean","Oilpalm")){#, "Cocoa", "Coffee", "Rubber"
+    for(k_price in unlist(no_biofuel_focus_groups[[j_crop]])){#"Chicken", "Pork", "Sheep", "Crude_oil", 
       # uncomment to prevent estimation from direct effects 
       # if(mapmat[mapmat[,"Crops] == j_crop, "Prices"] != k_price){ 
       alpha_disaggr_res_list_continents[[CNT]][[elm]] <- make_main_reg(continent = CNT,
-                                                                         original_sj = j_crop, 
-                                                                         original_Pk = k_price, 
-                                                                         estimated_effect = "alpha", 
-                                                                         sjpos = est_parameters[["sjpos"]],
-                                                                         standardization = est_parameters[["standardization"]],
-                                                                         price_dyn = est_parameters[["price_dyn"]],
-                                                                         distribution = est_parameters[["distribution"]], 
-                                                                         pasture_shares = est_parameters[["pasture_shares"]]
+                                                                       original_sj = j_crop, 
+                                                                       original_Pk = k_price, 
+                                                                       estimated_effect = "alpha", 
+                                                                       control_interact_sj = FALSE,
+                                                                       aggregate_K = "",
+                                                                       biofuel_focus = FALSE, 
+                                                                       sjpos = est_parameters[["sjpos"]],
+                                                                       standardization = est_parameters[["standardization"]],
+                                                                       price_dyn = est_parameters[["price_dyn"]],
+                                                                       distribution = est_parameters[["distribution"]], 
+                                                                       pasture_shares = est_parameters[["pasture_shares"]]
       )
       
-      names(alpha_disaggr_res_list_continents[[cnt_elm]])[elm] <- paste0(j_crop,"_X_",k_price)
+      names(alpha_disaggr_res_list_continents[[CNT]])[elm] <- paste0(j_crop,"_X_",k_price)
       elm <- elm + 1
       # }
     }
@@ -1280,31 +1296,11 @@ for(j_crop in c("Fodder", "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber")){#
                                                   price_dyn = est_parameters[["price_dyn"]],
                                                   distribution = est_parameters[["distribution"]], 
                                                   pasture_shares = est_parameters[["pasture_shares"]]
-                                                  )
+    )
     
     names(alpha_aggr_K_res_list)[elm] <- paste0(j_crop, "_X_", aggr_K)
     elm <- elm + 1
   }
-}
-## WITH FOCUS ON BIOFUELS
-for(j_crop in c("Fodder", "Soybean", "Oilpalm")){#, "Cocoa", "Coffee", 
-  
-  alpha_aggr_K_res_list[[elm]] <- make_main_reg(original_sj = j_crop, 
-                                                original_Pk = mapmat[mapmat[,"Crops"]==j_crop, "Prices"], 
-                                                estimated_effect = "alpha", 
-                                                group_prices = TRUE, 
-                                                aggregate_K = "biofuel_feedstocks", ## /!!\ THIS DIFFERS FROM THE OPTIONS ABOVE
-                                                biofuel_focus = TRUE, ## /!!\ THIS DIFFERS FROM THE OPTIONS ABOVE
-
-                                                sjpos = est_parameters[["sjpos"]],
-                                                standardization = est_parameters[["standardization"]],
-                                                price_dyn = est_parameters[["price_dyn"]],
-                                                distribution = est_parameters[["distribution"]], 
-                                                pasture_shares = est_parameters[["pasture_shares"]]
-  )
-    
-  names(alpha_aggr_K_res_list)[elm] <- paste0(j_crop, "_X_biofuel_feedstocks")
-  elm <- elm + 1
 }
 ## WITH FOCUS ON SOY
 for(j_crop in c("Fodder", "Soybean", "Oilpalm")){#, "Cocoa", "Coffee", 
@@ -1322,13 +1318,32 @@ for(j_crop in c("Fodder", "Soybean", "Oilpalm")){#, "Cocoa", "Coffee",
                                                 distribution = est_parameters[["distribution"]], 
                                                 pasture_shares = est_parameters[["pasture_shares"]]
   )
-
-    names(alpha_aggr_K_res_list)[elm] <- paste0(j_crop, "_X_soy")
+  
+  names(alpha_aggr_K_res_list)[elm] <- paste0(j_crop, "_X_soy")
   elm <- elm + 1
 }
-
+## WITH FOCUS ON BIOFUELS
+for(j_crop in c("Soybean", "Oilpalm")){#, "Cocoa", "Coffee", "Fodder", 
+  
+  alpha_aggr_K_res_list[[elm]] <- make_main_reg(original_sj = j_crop, 
+                                                original_Pk = mapmat[mapmat[,"Crops"]==j_crop, "Prices"], 
+                                                estimated_effect = "alpha", 
+                                                group_prices = TRUE, 
+                                                aggregate_K = "biofuel_feedstocks", ## /!!\ THIS DIFFERS FROM THE OPTIONS ABOVE
+                                                biofuel_focus = TRUE, ## /!!\ THIS DIFFERS FROM THE OPTIONS ABOVE
+                                                
+                                                sjpos = est_parameters[["sjpos"]],
+                                                standardization = est_parameters[["standardization"]],
+                                                price_dyn = est_parameters[["price_dyn"]],
+                                                distribution = est_parameters[["distribution"]], 
+                                                pasture_shares = est_parameters[["pasture_shares"]]
+  )
+  
+  names(alpha_aggr_K_res_list)[elm] <- paste0(j_crop, "_X_biofuel_feedstocks")
+  elm <- elm + 1
+}
 est_filename <- paste0(est_parameters, collapse = "_") %>% paste0(".Rdata")
-est_filename <- paste0("aggr_K", est_filename)
+est_filename <- paste0("aggr_K_alldirect_", est_filename)
 saveRDS(alpha_aggr_K_res_list, here("temp_data","reg_results", "alpha", est_filename))
 
 extr_alpha_aggr_K_res_list <- lapply(alpha_aggr_K_res_list, FUN = function(x){return(x["aggr_K",])})
@@ -1522,7 +1537,7 @@ for(j_crop in c("Soybean","Oilpalm")){#, "Cocoa", "Coffee", "Rubber"
     alpha_disaggr_res_list[[elm]] <- make_main_reg(original_sj = j_crop, 
                                                    original_Pk = k_price, 
                                                    estimated_effect = "alpha", 
-                                                   aggregate_K = NULL,
+                                                   aggregate_K = "",
                                                    fe = "grid_id + country_year", # 
                                                    se = "twoway", #vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical"),
                                                    group_prices = TRUE,
