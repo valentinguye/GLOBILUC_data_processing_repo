@@ -271,7 +271,7 @@ start_year = 2001
 end_year = 2019
 continent = "all"
 further_lu_evidence = "none"
-original_sj = "Oilpalm"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+original_sj = "Fodder"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
 original_Pk <- "Soybean" # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
 # "Beef" , , , "Cocoa", "Coffee", "Rubber"
@@ -453,7 +453,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   # Keep only in data the useful variables 
   d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", "remaining_fc", "accu_defo_since2k",
                                  outcome_variable, "pasture_share",
-                                 unique(c(sj, all_exposures))))) #
+                                 unique(c(original_sj, sj, all_exposures))))) #
   
   # Merge only the prices needed, not the whole price dataframe
   d <- left_join(d, prices[,c("year", unique(c(treatments, all_treatments)))], by = c("year"))#, all_treatments
@@ -675,17 +675,42 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   ### Controls - mechanisms ####
   # it's important that this is not conditioned on anything so these objects exist
-  alpha_controls <- c()
-  gamma_controls <- c() 
-  delta_controls <- c() 
+  controls <- c()
+  # gamma_controls <- c() 
+  # delta_controls <- c() 
   
   # add remainging forest cover as a control
   if(remaining){
-    alpha_controls <- c(alpha_controls, "remaining_fc")
-    gamma_controls <- c(gamma_controls, "remaining_fc")
-    delta_controls <- c(delta_controls, "remaining_fc")
+    controls <- c(controls, "remaining_fc")
+    # gamma_controls <- c(gamma_controls, "remaining_fc")
+    # delta_controls <- c(delta_controls, "remaining_fc")
   }
   
+  # if we don't control for indirect interactions with sj, then we still add the interactions with the extra prices in the specification
+  if(!control_interact_sj){
+    meats_ctrl <- c()
+    for(original_mc in meats[meats != original_Pk]){
+      varname <- paste0(original_sj, "_X_", original_mc)
+      meats_ctrl <- c(meats_ctrl, varname)
+      mc <- paste0(original_mc, price_info)
+      d <- mutate(d, 
+                  !!as.symbol(varname) := !!as.symbol(sj) * log(!!as.symbol(mc)) )
+    }
+    
+    d <- mutate(d, sj_X_meats = rowMeans(across(.cols = (any_of(meats_ctrl)))))
+    controls <- c(controls, "sj_X_meats")
+    
+    if(original_Pk != "Crude_oil"){
+    co <- paste0("Crude_oil", price_info)  
+    d <- mutate(d, 
+                sj_X_Crude_oil := !!as.symbol(sj) * log(!!as.symbol(co)) )
+    controls <- c(controls, "sj_X_Crude_oil")
+    }
+  }
+    
+    
+    
+
   # if we are to group these controls in one single variable
   # if(define_an_option_name){
   #   sj_interactions <- c()
@@ -699,7 +724,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   #   rm(varname, at)
   #   
   #   d <- mutate(d, one_ctrl = rowSums(across(.cols = (any_of(sj_interactions)))))
-  #   alpha_controls <- c(alpha_controls, "one_ctrl")
+  #   controls <- c(controls, "one_ctrl")
   # }
   
   
@@ -713,7 +738,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     
     # for(si in all_exposures[!(all_exposures %in% c(sj, s_ref))]){
     #   varname <- paste0(original_all_exposures[match(si, all_exposures)], "_X_", original_treatments)
-    #   alpha_controls <- c(alpha_controls, varname)
+    #   controls <- c(controls, varname)
     #   # Log prices so their variations are comparable
     #   d <- mutate(d,
     #               !!as.symbol(varname) := (!!as.symbol(si)) * log( (!!as.symbol(treatments)) ))#+1
@@ -721,7 +746,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     
     # for(si in all_exposures_but_k[all_exposures_but_k != sj]){ # do not put the regressor a second time
     #   varname <- paste0(original_all_exposures_but_k[match(si, all_exposures_but_k)], "_X_", original_treatments)
-    #   alpha_controls <- c(alpha_controls, varname)
+    #   controls <- c(controls, varname)
     #   # Log prices so their variations are comparable
     #   d <- mutate(d,
     #               !!as.symbol(varname) := (!!as.symbol(si)) * log( (!!as.symbol(treatments)) ))#+1
@@ -732,7 +757,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     # (which is supposed to be equivalent to main approach)
     
     varname <- "one_ctrl"
-    alpha_controls <- c(alpha_controls, varname)
+    controls <- c(controls, varname)
     # Log prices so their variations are comparable
     d <- mutate(d,
                 !!as.symbol(varname) := (1 - !!as.symbol(sj) - s_ref ) * log( !!as.symbol(treatments) ) )#
@@ -743,7 +768,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     # original_sk <- mapmat[mapmat[,"Prices"]==original_treatments, "Crops"]
     # sk <- paste0(original_sk, standardization)
     # varname <- paste0(original_sk, "_X_", original_treatments)
-    # alpha_controls <- c(alpha_controls, varname)
+    # controls <- c(controls, varname)
     # # Log prices so their variations are comparable
     # d <- mutate(d,
     #             !!as.symbol(varname) := (!!as.symbol(sk)) * log( (!!as.symbol(treatments)) ))#+1
@@ -761,12 +786,12 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
     #   Pm <- paste0(original_Pm, price_info)
     #   sm <- paste0(original_sm, standardization)
     #   varname <- paste0(original_sm, "_X_", original_Pm)
-    #   alpha_controls <- c(alpha_controls, varname)
+    #   controls <- c(controls, varname)
     #   d <- mutate(d,
     #               !!as.symbol(varname) := (!!as.symbol(sm)) * (!!as.symbol(Pm)) )# if group_price (the only way currently), prices are already logged. 
     # }
     
-    # this is to control for direct interactions from all treatments, grouped in one single variable
+    # this is to control for direct interactions from all treatments, grouped in one single variable |||   |||
     direct_controls <- c()
     for(Pm in treatments[original_treatments != original_Pk & original_treatments %in% mapmat[,"Prices"]]){ # do not put the direct interaction with the treatment of interest, otherwise perfect colinearity
       # find the suitability index that matches Pm
@@ -786,18 +811,18 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
       
     }
     d <- mutate(d, dir_ctrl_grp = rowSums(across(.cols = (any_of(direct_controls)))))
-    alpha_controls <- c(alpha_controls, "dir_ctrl_grp")
+    controls <- c(controls, "dir_ctrl_grp")
     
     rm(varname, original_Pm, original_sm, sm, Pm)
   }
   
   ## MODEL SPECIFICATION FORMULAE - alpha model
-  if(length(alpha_controls) > 0){ 
+  if(length(controls) > 0){ 
     alpha_model <- as.formula(paste0(outcome_variable,
                                      " ~ ",
                                      paste0(regressors, collapse = "+"),
                                      " + ",
-                                     paste0(alpha_controls, collapse = "+"),
+                                     paste0(controls, collapse = "+"),
                                      " | ",
                                      fe))
   }else{
@@ -836,7 +861,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   # - are suitable to crop j 
   if(sjpos){
-    d <- dplyr::filter(d, !!as.symbol(sj) > 0)  
+    d <- dplyr::filter(d, !!as.symbol(original_sj) > 0)  
   }
   
   # - are in study period 
@@ -853,7 +878,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
   
   if(estimated_effect == "alpha"){
     used_vars <- unique(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
-                          outcome_variable, regressors, alpha_controls))
+                          outcome_variable, regressors, controls))
   }else{
     used_vars <- unique(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",
                           outcome_variable, regressors, gamma_controls, delta_controls))
@@ -1117,7 +1142,7 @@ make_main_reg <- function(outcome_variable = "driven_loss", # one of "nd_first_l
 
 ## DEFINE HERE THE VALUES THAT WILL BE PASSED TO SPECIFICATION ARGUMENTS OF REGRESSION FUNCTION ### 
 est_parameters <- list(outcome_variable  = "driven_loss",
-                       sjpos = FALSE,
+                       sjpos = TRUE,
                        standardization = "_std2",
                        price_dyn = "main",
                        distribution = "gaussian", 
@@ -1235,9 +1260,10 @@ title <- paste0("Moderation effects of commodity prices on the influence of agro
 alpha_disaggr_res_list_continents <- list(America = list(), 
                                           Africa = list(), 
                                           Asia = list())
+
 for(CNT in c("America", "Africa", "Asia")){
   elm <- 1
-  for(j_crop in c("Fodder", "Soybean","Oilpalm")){#, "Cocoa", "Coffee", "Rubber"
+  for(j_crop in c("Soybean")){#,"Fodder",  "Cocoa", "Coffee", "Rubber","Oilpalm"
     for(k_price in unlist(no_biofuel_focus_groups[[j_crop]])){#"Chicken", "Pork", "Sheep", "Crude_oil", 
       # uncomment to prevent estimation from direct effects 
       # if(mapmat[mapmat[,"Crops] == j_crop, "Prices"] != k_price){ 
