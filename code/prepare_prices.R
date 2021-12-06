@@ -275,8 +275,12 @@ for(country in c("United States", "European Union", "China")){
                                   Attribute_Description == attribute_des & 
                                   Commodity_Description %in% focal_commodities & 
                                   Market_Year >= 1980 & 
-                                  Market_Year <= 2021) %>%
-                    dplyr::select(Commodity_Description, Market_Year, Value)
+                                  Market_Year <= 2021)
+     
+     print(unique(tmpd$Unit_Description))
+     print(tmpd[tmpd$Unit_Description=="(1000 HEAD)", "Commodity_Description"]%>% unique())
+     
+     tmpd <- dplyr::select(tmpd, Commodity_Description, Market_Year, Value)
      
      # rename some commodities and variables
      tmpd[tmpd$Commodity_Description == "Animal Numbers, Cattle","Commodity_Description"] <- "Cattle"
@@ -313,10 +317,19 @@ for(country in c("United States", "European Union", "China")){
       tmpd[is.na(tmpd$year),"year"] <- (1980 : (min_year - 1))
     }
     
+    # transform transformed commodities back to quantities of a single crop.
+    rapeseed_commos <- names(tmpd)[grepl("Rapeseed", names(tmpd))]
+    # tmpd <- mutate(tmpd)
+        
     psd_list[[paste0(country, " ", attribute_des)]]  <- tmpd   
 
   }
 }
+
+# UNITS
+# so from the prints: in AH, unit is 1000ha for all goods, 
+# for TS is 1000 head only for Cattle, and 1000 MT for all other goods, 
+# and for DC it's 1000 MT for all goods
 
 psd <- bind_cols(psd_list)
 names(psd)[1] <- "year"
