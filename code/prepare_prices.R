@@ -1,4 +1,4 @@
-### PACKAGES ###
+#### PACKAGES ####
 # see this project's README for a better understanding of how packages are handled in this project. 
 
 # These are the packages needed in this particular script. 
@@ -318,9 +318,19 @@ for(country in c("United States", "European Union", "China")){
     }
     
     # transform transformed commodities back to quantities of a single crop.
-    rapeseed_commos <- names(tmpd)[grepl("Rapeseed", names(tmpd))]
-    # tmpd <- mutate(tmpd)
-        
+    # for(crop in c("Rapeseed", "Soybean", "Sunflower")){
+    #   commos <- names(tmpd)[grepl(crop, names(tmpd))]
+    #   log_commos <- c()
+    #   for(co in commos){
+    #     log_co <- paste0("log_", co)
+    #     log_commos <- c(log_commos, log_co)
+    #     tmpd <- mutate(tmpd, !!as.symbol(log_co) := log(!!as.symbol(co)))
+    #   }
+    #   varname <- paste0(crop, "_commos")
+    #   tmpd <- mutate(tmpd, 
+    #                  !!as.symbol(varname) := rowMeans(across(.cols = (any_of(log_commos)))))
+    # }
+    
     psd_list[[paste0(country, " ", attribute_des)]]  <- tmpd   
 
   }
@@ -350,12 +360,14 @@ ip <- full_join(x = ps2, y = imf, by = "year")
 
 ip <- ip %>% dplyr::select(-MUV_index, -FPI, -MUV_index_10, - MUV_index_2014_16)
 
-macro_vars <- ip
-for(country in c("United States", "EU-25", "China")){
-  for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption")){
-    macro_vars <- full_join(macro_vars, psd_list[[paste0(country, " ", attribute_des)]], by = "year")
-  }
-}
+ip <- full_join(x = ip, y = psd, by = "year")
+
+# macro_vars <- ip
+# for(country in c("United States", "EU-25", "China")){
+#   for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption")){
+#     macro_vars <- full_join(macro_vars, psd_list[[paste0(country, " ", attribute_des)]], by = "year")
+#   }
+# }
 
 
 
@@ -415,7 +427,7 @@ inter_prices <- dplyr::mutate(inter_prices, across(.cols = !c("year"),
                                        .fns = log,
                                        .names = paste0("ln_", "{.col}")))
 
-saveRDS(inter_prices, here("temp_data", "prepared_international_prices.Rdata"))
+saveRDS(inter_prices, here("temp_data", "prepared_international_prices_and_macro.Rdata"))
 
 rm(inter_prices)
 
