@@ -305,6 +305,7 @@ remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k")]
 
 saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
 
+
 #### STANDARDIZE AND AGGREGATE SUITABILITY INDICES ####  
  
 # name = dataset_names[1]
@@ -476,6 +477,7 @@ for(name in dataset_names){
 
 # df_cs[,c("si_sum", "max_si", "max_si_2nd", var_names)]
 
+
 #### MERGE AESI DATASETS WITH ADDED VARIABLES #### 
 for(name in dataset_names){
   
@@ -522,9 +524,9 @@ for(name in dataset_names){
     rm(df_remain)
   }
   
-  # Create country trends variable
+  # Create country year fixed effect
   final <- mutate(final, country_year = paste0(country_name, "_", year))
-  
+
   saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
   
   rm(final)

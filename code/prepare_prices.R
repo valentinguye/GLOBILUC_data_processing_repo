@@ -75,9 +75,10 @@ ps_commo <- c("Banana, US",
               "Coffee, Robusta", 
               "Cotton, A Index",
               "Rice, Thai 5%",
-              "Groundnuts", 
+              "Groundnut oil", 
               "Maize",
               "Palm oil", 
+              "Palm kernel oil",
               "Rubber, SGP/MYS",
               "Sorghum", 
               "Soybeans", 
@@ -102,11 +103,12 @@ names(ps2)[names(ps2) == "Coconut oil"] <- "Coconut_oil"
 names(ps2)[names(ps2) == "Coffee, Arabica"] <- "Coffee" # for the sake of simplicity, because this is the one we will use with GAEZ. 
 names(ps2)[names(ps2) == "Cotton, A Index"] <- "Cotton"
 names(ps2)[names(ps2) == "Crude oil, average"] <- "Crude_oil"
-names(ps2)[names(ps2) == "Groundnuts"] <- "Groundnut"
+names(ps2)[names(ps2) == "Groundnut oil"] <- "Groundnut_oil"
 names(ps2)[names(ps2) == "Meat, chicken"] <- "Chicken"
 names(ps2)[names(ps2) == "Meat, sheep"] <- "Sheep"
 names(ps2)[names(ps2) == "Rice, Thai 5%"] <- "Rice"
 names(ps2)[names(ps2) == "Palm oil"] <- "Palm_oil"
+names(ps2)[names(ps2) == "Palm kernel oil"] <- "Palm_kernel_oil"
 names(ps2)[names(ps2) == "Rubber, SGP/MYS"] <- "Rubber"
 names(ps2)[names(ps2) == "Soybeans"] <- "Soybean"
 names(ps2)[names(ps2) == "Soybean oil"] <- "Soybean_oil"
@@ -148,6 +150,7 @@ needed_imf_col <- c("year",
                     colnames(imf)[grepl(pattern = "sunflower", x = imf[1,], ignore.case = TRUE)],
                     # colnames(imf)[grepl(pattern = "arabica", x = imf[1,], ignore.case = TRUE)],
                     colnames(imf)[grepl(pattern = "pork", x = imf[1,], ignore.case = TRUE)],
+                    colnames(imf)[grepl(pattern = "fertilizer", x = imf[1,], ignore.case = TRUE)],
                     # PFOOD is the name of the column for the food price index 
                     colnames(imf)[grepl(pattern = "pfood", x = imf[1,], ignore.case = TRUE)]) 
 imf <- imf[, needed_imf_col]
@@ -159,7 +162,7 @@ imf <- as.data.frame(imf)
 
 # Rename /!\ ORDER MATTERS HERE ! 
 names(imf)
-names(imf) <- c("year", "Oat", "Olive_oil", "FPI", "Milk", "Rapeseed_oil", "Sunflower_oil",  "Pork")#"Coffee",
+names(imf) <- c("year", "Oat", "Olive_oil", "FPI", "Milk", "Rapeseed_oil", "Sunflower_oil",  "Pork", "Fertilizer")#"Coffee",
 
 # Convert in $/mt 
 # Oat is in USD/bushel (ratio from https://www.sagis.org.za/conversion_table.html)
@@ -183,9 +186,11 @@ imf <- ddply(imf, "year", summarise,
                     Sunflower_oil = Sunflower_oil %>% as.numeric() %>% mean(), 
                     # Coffee = mean(Coffee), 
                     Pork = Pork %>% as.numeric() %>% mean(), 
+                    Fertilizer = Fertilizer %>% as.numeric() %>% mean(), 
                     FPI = FPI %>% as.numeric() %>% mean())
 
 # From 1992 on, use the Food price index (FPI) from the IMF, in base 2016=100, to deflate the nominal time series.
+# Except for fertilizers, which is already an index base 100 in 2016
 imf[imf$year >=1992,] <- mutate(imf[imf$year >=1992,], Oat = as.numeric(Oat)/(FPI/100), 
                                                        Olive_oil = as.numeric(Olive_oil)/(FPI/100), 
                                                        Rapeseed_oil = as.numeric(Rapeseed_oil)/(FPI/100), 
@@ -193,13 +198,13 @@ imf[imf$year >=1992,] <- mutate(imf[imf$year >=1992,], Oat = as.numeric(Oat)/(FP
                                                        # Coffee = as.numeric(Coffee)/muv_index_2016,
                                                        Pork = as.numeric(Pork)/(FPI/100))
 
-# Then change the base from 2016 to 2014-2016, to match FAOSTAT
+# Then change the base from 2016 to 2014-2016, to match FAOSTAT (including fertilizers)
 fpi_2014_16 <- mean(c(as.numeric(imf[imf$year >= 2014 & imf$year <= 2016, "FPI"])))
 
 imf <- dplyr::mutate(imf, across(.cols = (!contains("year")), 
                                  .fns = ~.*fpi_2014_16/100)) 
 
-# For years prior 1992, we deflate with the MUV index base 2014-2016 from the Pink Sheet
+# For years prior 1992, we deflate with the MUV index base 2014-2016 from the Pink Sheet (do not include fertilizer index)
 imf$MUV_index_10 <- NA
 imf$MUV_index_10[imf$year<1992] <- ps2$MUV_index[ps2$year >= min(imf$year) & ps2$year < 1992]
 
@@ -217,142 +222,65 @@ imf[imf$year < 1992,] <- mutate(imf[imf$year < 1992,], Oat = as.numeric(Oat)/(MU
 class(imf[,2])
 
 
-#### USDA DATA #### 
+#### WEIGHTS ####
 
-psd <- read.csv(here("input_data", "USDA", "psd_alldata_csv", "psd_alldata.csv"))
+### VEGETABLE OILS WEIGHTS AND CEREALS-FEEDS WEIGHTS
+# here, use faostat data
+faocer <- read.csv(file = here("input_data", "FAOSTAT_data_12-10-2021.csv"))
+unique(faocer$Item)
+template <- faocer[!duplicated(faocer$Year), c("Year", "Unit")]
+cereals <- c("Barley", "Maize", "Maize, green", "Oats", "Rice, paddy", "Sorghum", "Soybeans", "Wheat") # they are all expressed in tonnes
+for(cer in cereals){
+  cer_df <- faocer[faocer$Item == cer, c("Year", "Value")]
+  names(cer_df)[names(cer_df)=="Value"] <- cer
+  template <- full_join(template, cer_df, by = "Year")
+}
+rm(cer_df)
+# Group maize 
+faocer <- mutate(template, Maize := Maize + !!as.symbol("Maize, green"))
+cereals <- cereals[cereals != "Maize, green"]
+faocer <- faocer[,c("Year", cereals)]
 
-## What countries are there
-sort(unique(psd$Country_Name))
+# Weight Soybeans to not double factor in soybean_oil used for food or industrial use (17% of the total according to OurWorldinData) 
+faocer <- mutate(faocer, Soybeans = Soybeans*0.83)
 
-uspsd <- psd[psd$Country_Name == "United States",]
-
-## What agregate to use? 
-unique(uspsd$Attribute_Description)
-# Total Use = domestic consumption + exports + ending stocks
-uspsd_TU <- uspsd[uspsd$Attribute_Description == "Total Use",]
-uspsd_TU$Calendar_Year%>%unique()%>% sort()# - misses years 2001-2007
-uspsd_TU$Market_Year%>%unique()%>% sort()
-unique(uspsd_TU$Commodity_Description) # only very few commodities
-# Total Supply = beginning stocks + domestic production + imports
-uspsd_TS <- uspsd[uspsd$Attribute_Description == "Total Supply",]
-uspsd_TS$Calendar_Year%>%unique()%>% sort()
-uspsd_TS$Market_Year%>%unique()%>% sort()
-unique(uspsd_TS$Commodity_Description)
-# Domestic Consumption = all possible uses of the commodity: food, feed, seed, waste, and industrial processing
-uspsd_DC <- uspsd[uspsd$Attribute_Description == "Domestic Consumption",]
-uspsd_DC$Calendar_Year%>%unique()%>% sort()# - misses years 2001-2005
-uspsd_DC$Market_Year%>%unique()%>% sort()
-unique(uspsd_DC$Commodity_Description)
-
-# Area Harvested
-uspsd_AH <- uspsd[uspsd$Attribute_Description == "Area Harvested",]
-uspsd_AH$Calendar_Year%>%unique()%>% sort() # only since 2006
-uspsd_AH$Market_Year%>%unique()%>% sort()
-unique(uspsd_AH$Commodity_Description) # main crops (by crop, not commodity, for instance only one category for soy)
-
-# they all have all years of information, conditional on using marketing year and not calendar year. 
-
-## What commodities?
-unique(uspsd$Commodity_Description)
-
-
-
-
-# select those we want
-focal_commodities <- c("Animal Numbers, Cattle", "Corn",
-                       "Meal, Rapeseed", "Meal, Soybean", "Meal, Sunflowerseed", # these categories are only in TS and DC, not in AH
-                       "Oil, Rapeseed", "Oil, Soybean", "Oil, Sunflowerseed", # these categories are only in TS and DC, not in AH
-                       "Oilseed, Rapeseed", "Oilseed, Soybean", "Oilseed, Sunflowerseed", 
-                       "Rice, Milled", "Sugar, Centrifugal", "Wheat")
-## format data 
-psd_list <- list()
-elm <- 1
-for(country in c("United States", "European Union", "China")){
-  for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption")){
-    
-     # select observations and variables we want
-     tmpd<- psd %>% dplyr::filter(Country_Name == country &
-                                  Attribute_Description == attribute_des & 
-                                  Commodity_Description %in% focal_commodities & 
-                                  Market_Year >= 1980 & 
-                                  Market_Year <= 2021)
-     
-     print(unique(tmpd$Unit_Description))
-     print(tmpd[tmpd$Unit_Description=="(1000 HEAD)", "Commodity_Description"]%>% unique())
-     
-     tmpd <- dplyr::select(tmpd, Commodity_Description, Market_Year, Value)
-     
-     # rename some commodities and variables
-     tmpd[tmpd$Commodity_Description == "Animal Numbers, Cattle","Commodity_Description"] <- "Cattle"
-     tmpd[tmpd$Commodity_Description == "Corn","Commodity_Description"] <- "Maize" 
-     tmpd[tmpd$Commodity_Description == "Meal, Rapeseed","Commodity_Description"] <- "Rapeseed_meal"
-     tmpd[tmpd$Commodity_Description == "Meal, Soybean","Commodity_Description"] <- "Soybean_meal"
-     tmpd[tmpd$Commodity_Description == "Meal, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_meal"
-     tmpd[tmpd$Commodity_Description == "Oil, Rapeseed","Commodity_Description"] <- "Rapeseed_oil"
-     tmpd[tmpd$Commodity_Description == "Oil, Soybean","Commodity_Description"] <- "Soybean_oil"
-     tmpd[tmpd$Commodity_Description == "Oil, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_oil"
-     tmpd[tmpd$Commodity_Description == "Oilseed, Rapeseed","Commodity_Description"] <- "Rapeseed_oilseed"
-     tmpd[tmpd$Commodity_Description == "Oilseed, Soybean","Commodity_Description"] <- "Soybean_oilseed"
-     tmpd[tmpd$Commodity_Description == "Oilseed, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_oilseed"
-     tmpd[tmpd$Commodity_Description == "Rice, Milled","Commodity_Description"] <- "Rice"
-     tmpd[tmpd$Commodity_Description == "Sugar, Centrifugal","Commodity_Description"] <- "Sugar"
-     
-     names(tmpd)[names(tmpd)=="Market_Year"] <- "year"
-     names(tmpd)[names(tmpd)=="Value"] <-  gsub(" ", "_", attribute_des)
-  
-
-     tmpd <- reshape(tmpd, direction = "wide", 
-                     v.names = gsub(" ", "_", attribute_des),
-                     timevar = "Commodity_Description",
-                     idvar = "year")
-    
-    # add the country in the variable name
-    names(tmpd)[names(tmpd)!="year"] <- paste0(gsub(" ", "", country), ".", names(tmpd)[names(tmpd)!="year"]) 
-    
-
-    # and lines if there are not as many as in other time series
-    min_year <- min(tmpd$year, na.rm = TRUE) 
-    if(min_year>1980){
-      tmpd <- rbind(matrix(NA, nrow = min_year - 1980, ncol = ncol(tmpd), dimnames = list(NULL, colnames(tmpd)) ), tmpd)#rep(NA, ncol(tmpd))
-      tmpd[is.na(tmpd$year),"year"] <- (1980 : (min_year - 1))
-    }
-    
-    # transform transformed commodities back to quantities of a single crop.
-    # for(crop in c("Rapeseed", "Soybean", "Sunflower")){
-    #   commos <- names(tmpd)[grepl(crop, names(tmpd))]
-    #   log_commos <- c()
-    #   for(co in commos){
-    #     log_co <- paste0("log_", co)
-    #     log_commos <- c(log_commos, log_co)
-    #     tmpd <- mutate(tmpd, !!as.symbol(log_co) := log(!!as.symbol(co)))
-    #   }
-    #   varname <- paste0(crop, "_commos")
-    #   tmpd <- mutate(tmpd, 
-    #                  !!as.symbol(varname) := rowMeans(across(.cols = (any_of(log_commos)))))
-    # }
-    
-    psd_list[[paste0(country, " ", attribute_des)]]  <- tmpd   
-
-  }
+# Make shares of total supply for each crop
+faocer <- mutate(faocer, cereal_supply = rowSums(across(.cols = !contains("Year"))))
+for(cer in cereals){
+  faocer <- mutate(faocer, !!as.symbol(cer) := !!as.symbol(cer)/cereal_supply)
 }
 
-# UNITS
-# so from the prints: in AH, unit is 1000ha for all goods, 
-# for TS is 1000 head only for Cattle, and 1000 MT for all other goods, 
-# and for DC it's 1000 MT for all goods
+# change names 
+names(faocer) <- c("year", "share_Barley", "share_Maize", "share_Oat", "share_Rice", "share_Sorghum", "share_Soybean_meal", "share_Wheat", "cereal_supply")
 
-psd <- bind_cols(psd_list)
-names(psd)[1] <- "year"
-psd <- psd[, !grepl("year.", names(psd))]
+### SOY WEIGHTS
+# here, use USDA PSD data
+# here we make a price index for soy. 
+psd <- read.csv(here("input_data", "USDA", "psd_alldata_csv", "psd_alldata.csv"))
 
+meal <- filter(psd, Country_Name %in% c("Brazil","China", "Argentina", "India", "United States"), #"Brazil", "China", "Argentina", "India", 
+               Commodity_Description %in% c("Meal, Soybean"), 
+               Attribute_Description == "Production") %>% ddply(c("Market_Year"), summarise, 
+                                                                Soybean_meal = sum(Value, na.rm = TRUE))
 
-# transform transformed commodities back to quantities of a single crop.
+oil <- filter(psd, Country_Name %in% c("Brazil","China", "Argentina", "India", "United States"), 
+              Commodity_Description %in% c("Oil, Soybean"), 
+              Attribute_Description == "Production") %>% ddply("Market_Year", summarise, 
+                                                               Soybean_oil = sum(Value, na.rm = TRUE))
+# this is the total soybean production. 
+# total <- filter(psd, Country_Name %in% c("Brazil","China", "Argentina", "India", "United States"),
+#                Commodity_Description %in% c("Oilseed, Soybean"),
+#                Attribute_Description == "Production") %>% ddply("Market_Year", summarise,
+#                                                                   Soybeans = sum(Value, na.rm = TRUE))
 
-# and quantities of interest (ratios?)
+soy <- full_join(oil, meal, "Market_Year")
+# soy <- full_join(soy, total, "Market_Year")
 
+# give them a different name (soyshare) because share_Soybean_meal is already taken
+soy <- mutate(soy, soyshare_Soybean_meal = Soybean_meal/(Soybean_meal + Soybean_oil),
+              soyshare_Soybean_oil = Soybean_oil/(Soybean_meal + Soybean_oil))
 
-
-
+names(soy)[names(soy)=="Market_Year"] <- "year"
 
 #### Consolidate international price annual time series data frame #### 
 # keep all years from each sources
@@ -360,7 +288,47 @@ ip <- full_join(x = ps2, y = imf, by = "year")
 
 ip <- ip %>% dplyr::select(-MUV_index, -FPI, -MUV_index_10, - MUV_index_2014_16)
 
-ip <- full_join(x = ip, y = psd, by = "year")
+
+### Make logarithms
+ip <- dplyr::mutate(ip, across(.cols = !c("year"),
+                         .fns = log,
+                         .names = paste0("ln_", "{.col}")))
+
+### Make weighted prices
+ip <- left_join(x = ip, y = faocer, by = "year")
+
+# Weight only log prices
+
+## Cereals_feeds
+for(wc in c("Barley", "Maize", "Oat", "Rice", "Sorghum", "Soybean_meal", "Wheat")){
+  ip <- mutate(ip, 
+               !!as.symbol(paste0("w_ln_",wc)) := !!as.symbol(paste0("share_",wc)) * (!!as.symbol(paste0("ln_",wc))) )
+}
+
+## Vegetable_oils
+# This is a share of world supply, as per the USDA WorldSupplyUseOilseedandProducts, Table 42–World vegetable oils supply and distribution, 2013/14–2020/21
+# Quantities are averaged from year 2013/14 to 2018/19 
+oil_sha <- c(0.018795739,0.025995556,0.01600368,0.34937766,0.04112145,0.0303809,0.148273209,0.278552254,0.091499553)
+names(oil_sha) <- c("Coconut_oil","Cotton","Olive_oil","Palm_oil","Palm_kernel_oil","Groundnut_oil","Rapeseed_oil","Soybean_oil","Sunflower_oil")
+oil_sha <- oil_sha[base::order(names(oil_sha))]
+
+for(wc in c(names(oil_sha))){
+  ip <- mutate(ip, 
+               !!as.symbol(paste0("w_ln_",wc)) := oil_sha[wc] * (!!as.symbol(paste0("ln_",wc))) )
+}
+
+# do not average weighted prices now, because this will be done more flexibly in the analysis directly. 
+
+## Soy
+
+ip <- left_join(ip, soy[,c("year", "soyshare_Soybean_meal", "soyshare_Soybean_oil")], "year")
+
+ip <- mutate(ip, ln_Soy_index := soyshare_Soybean_meal * ln_Soybean_meal + 
+                                 soyshare_Soybean_oil * ln_Soybean_oil)
+
+
+## IF WE ARE TO MERGE MACRO FROM USDA
+# ip <- full_join(x = ip, y = psd, by = "year")
 
 # macro_vars <- ip
 # for(country in c("United States", "EU-25", "China")){
@@ -422,14 +390,216 @@ vars_torm <- names(inter_prices)[(#grepl(pattern = "_lag2", x = names(inter_pric
 
 inter_prices <- inter_prices[,!(names(inter_prices) %in% vars_torm)]
 
-### Make logarithms
-inter_prices <- dplyr::mutate(inter_prices, across(.cols = !c("year"),
-                                       .fns = log,
-                                       .names = paste0("ln_", "{.col}")))
-
-saveRDS(inter_prices, here("temp_data", "prepared_international_prices_and_macro.Rdata"))
+saveRDS(inter_prices, here("temp_data", "prepared_international_prices.Rdata"))
 
 rm(inter_prices)
+
+
+
+
+
+#### WEIGHTS ####
+# this is the code if we want to compute a data frame of weights on its own. Currently not needed, as weighting is done in this script, above. 
+#fg <- read_xlsx("input_data", "USDA", "FeedGrainsYearbookTables-AllYears.xlsx", sheet = "FGYearbookTable02-Full") 
+# 
+# faocer <- read.csv(file = here("input_data", "FAOSTAT_data_12-10-2021.csv"))
+# unique(faocer$Item)
+# template <- faocer[!duplicated(faocer$Year), c("Year", "Unit")]
+# cereals <- c("Barley", "Maize", "Maize, green", "Oats", "Rice, paddy", "Sorghum", "Soybeans", "Wheat") # they are all expressed in tonnes
+# for(cer in cereals){
+#   cer_df <- faocer[faocer$Item == cer, c("Year", "Value")]
+#   names(cer_df)[names(cer_df)=="Value"] <- cer
+#   template <- full_join(template, cer_df, by = "Year")
+# }
+# rm(cer_df)
+# # Group maize 
+# faocer <- mutate(template, Maize := Maize + !!as.symbol("Maize, green"))
+# cereals <- cereals[cereals != "Maize, green"]
+# faocer <- faocer[,c("Year", cereals)]
+# 
+# 
+# # Make shares of total supply for each crop
+# faocer <- mutate(faocer, cereal_supply = rowSums(across(.cols = !contains("Year"))))
+# for(cer in cereals){
+#   faocer <- mutate(faocer, !!as.symbol(cer) := !!as.symbol(cer)/cereal_supply)
+# }
+# 
+# # change names 
+# names(faocer) <- c("year", "share_Barley", "share_Maize", "share_Oat", "share_Rice", "share_Sorghum", "share_Soybeans", "share_Wheat", "cereal_supply")
+# 
+# # lag 
+# ip_variables <- names(faocer)[names(faocer)!="year"]
+# for(voi in ip_variables){
+#   ## short to long lags
+#   for(lag in c(1:5)){
+#     faocer <- dplyr::arrange(faocer, year)
+#     faocer <- DataCombine::slide(faocer,
+#                                  Var = voi, 
+#                                  TimeVar = "year",
+#                                  NewVar = paste0(voi,"_lag",lag),
+#                                  slideBy = -lag, 
+#                                  keepInvalid = FALSE)
+#     faocer <- dplyr::arrange(faocer, year)
+#     
+#   }
+#   for(py in c(2:5)){
+#     ## Past-year averages (2, 3 and 4 years)  
+#     # note that we DON'T add voi column (not lagged) in the row mean
+#     faocer$newv <- rowMeans(x = faocer[,paste0(voi,"_lag",c(1:py))], na.rm = FALSE)
+#     faocer[is.nan(faocer$newv),"newv"] <- NA
+#     colnames(faocer)[colnames(faocer)=="newv"] <- paste0(voi,"_",py,"pya")
+#   }
+# }
+# 
+# # remove some variables that were only temporarily necessary
+# # (we want to keep lag1)
+# vars_torm <- names(faocer)[(#grepl(pattern = "_lag2", x = names(faocer)) |
+#   grepl(pattern = "_lag3", x = names(faocer)) |
+#     grepl(pattern = "_lag4", x = names(faocer)) |
+#     grepl(pattern = "_lag5", x = names(faocer)))]
+# 
+# faocer <- faocer[,!(names(faocer) %in% vars_torm)]
+# 
+# 
+# saveRDS(faocer, here("temp_data", "fao_cereals_shares_global_supply.Rdata"))
+# 
+# rm(template, cereals)
+
+
+
+
+#### USDA MACRO ####
+
+psd <- read.csv(here("input_data", "USDA", "psd_alldata_csv", "psd_alldata.csv"))
+
+## What countries are there
+sort(unique(psd$Country_Name))
+
+uspsd <- psd[psd$Country_Name == "United States",]
+
+## What agregate to use? 
+unique(uspsd$Attribute_Description)
+# Total Use = domestic consumption + exports + ending stocks
+uspsd_TU <- uspsd[uspsd$Attribute_Description == "Total Use",]
+uspsd_TU$Calendar_Year%>%unique()%>% sort()# - misses years 2001-2007
+uspsd_TU$Market_Year%>%unique()%>% sort()
+unique(uspsd_TU$Commodity_Description) # only very few commodities
+# Total Supply = beginning stocks + domestic production + imports
+uspsd_TS <- uspsd[uspsd$Attribute_Description == "Total Supply",]
+uspsd_TS$Calendar_Year%>%unique()%>% sort()
+uspsd_TS$Market_Year%>%unique()%>% sort()
+unique(uspsd_TS$Commodity_Description)
+# Domestic Consumption = all possible uses of the commodity: food, feed, seed, waste, and industrial processing
+uspsd_DC <- uspsd[uspsd$Attribute_Description == "Domestic Consumption",]
+uspsd_DC$Calendar_Year%>%unique()%>% sort()# - misses years 2001-2005
+uspsd_DC$Market_Year%>%unique()%>% sort()
+unique(uspsd_DC$Commodity_Description)
+
+# Area Harvested
+uspsd_AH <- uspsd[uspsd$Attribute_Description == "Area Harvested",]
+uspsd_AH$Calendar_Year%>%unique()%>% sort() # only since 2006
+uspsd_AH$Market_Year%>%unique()%>% sort()
+unique(uspsd_AH$Commodity_Description) # main crops (by crop, not commodity, for instance only one category for soy)
+
+# they all have all years of information, conditional on using marketing year and not calendar year. 
+
+## What commodities?
+unique(uspsd$Commodity_Description)
+
+
+
+
+# select those we want
+focal_commodities <- c("Animal Numbers, Cattle", "Corn",
+                       "Meal, Rapeseed", "Meal, Soybean", "Meal, Sunflowerseed", # these categories are only in TS and DC, not in AH
+                       "Oil, Rapeseed", "Oil, Soybean", "Oil, Sunflowerseed", # these categories are only in TS and DC, not in AH
+                       "Oilseed, Rapeseed", "Oilseed, Soybean", "Oilseed, Sunflowerseed", 
+                       "Rice, Milled", "Sugar, Centrifugal", "Wheat")
+## format data 
+psd_list <- list()
+elm <- 1
+for(country in c("United States", "European Union", "China")){
+  for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption")){
+    
+    # select observations and variables we want
+    tmpd<- psd %>% dplyr::filter(Country_Name == country &
+                                   Attribute_Description == attribute_des & 
+                                   Commodity_Description %in% focal_commodities & 
+                                   Market_Year >= 1980 & 
+                                   Market_Year <= 2021)
+    
+    print(unique(tmpd$Unit_Description))
+    print(tmpd[tmpd$Unit_Description=="(1000 HEAD)", "Commodity_Description"]%>% unique())
+    
+    tmpd <- dplyr::select(tmpd, Commodity_Description, Market_Year, Value)
+    
+    # rename some commodities and variables
+    tmpd[tmpd$Commodity_Description == "Animal Numbers, Cattle","Commodity_Description"] <- "Cattle"
+    tmpd[tmpd$Commodity_Description == "Corn","Commodity_Description"] <- "Maize" 
+    tmpd[tmpd$Commodity_Description == "Meal, Rapeseed","Commodity_Description"] <- "Rapeseed_meal"
+    tmpd[tmpd$Commodity_Description == "Meal, Soybean","Commodity_Description"] <- "Soybean_meal"
+    tmpd[tmpd$Commodity_Description == "Meal, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_meal"
+    tmpd[tmpd$Commodity_Description == "Oil, Rapeseed","Commodity_Description"] <- "Rapeseed_oil"
+    tmpd[tmpd$Commodity_Description == "Oil, Soybean","Commodity_Description"] <- "Soybean_oil"
+    tmpd[tmpd$Commodity_Description == "Oil, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_oil"
+    tmpd[tmpd$Commodity_Description == "Oilseed, Rapeseed","Commodity_Description"] <- "Rapeseed_oilseed"
+    tmpd[tmpd$Commodity_Description == "Oilseed, Soybean","Commodity_Description"] <- "Soybean_oilseed"
+    tmpd[tmpd$Commodity_Description == "Oilseed, Sunflowerseed","Commodity_Description"] <- "Sunflowerseed_oilseed"
+    tmpd[tmpd$Commodity_Description == "Rice, Milled","Commodity_Description"] <- "Rice"
+    tmpd[tmpd$Commodity_Description == "Sugar, Centrifugal","Commodity_Description"] <- "Sugar"
+    
+    names(tmpd)[names(tmpd)=="Market_Year"] <- "year"
+    names(tmpd)[names(tmpd)=="Value"] <-  gsub(" ", "_", attribute_des)
+    
+    
+    tmpd <- reshape(tmpd, direction = "wide", 
+                    v.names = gsub(" ", "_", attribute_des),
+                    timevar = "Commodity_Description",
+                    idvar = "year")
+    
+    # add the country in the variable name
+    names(tmpd)[names(tmpd)!="year"] <- paste0(gsub(" ", "", country), ".", names(tmpd)[names(tmpd)!="year"]) 
+    
+    
+    # and lines if there are not as many as in other time series
+    min_year <- min(tmpd$year, na.rm = TRUE) 
+    if(min_year>1980){
+      tmpd <- rbind(matrix(NA, nrow = min_year - 1980, ncol = ncol(tmpd), dimnames = list(NULL, colnames(tmpd)) ), tmpd)#rep(NA, ncol(tmpd))
+      tmpd[is.na(tmpd$year),"year"] <- (1980 : (min_year - 1))
+    }
+    
+    # transform transformed commodities back to quantities of a single crop.
+    # for(crop in c("Rapeseed", "Soybean", "Sunflower")){
+    #   commos <- names(tmpd)[grepl(crop, names(tmpd))]
+    #   log_commos <- c()
+    #   for(co in commos){
+    #     log_co <- paste0("log_", co)
+    #     log_commos <- c(log_commos, log_co)
+    #     tmpd <- mutate(tmpd, !!as.symbol(log_co) := log(!!as.symbol(co)))
+    #   }
+    #   varname <- paste0(crop, "_commos")
+    #   tmpd <- mutate(tmpd, 
+    #                  !!as.symbol(varname) := rowMeans(across(.cols = (any_of(log_commos)))))
+    # }
+    
+    psd_list[[paste0(country, " ", attribute_des)]]  <- tmpd   
+    
+  }
+}
+
+# UNITS
+# so from the prints: in AH, unit is 1000ha for all goods, 
+# for TS is 1000 head only for Cattle, and 1000 MT for all other goods, 
+# and for DC it's 1000 MT for all goods
+
+psd <- bind_cols(psd_list)
+names(psd)[1] <- "year"
+psd <- psd[, !grepl("year.", names(psd))]
+
+
+# transform transformed commodities back to quantities of a single crop.
+
+# and quantities of interest (ratios?)
 
 
 
