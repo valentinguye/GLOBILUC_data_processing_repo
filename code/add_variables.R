@@ -485,6 +485,11 @@ for(name in dataset_names){
   base_path <- paste0(here(origindir, name), ".Rdata")
   df_base <- readRDS(base_path)
   
+  commodity_driven_path <- paste0(here(origindir, "driverloss_commodity_aesi_long.Rdata"))
+  commodity_driven <- readRDS(commodity_driven_path)
+  commodity_driven <- dplyr::select(commodity_driven, driven_loss_commodity, lon, lat, grid_id, year)
+  
+  final <- left_join(commodity_driven, df_base, by = c("lon", "lat"))
   # # Remove non-standardized suitability indexes
   # df_base <- dplyr::select(df_base,-all_of(gaez_crops))
   
