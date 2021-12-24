@@ -459,9 +459,10 @@ long_df <- mutate(long_df, year = years[year])
 
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
-d <- long_df[long_df$driven_loss != long_df$driven_loss_commodity,]
-d <- mutate(d, diff = driven_loss - driven_loss_commodity)
-
+# d <- long_df[long_df$driven_loss != long_df$driven_loss_commodity,]
+# d <- mutate(d, diff = driven_loss - driven_loss_commodity)
+# summary(d$diff)
+# d[d$diff>0 , c("driven_loss", "driven_loss_commodity")]
 
 saveRDS(long_df, here(targetdir, "driverloss_aesi_long.Rdata"))
 

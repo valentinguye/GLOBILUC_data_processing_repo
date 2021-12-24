@@ -484,12 +484,29 @@ for(name in dataset_names){
   # Base dataset (including outcome variable(s))
   base_path <- paste0(here(origindir, name), ".Rdata")
   df_base <- readRDS(base_path)
+  # length(unique(df_base$lon))
+  # length(unique(df_base$lat))
+  # 
+  # df_base$lon <- round(df_base$lon, 6)
+  # df_base$lat <- round(df_base$lat, 6)
+  # length(unique(df_base$lon))
+  # length(unique(df_base$lat))
+  # df_base$lat <- as.character(df_base$lat)
+  # df_base$lon <- as.character(df_base$lon)
+  # 
+  # commodity_driven_path <- paste0(here(origindir, "driverloss_commodity_aesi_long.Rdata"))
+  # commodity_driven <- readRDS(commodity_driven_path)
+  # length(unique(commodity_driven$lon))
+  # length(unique(commodity_driven$lat))
+  # commodity_driven$lon <- round(commodity_driven$lon, 6)
+  # commodity_driven$lat <- round(commodity_driven$lat, 6)
+  # length(unique(commodity_driven$lon))
+  # length(unique(commodity_driven$lat))
+  # commodity_driven$lat <- as.character(commodity_driven$lat)
+  # commodity_driven$lon <- as.character(commodity_driven$lon)
   
-  commodity_driven_path <- paste0(here(origindir, "driverloss_commodity_aesi_long.Rdata"))
-  commodity_driven <- readRDS(commodity_driven_path)
-  commodity_driven <- dplyr::select(commodity_driven, driven_loss_commodity, lon, lat, grid_id, year)
-  
-  final <- left_join(commodity_driven, df_base, by = c("lon", "lat"))
+  # final <- inner_join(df_base, commodity_driven, by = c("lon", "lat", "year"))
+ 
   # # Remove non-standardized suitability indexes
   # df_base <- dplyr::select(df_base,-all_of(gaez_crops))
   
@@ -520,12 +537,12 @@ for(name in dataset_names){
     df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
     names(df_pasture)[names(df_pasture)=="driverloss_masked_pasture"] <- "pasture_share"
     
-    final <- left_join(final, df_pasture, by = c("lon", "lat"))
+    final <- left_join(final, df_pasture, by = c("lon", "lat")) # /!\ THIS ACTUALLY DOES NOT MATCH PERFECTLY. HANDLE IF WE REALLY WANT TO USE PASTURE SHARES
     rm(df_pasture)
     
     # remaining
     df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
-    final <- left_join(final, df_remain, by = c("grid_id", "year"))
+    final <- inner_join(final, df_remain, by = c("grid_id", "year")) # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
     rm(df_remain)
   }
   

@@ -288,6 +288,40 @@ ip <- full_join(x = ps2, y = imf, by = "year")
 
 ip <- ip %>% dplyr::select(-MUV_index, -FPI, -MUV_index_10, - MUV_index_2014_16)
 
+### Make calorie prices
+
+### CALORIE CONTENT OF CROPS *before log*
+
+# values are in calories per kg, from https://www.fao.org/3/x9892e/X9892e05.htm
+# or kcalories per ton
+cal_content <- c(
+  "Banana" = 600,
+  "Barley" = 3320,
+  "Beef" = 1500, 
+  "Orange" = 340, 
+  "Cocoa" = 4140,
+  "Coconut_oil" = 8840,
+  "Coffee" = 470,
+  "Cotton" = 2530, # we have prices not on cotton oil but on cotton raw from Cotlook 'A' Index
+  "Groundnut_oil" = 8840,
+  "Maize" = 3560,
+  "Oat" = 3850,
+  "Olive_oil" = 8840,
+  "Palm_oil" = 8840,
+  "Palm_kernel_oil" = 8840,
+  "Rapeseed_oil" = 8840,
+  "Rice" = 3600, # it's not rice paddy, but 5% broken, so we take the value for rice milled from calorie content source
+  "Sorghum" = 3430,
+  "Soybean_oil" = 8840,
+  "Soybean_meal" = 2610,
+  "Sugar" = 3730, # it's raw in Pink Sheet
+  "Sunflower_oil" = 8840,
+  "Tea" = 400,
+  "Wheat" = 3340)
+
+for(commo in names(cal_content)){
+  ip <- mutate(ip, !!as.symbol(paste0("kca_",commo)) := !!as.symbol(commo) / cal_content[commo])  
+}
 
 ### Make logarithms
 ip <- dplyr::mutate(ip, across(.cols = !c("year"),
@@ -297,12 +331,15 @@ ip <- dplyr::mutate(ip, across(.cols = !c("year"),
 ### Make weighted prices
 ip <- left_join(x = ip, y = faocer, by = "year")
 
-# Weight only log prices
+# Weight only log and kca prices
 
 ## Cereals_feeds
 for(wc in c("Barley", "Maize", "Oat", "Rice", "Sorghum", "Soybean_meal", "Wheat")){
+  # ip <- mutate(ip, 
+  #              !!as.symbol(paste0("w_ln_",wc)) := !!as.symbol(paste0("share_",wc)) * (!!as.symbol(paste0("ln_",wc))) )
+  # intervert kca_ and ln_ in variable names for convenience in make_main_reg function
   ip <- mutate(ip, 
-               !!as.symbol(paste0("w_ln_",wc)) := !!as.symbol(paste0("share_",wc)) * (!!as.symbol(paste0("ln_",wc))) )
+               !!as.symbol(paste0("w_kca_ln_",wc)) := !!as.symbol(paste0("share_",wc)) * (!!as.symbol(paste0("ln_kca_",wc))) )
 }
 
 ## Vegetable_oils
@@ -314,7 +351,7 @@ oil_sha <- oil_sha[base::order(names(oil_sha))]
 
 for(wc in c(names(oil_sha))){
   ip <- mutate(ip, 
-               !!as.symbol(paste0("w_ln_",wc)) := oil_sha[wc] * (!!as.symbol(paste0("ln_",wc))) )
+               !!as.symbol(paste0("w_kca_ln_",wc)) := oil_sha[wc] * (!!as.symbol(paste0("ln_kca_",wc))) )
 }
 
 # do not average weighted prices now, because this will be done more flexibly in the analysis directly. 
