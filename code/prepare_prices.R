@@ -345,8 +345,10 @@ for(wc in c("Barley", "Maize", "Oat", "Rice", "Sorghum", "Soybean_meal", "Wheat"
 ## Vegetable_oils
 # This is a share of world supply, as per the USDA WorldSupplyUseOilseedandProducts, Table 42–World vegetable oils supply and distribution, 2013/14–2020/21
 # Quantities are averaged from year 2013/14 to 2018/19 
-oil_sha <- c(0.018795739,0.025995556,0.01600368,0.34937766,0.04112145,0.0303809,0.148273209,0.278552254,0.091499553)
-names(oil_sha) <- c("Coconut_oil","Cotton","Olive_oil","Palm_oil","Palm_kernel_oil","Groundnut_oil","Rapeseed_oil","Soybean_oil","Sunflower_oil")
+oil_sha <- c(0.019101432,0.026418347,0.355059925,0.041790248,0.030875014,0.150684719,0.283082617,0.092987698)
+# weights with olive oil
+# oil_sha <- c(0.018795739,0.025995556,0.01600368,0.34937766,0.04112145,0.0303809,0.148273209,0.278552254,0.091499553)
+names(oil_sha) <- c("Coconut_oil","Cotton","Palm_oil","Palm_kernel_oil","Groundnut_oil","Rapeseed_oil","Soybean_oil","Sunflower_oil")
 oil_sha <- oil_sha[base::order(names(oil_sha))]
 
 for(wc in c(names(oil_sha))){
