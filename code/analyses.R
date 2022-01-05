@@ -126,6 +126,7 @@ mapmat <- matrix(data = mapmat_data,
 
 colnames(mapmat) <- c("Prices", "Crops")
 
+biofuel_feedstocks_gaez <- c("Coconut", "Maizegrain", "Oilpalm", "Rapeseed", "Sorghum2", "Soybean", "Sugar", "Sunflower", "Wheat")
 
 # there are different ways of grouping crops in a relevant way, depending on the exposure crop, sj
 meats = c("Beef", "Chicken", "Pork", "Sheep")
@@ -138,35 +139,41 @@ cereals_feeds_wosoy <- cereals_feeds[!grepl("Soybean", cereals_feeds)]
 vegetable_oils_wosoy <- vegetable_oils[!grepl("Soybean", vegetable_oils)]
 
 # gérer depuis ici ce pour quoi on contrôle pour chaque prix, et ce qu'on met ou pas dans les groupes
-no_biofuel_focus_groups <- list(Fodder = list(Beef = "Beef", Chicken = "Chicken", Pork = "Pork", 
+no_biofuel_focus_groups <- list(Fodder = list(Beef = "Beef", Chicken = "Chicken", Pork = "Pork", #  
                                               cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
                                               Sugar = "Sugar", Cocoa = "Cocoa", Coffee = "Coffee", 
-                                              Banana = "Banana", Orange = "Orange", Olive_oil = "Olive_oil",
-                                              Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"), 
-                                
-                                Soybean = list(Beef = "Beef", Chicken = "Chicken", Pork = "Pork", 
-                                               cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils,
-                                               Sugar = "Sugar", Cocoa = "Cocoa", Coffee = "Coffee",
-                                               Olive_oil = "Olive_oil",#Banana = "Banana", Orange = "Orange",
-                                               Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"),
-                                
-                                Oilpalm = list(Beef = "Beef", Chicken = "Chicken", Pork = "Pork", 
-                                               cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils,
-                                               Sugar = "Sugar", Cocoa = "Cocoa", Coffee = "Coffee",  
-                                               Banana = "Banana", Orange = "Orange", Olive_oil = "Olive_oil",
-                                               Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"),
-                                
-                                Cocoa = list(Cocoa = "Cocoa", 
-                                             Beef = "Beef", Chicken = "Chicken", Pork = "Pork",  cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
-                                             Coffee = "Coffee", Sugar = "Sugar", Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"), 
-                                
-                                Coffee = list(Coffee = "Coffee", 
-                                              Beef = "Beef", Chicken = "Chicken", Pork = "Pork",  cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
-                                              Cocoa = "Cocoa", Sugar = "Sugar", Tea = "Tea", Tobacco = "Tobacco", Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"), 
-                                
-                                Rubber = list(Rubber = "Rubber", 
-                                              Beef = "Beef", Chicken = "Chicken", Pork = "Pork",  cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
-                                              Crude_oil = "Crude_oil", Fertilizer = "Fertilizer")
+                                              Banana = "Banana", Orange = "Orange", Olive_oil = "Olive_oil", # 
+                                              Tea = "Tea", Tobacco = "Tobacco",
+                                              Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"
+), 
+
+Soybean = list(Beef = "Beef", Chicken = "Chicken", Pork = "Pork", #  
+               cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
+               Sugar = "Sugar", Cocoa = "Cocoa", Coffee = "Coffee", 
+               Banana = "Banana", Orange = "Orange", Olive_oil = "Olive_oil", # 
+               Tea = "Tea", Tobacco = "Tobacco",
+               Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"
+),
+
+Oilpalm = list(Beef = "Beef", Chicken = "Chicken", Pork = "Pork", #  
+               cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
+               Sugar = "Sugar", Cocoa = "Cocoa", Coffee = "Coffee", 
+               Banana = "Banana", Orange = "Orange", Olive_oil = "Olive_oil", # 
+               Tea = "Tea", Tobacco = "Tobacco",
+               Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"
+),
+
+Cocoa = list(Cocoa = "Cocoa", 
+             Beef = "Beef", Chicken = "Chicken", Pork = "Pork",  cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
+             Coffee = "Coffee", Sugar = "Sugar", Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"), 
+
+Coffee = list(Coffee = "Coffee", 
+              Beef = "Beef", Chicken = "Chicken", Pork = "Pork",  cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
+              Cocoa = "Cocoa", Sugar = "Sugar", Tea = "Tea", Tobacco = "Tobacco", Crude_oil = "Crude_oil", Fertilizer = "Fertilizer"), 
+
+Rubber = list(Rubber = "Rubber", 
+              Beef = "Beef", Chicken = "Chicken", Pork = "Pork",  cereals_feeds = cereals_feeds, vegetable_oils = vegetable_oils, 
+              Crude_oil = "Crude_oil", Fertilizer = "Fertilizer")
 )
 
 # this is used in both disaggr and aggr procedures (only as a robustness check for the former)
@@ -220,6 +227,8 @@ main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "drive
 ### PRICE DATA ###
 prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 
+
+
 # renewable fuel standards, as from https://www.epa.gov/renewable-fuel-standard-program/renewable-fuel-annual-standards
 rfs <- data.frame(year = unique(prices$year), tot_ren = 0, adv_bio = 0, init_conv_bio = 0)
 rfs <- dplyr::arrange(rfs, year)
@@ -227,11 +236,35 @@ rfs[rfs$year >= 2006 & rfs$year <= 2020, c("tot_ren")] <- c(4, 4, 9, 11.1, 12.95
 rfs[rfs$year >= 2006 & rfs$year <= 2020, c("adv_bio")] <- c(0, 0, 0, 0.6, 0.95,	1.35,	2.0,	2.75,	2.67,	2.88,	3.61,	4.28,	4.29,	4.92, 5.09)
 rfs[rfs$year >= 2006 & rfs$year <= 2020, c("init_conv_bio")] <- c(4, 4, 9, 10.5, 12, 12.6, 13.2, 13.8, 14.4, 15, 15, 15, 15, 15, 15)
 
+# make additional variables
 rfs <- mutate(rfs, conv_bio = tot_ren - adv_bio)
 
+rfs <- mutate(rfs, amendments = conv_bio - init_conv_bio) # in 2014 it ramped up to 13.61 instead of 14.4, which is thus a negative shock on demand of .79 bgal
+rfs <- round(rfs, 2)
+rfs$blendwall <- 0
+rfs[rfs$year == 2014, "blendwall"] <- -0.79
+
+# make random permutations of main rfs vars as placebos
+rfs <- mutate(rfs, init_conv_bio_placebo = sample(init_conv_bio, length(init_conv_bio)), 
+              conv_bio_placebo = sample(conv_bio, length(conv_bio)))
+
+# merge with price time series
 prices <- left_join(prices, rfs, by = "year")
 
-rfs_vars <- c("tot_ren", "adv_bio", "init_conv_bio", "conv_bio")
+# make lags and leads
+rfs_vars <- c("tot_ren", "adv_bio", "init_conv_bio", "conv_bio", "init_conv_bio_placebo", "conv_bio_placebo", "amendments", "blendwall")
+for(voi in rfs_vars){
+  for(lead in c(1:5)){
+    prices <- dplyr::arrange(prices, year)
+    prices <- DataCombine::slide(prices,
+                                 Var = voi, 
+                                 TimeVar = "year",
+                                 NewVar = paste0(voi,"_lead",lead),
+                                 slideBy = lead, 
+                                 keepInvalid = FALSE)
+    prices <- dplyr::arrange(prices, year)
+  }  
+}
 for(voi in rfs_vars){
   for(lag in c(1:5)){
     prices <- dplyr::arrange(prices, year)
@@ -316,6 +349,32 @@ ran.gen_cluster_blc <- function(original_data, arg_list){
 
 
 #### DES STATS ####
+
+### On prices ###
+all_prices <- c(mapmat[,"Prices"], "Soybean_meal", "Soybean_oil", "Chicken", "Pork", "Palm_kernel_oil", "Crude_oil", "Fertilizer")
+subp <- prices[,c("year", paste0("ln_", all_prices))] %>% filter(year >= 2000 & year <= 2019) 
+
+cor_mat <- cor(dplyr::select(subp, -year))
+
+# store results in 
+cortests <- cor_mat
+k_treatments <- list()
+length(k_treatments) <- length(all_prices)
+names(k_treatments) <- all_prices
+
+for(serie1 in colnames(cortests)){
+  
+  for(serie2 in row.names(cortests)){
+    
+    cortests[serie1, serie2] <- cor.test(subp[,serie1], subp[,serie2], )$p.value
+  }
+  serie1_names <- row.names(cortests[cortests[, serie1] < 0.1, ])
+  k_treatments[[gsub("ln_", "", serie1)]] <- gsub("ln_", "", serie1_names)
+  
+}
+
+
+# suitability indexes
 mdcs <- main_data[!duplicated(main_data$grid_id),]
 for(crop in all_exposures){
   #print(paste0(crop, " : ", round(sum(mdcs[,crop]>0, na.rm = TRUE)/247182, 2), "%"))
@@ -344,16 +403,17 @@ plot(dsoy[, "Soybean_std2"])
 
 
 
+
 ### TEMPORARY OBJECTS 
 outcome_variable = "driven_loss_commodity" # "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
 start_year = 2001
 end_year = 2019
 continent = "America"
 further_lu_evidence = "none"
-original_sj = "Soybean"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+original_sj = "Fodder"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
 all_but_k <- FALSE # if true, replaces original_sj by (1-original_sk), i.e. what is interacted with the treatment is the relative suitability for anything but k. 
-original_Pk <- "Soy_index" # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
+original_Pk <- "Soybean_meal" # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
 # "Beef" , , , "Cocoa", "Coffee", "Rubber"
 # "Rapeseed_oil", "Sunflower_oil","Rice", "Wheat", "Maize", "Sugar", "Sorghum")
 
@@ -376,10 +436,15 @@ standardization = "_std2"
 price_dyn <- "main"
 
 estimated_effect = "alpha"
-placebo_test <- FALSE
 rfs_reg <- TRUE
+placebo_rfs <- TRUE
 original_rfs_treatments <- c("init_conv_bio")
+rfs_lead <- 1
 rfs_lag <- 0
+original_exposure_rfs <- biofuel_feedstocks_gaez
+group_exposure_rfs <- TRUE
+
+
 
 control_interact_Pk <- FALSE
 reference_crop <- c("Oat", "Olive")#
@@ -393,7 +458,7 @@ fc_trend <- TRUE
 s_trend <- TRUE
 fc_s_trend <- TRUE
 
-sjpos <- TRUE # should the sample be restricted to cells where sj is positive? 
+sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
 # open_path <- FALSE
 # commoXcommo <- "Fodder_X_Beef"
 fe = "grid_id + country_year" # + country_year  
@@ -436,10 +501,13 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           price_dyn = "main", # one of main - and then prices are lagged 1 year if sj is fodder or soybean and if it's tree plantations it is 3pya or "alt" and it is the other way round.
                           # available price dynamics are "_lag1", "_2pya", "_3pya", "_4pya", "_5pya",
                           estimated_effect = "alpha",# if "alpha", estimates the (aggregated or not) cross-elasticity effect. If different from "alpha" (e.g. "gamma") it estimates the ILUC effect from price covariation. 
-                          placebo_test = FALSE,
+                          placebo_rfs = FALSE,
                           rfs_reg = FALSE,
                           original_rfs_treatments = c("init_conv_bio"),
+                          rfs_lead = 1,
                           rfs_lag = 1,
+                          original_exposure_rfs = biofuel_feedstocks_gaez,
+                          group_exposure_rfs = FALSE,
                           
                           aggregate_K = "", # if not "", either "meats", "cereals_feeds", "vegetable_oils", or "biofuel_feedstocks"
                           control_interact_sj = TRUE, 
@@ -492,7 +560,6 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   }
   
   
-  
   #### PREPARE NEEDED VARIABLE NAMES
   # this does not involve data, just arguments of the make_reg function
   # original_ names are used to get generic covariate names in coefficient tables (irrespective of modelling choices)
@@ -515,6 +582,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # standardize them
   all_exposures <- paste0(original_all_exposures, standardization)
   
+  exposure_rfs <- paste0(original_exposure_rfs, standardization)
   
   ## Price variable names to find in the price data
   if(price_dyn == "main"){
@@ -545,7 +613,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   original_treatments <- unlist(maplist[[original_sj]])
   treatments <- paste0("ln_", original_treatments, price_info)
   
-  # this is all possible treatments, necessary in every specificaton 
+  # this is all possible treatments, necessary in every specification 
   original_all_treatments <- mapmat[,"Prices"]
   all_treatments <- paste0("ln_", original_all_treatments, price_info)
   
@@ -554,12 +622,21 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # note that "Soybean" is not one of them. Only Soybean_meal and Soybean_oil. 
   
   # rfs treatments are the non lagged + all the lagged values up to the furthest one (specified), for each rfs variable.  
+  if(placebo_rfs){
+    original_rfs_treatments <- paste0(original_rfs_treatments, "_placebo")
+  }
   rfs_treatments <- original_rfs_treatments
+  if(rfs_lead >= 1){
+    for(rfs_var in original_rfs_treatments){
+      rfs_treatments <- c(rfs_treatments, paste0(rfs_var, "_lead", 1:rfs_lead))
+    }
+  }
   if(rfs_lag >= 1){
     for(rfs_var in original_rfs_treatments){
       rfs_treatments <- c(rfs_treatments, paste0(rfs_var, "_lag", 1:rfs_lag))
     }
   }
+  
   
   # this is used at some points 
   sjPj <- paste0(original_sj, "_X_", original_Pj)
@@ -631,22 +708,32 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # }    
   
   #   PLACEBO AND RFS 
-  if(placebo_test){
-    rts <- rnorm(length(unique(d$year)), mean = mean(unique(d[,Pk])), sd = sd(unique(d[,Pk])))
-    rts <- data.frame(year = unique(d$year), rts = rts)
-    d <- left_join(d, rts, by = "year")
-    d <- mutate(d, placebo := !!as.symbol(sj) * rts)
-    regressors <- "placebo"
-  }
+  # if(placebo_test){
+  #   rts <- rnorm(length(unique(d$year)), mean = mean(unique(d[,Pk])), sd = sd(unique(d[,Pk])))
+  #   rts <- data.frame(year = unique(d$year), rts = rts)
+  #   d <- left_join(d, rts, by = "year")
+  #   d <- mutate(d, placebo := !!as.symbol(sj) * rts)
+  #   regressors <- "placebo"
+  # }
   
   if(rfs_reg){
     regressors <- c()
     for(rfs_var in rfs_treatments){
-      # original_rfs_var <- original_rfs_treatments[match(rfs_var, rfs_treatments)]
-      varname <- paste0(original_sj, "_X_", rfs_var)
-      regressors <- c(regressors, varname)
-      
-      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(sj) * !!as.symbol(rfs_var))
+      if(group_exposure_rfs){
+        # group (sum) exposures
+        d <- dplyr::mutate(d, grp_exp = rowSums(across(.cols = (any_of(exposure_rfs)))))
+        # make the regressor of interest
+        varname <- paste0("grp_exp_X_", rfs_var)
+        regressors <- c(regressors, varname)
+        d <- mutate(d, !!as.symbol(varname) := grp_exp * !!as.symbol(rfs_var))
+      }else{
+        for(exp_rfs in exposure_rfs){
+          # make regressors of interest
+          varname <- paste0(exp_rfs, "_X_", rfs_var)
+          regressors <- c(regressors, varname)
+          d <- mutate(d, !!as.symbol(varname) := !!as.symbol(exp_rfs) * !!as.symbol(rfs_var))
+        }
+      }
     }
   }
   
@@ -691,6 +778,9 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   
   
   if(control_interact_sj){
+    # useful for later
+    protected <- regressors
+    
     # remove Pk from crops to group (bc sjPk is the regressor of interest)
     original_treatments_but_k <- original_treatments[original_treatments != original_Pk]
     treatments_but_k <- paste0("ln_", original_treatments_but_k, price_info)
@@ -759,6 +849,14 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                     !!as.symbol(varname) := (!!as.symbol(sj)) * (!!as.symbol(gn)) )
       }
       rm(varname, original_gn, gn)
+      
+      # finally, remove interactions with prices that are not correlated with Pk
+      protected <- regressors[regressors %in% protected |
+                                regressors == paste0(original_sj, "_X_cereals_feeds") |
+                                regressors == paste0(original_sj, "_X_vegetable_oils")]
+      
+      unprotected <- regressors[!(regressors %in% protected)]
+      regressors <- c(protected, unprotected[(unprotected %in% paste0(original_sj, "_X_", k_treatments[[k_price]]))])
       
     }else{ # i.e. if we do not group terms of interaction between sj and other prices 
       
@@ -905,6 +1003,11 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   controls <- c()
   # gamma_controls <- c() 
   # delta_controls <- c() 
+  
+  # from here, if we are in rfs process, sj may refer to the group of exposures
+  if((rfs_reg | placebo_test) & group_exposure_rfs){
+    sj <- "grp_exp"
+  }
   
   # d <- mutate(d, sj_year := paste0(!!as.symbol(sj),"_",year))
   
@@ -1532,7 +1635,7 @@ for(CNT in c("America", "Asia")){#, "Africa",, , "Africa", "Asia"
 
 ## DEFINE HERE THE VALUES THAT WILL BE PASSED TO SPECIFICATION ARGUMENTS OF REGRESSION FUNCTION ### 
 est_parameters <- list(outcome_variable  = "driven_loss_commodity",
-                       sjpos = FALSE,
+                       sjpos = TRUE,
                        standardization = "_std2",
                        price_dyn = "main",
                        distribution = "gaussian", 
@@ -1543,9 +1646,11 @@ alpha_disaggr_res_list_continents <- list(America = list(),
                                           Africa = list(), 
                                           Asia = list())
 
+alpha_disaggr_coeff_list_continents <- alpha_disaggr_res_list_continents
+
 for(CNT in c("America")){#, "Africa",, , "Africa", "Asia"
   elm <- 1
-  for(j_crop in c("Soybean")){#"Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber"
+  for(j_crop in c("Fodder", "Soybean")){#"Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber"
     for(k_price in unlist(no_biofuel_focus_groups[[j_crop]])){#"Chicken", "Pork", "Sheep", "Crude_oil", 
       # uncomment to prevent estimation from direct effects 
       # if(mapmat[mapmat[,"Crops] == j_crop, "Prices"] != k_price){ 
@@ -1570,11 +1675,19 @@ for(CNT in c("America")){#, "Africa",, , "Africa", "Asia"
       )
       
       names(alpha_disaggr_res_list_continents[[CNT]])[elm] <- paste0(j_crop,"_X_",k_price)
+      
+      # extract estimate of interest 
+      alpha_disaggr_coeff_list_continents[[CNT]][[elm]] <- alpha_disaggr_res_list_continents[[CNT]][[elm]][paste0(j_crop,"_X_",k_price), ]
+      names(alpha_disaggr_coeff_list_continents[[CNT]])[elm] <- paste0(j_crop,"_X_",k_price) 
       elm <- elm + 1
       # }
     }
   }
 }
+
+#Eyeball it 
+alpha_disaggr_coeff_list_continents
+
 ## SAVE 
 
 est_filename <- paste0(est_parameters, collapse = "_") %>% paste0(".Rdata")
