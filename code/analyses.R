@@ -102,7 +102,7 @@ mapmat_data <- c(
   "Groundnut_oil", "Groundnut",
   "Maize", "Maizegrain",
   "Oat", "Oat",
-  "Olive_oil", "Olive",
+  #"Olive_oil", "Olive",  # remove olive as it represents only a single cell in Asia
   "Palm_oil", "Oilpalm",
   "Rapeseed_oil", "Rapeseed",
   "Rice", "Rice",
@@ -376,6 +376,52 @@ for(serie1 in colnames(cortests)){
 
 # suitability indexes
 mdcs <- main_data[!duplicated(main_data$grid_id),]
+
+am <- dplyr::filter(mdcs, continent_name == "America")
+af <- dplyr::filter(mdcs, continent_name == "Africa")
+as <- dplyr::filter(mdcs, continent_name == "Asia")
+
+summary(am$Olive_std2)
+summary(as$Olive_std2)
+
+nrow(am)
+for(crop in mapmat[,"Crops"]){
+  sum(am[,paste0(crop,"_std2")]>0, na.rm = T)%>% paste0(" cells in America for ", crop) %>% print()
+  sum(af[,paste0(crop,"_std2")]>0, na.rm = T)%>% paste0(" cells in Africa for ", crop) %>% print()
+  sum(as[,paste0(crop,"_std2")]>0, na.rm = T)%>% paste0(" cells in Asia for ", crop) %>% print()
+}
+
+sum(am$Oat_std2>0, na.rm = T)
+sum(af$Oat_std2>0, na.rm = T)
+sum(as$Oat_std2>0, na.rm = T)
+
+sum(am$Rapeseed_std2>0, na.rm = T)
+sum(af$Rapeseed_std2>0, na.rm = T)
+sum(as$Rapeseed_std2>0, na.rm = T)
+
+
+mdcs <- dplyr::filter(mdcs, continent_name == "America")
+
+cor_mat_abs <-  cor(dplyr::select(mdcs, all_of(mapmat[,"Crops"])))
+cor_mat_std2 <-  cor(dplyr::select(mdcs, all_of(paste0(mapmat[,"Crops"], "_std2"))), use = "complete.obs")
+
+cortests <- cor_mat_std2
+j_exposures <- list()
+length(j_exposures) <- length(mapmat[,"Crops"])
+names(j_exposures) <- mapmat[,"Crops"]
+
+for(serie1 in colnames(cortests)){
+  
+  for(serie2 in row.names(cortests)){
+    
+    cortests[serie1, serie2] <- cor.test(mdcs[,serie1], mdcs[,serie2], )$p.value
+  }
+  j_exposures[[serie1]] <- cor_mat_std2[cortests[serie1, ] < 0.05, serie1]
+}
+cor_mat_abs[,"Maizegrain"]
+j_exposures[["Maizegrain_std2"]]
+
+
 for(crop in all_exposures){
   #print(paste0(crop, " : ", round(sum(mdcs[,crop]>0, na.rm = TRUE)/247182, 2), "%"))
   print(crop)
@@ -410,7 +456,7 @@ start_year = 2001
 end_year = 2019
 continent = "America"
 further_lu_evidence = "none"
-original_sj = "Fodder"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
+original_sj = "Soybean"# ,"Fodder",  "Soybean", "Oilpalm", "Cocoa", "Coffee", "Rubber" in GAEZ spelling, one, part, or all of the 6 main drivers of deforestation: 
 # for the k variables hypothesized in overleaf for palm oil, feglm quasipoisson converges within 25 iter.
 all_but_k <- FALSE # if true, replaces original_sj by (1-original_sk), i.e. what is interacted with the treatment is the relative suitability for anything but k. 
 original_Pk <- "Soybean_meal" # in price spelling. One, part, or all of the full set of commodities having a price-AESI match.
@@ -430,20 +476,20 @@ aggregate_K = ""
 biofuel_focus <- FALSE
 
 pasture_shares <- FALSE
-j_soy = "Soybean"
 fcr = 7.2
 standardization = "_std2"
 price_dyn <- "main"
 
 estimated_effect = "alpha"
 rfs_reg <- TRUE
-placebo_rfs <- TRUE
+placebo_rfs <- FALSE
 original_rfs_treatments <- c("init_conv_bio")
-rfs_lead <- 1
+rfs_lead <- 0
 rfs_lag <- 0
 original_exposure_rfs <- biofuel_feedstocks_gaez
 group_exposure_rfs <- TRUE
-
+control_absolute_rfs <- c()
+control_all_absolute_rfs <- TRUE
 
 
 control_interact_Pk <- FALSE
@@ -458,7 +504,7 @@ fc_trend <- TRUE
 s_trend <- TRUE
 fc_s_trend <- TRUE
 
-sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
+sjpos <- TRUE # should the sample be restricted to cells where sj is positive? 
 # open_path <- FALSE
 # commoXcommo <- "Fodder_X_Beef"
 fe = "grid_id + country_year" # + country_year  
@@ -474,9 +520,9 @@ glm_iter <- 25
 
 
 
-rm(outcome_variable, start_year, end_year, continent, further_lu_evidence, original_sj, original_Pk, focal_j_extra_price, pasture_shares, 
-   standardization, price_dyn, estimated_effect, group_prices, biofuel_focus, aggregate_K, control_interact_sj, control_interact_Pk,
-   reference_crop, control_direct, remaining, sjpos, fe, distribution, invhypsin, conley_cutoff, se, boot_cluster, coefs_to_aggregate, 
+rm(outcome_variable, start_year, end_year, continent, further_lu_evidence, original_sj, original_Pk, pasture_shares, 
+   standardization, price_dyn, estimated_effect, group_prices, biofuel_focus, aggregate_K, control_interact_sj, control_interact_Pk, reference_crop, control_direct, 
+   rfs_reg, placebo_rfs, original_rfs_treatments, rfs_lead, rfs_lag, original_exposure_rfs, group_exposure_rfs, control_absolute_rfs, control_all_absolute_rfs, remaining, sjpos, fe, distribution, invhypsin, conley_cutoff, se, boot_cluster, coefs_to_aggregate, 
    output, glm_iter)
 
 
@@ -501,39 +547,42 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           price_dyn = "main", # one of main - and then prices are lagged 1 year if sj is fodder or soybean and if it's tree plantations it is 3pya or "alt" and it is the other way round.
                           # available price dynamics are "_lag1", "_2pya", "_3pya", "_4pya", "_5pya",
                           estimated_effect = "alpha",# if "alpha", estimates the (aggregated or not) cross-elasticity effect. If different from "alpha" (e.g. "gamma") it estimates the ILUC effect from price covariation. 
+                          rfs_reg = TRUE,
                           placebo_rfs = FALSE,
-                          rfs_reg = FALSE,
                           original_rfs_treatments = c("init_conv_bio"),
-                          rfs_lead = 1,
-                          rfs_lag = 1,
+                          rfs_lead = 0,
+                          rfs_lag = 0,
                           original_exposure_rfs = biofuel_feedstocks_gaez,
-                          group_exposure_rfs = FALSE,
+                          group_exposure_rfs = FALSE, # if original_exposure_rfs is length 1, it does noe matter whether this option is TRUE or FALSE
+                          control_absolute_rfs = c(), 
+                          control_all_absolute_rfs = TRUE,
                           
                           aggregate_K = "", # if not "", either "meats", "cereals_feeds", "vegetable_oils", or "biofuel_feedstocks"
-                          control_interact_sj = TRUE, 
-                          
-                          group_prices = TRUE,
+                          control_interact_sj = FALSE, 
+                          group_prices = FALSE,
                           biofuel_focus = FALSE, # how to group prices? With a focus on biofuel feedstocks or rather on cereals/feeds and vegetable oils? 
+                          
                           control_interact_Pk = FALSE,
                           reference_crop = "Olive",
                           
-                          control_direct = TRUE,
-                          control_sjPj = TRUE,
-                          incl_sjPj = TRUE,
-                          control_skPk = TRUE,
-                          incl_skPk = TRUE,
+                          control_direct = FALSE,
+                          control_sjPj = FALSE,
+                          incl_sjPj = FALSE,
+                          control_skPk = FALSE,
+                          incl_skPk = FALSE,
                           # sjpj_lag = "_lag1", # either "" or "_lag1" or "_lag2"
                           # skpk_lag = "_lag1", # either "" or "_lag1" or "_lag2"
-                          sjpos = TRUE, # should the sample be restricted to cells where sj is positive? 
                           remaining = FALSE, # should remaining forest be controlled for STOP DOING THIS BECAUSE IT INTRODUCES NICKELL BIAS
                           fc_trend = TRUE,
                           s_trend = TRUE,
                           fc_s_trend = TRUE,
+                          
+                          sjpos = FALSE, # should the sample be restricted to cells where sj is positive? 
                           # open_path = FALSE,
                           # commoXcommo = "Fodder_X_Beef",
                           #commo_m = c(""), comment coder ça pour compatibilité avec loops over K_commo ? 
                           fe = "grid_id + country_year", 
-                          distribution = "gaussian",#  "quasipoisson", 
+                          distribution = "quasipoisson",#  "quasipoisson", 
                           invhypsin = TRUE, # if distribution is gaussian, should the dep. var. be transformed to inverse hyperbolic sine?
                           offset = FALSE,
                           se = "twoway",# # passed to vcov argument. Currently, one of "cluster", "twoway", or an object of the form:    
@@ -775,8 +824,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
       }
     }
   }
-  
-  
+
   if(control_interact_sj){
     # useful for later
     protected <- regressors
@@ -1004,8 +1052,27 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # gamma_controls <- c() 
   # delta_controls <- c() 
   
+  if(control_all_absolute_rfs){
+    all_abs <- mapmat[, "Crops"][!(mapmat[, "Crops"] %in% original_exposure_rfs)]
+    for(abs in all_abs){
+      for(rfs_var in rfs_treatments){
+        varname <- paste0(abs, "_X_", rfs_var)
+        controls <- c(controls, varname)
+        d <- mutate(d, !!as.symbol(varname) := !!as.symbol(abs) * !!as.symbol(rfs_var))
+      }
+    }
+  }
+  
+  if(length(control_absolute_rfs)>0){
+    for(abs_exp_rfs in control_absolute_rfs){
+      varname <- paste0(abs_exp_rfs, "_X_", rfs_var)
+      controls <- c(controls, varname)
+      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(abs_exp_rfs) * !!as.symbol(rfs_var))
+    }
+  }
+  
   # from here, if we are in rfs process, sj may refer to the group of exposures
-  if((rfs_reg | placebo_test) & group_exposure_rfs){
+  if((rfs_reg | placebo_rfs) & group_exposure_rfs){
     sj <- "grp_exp"
   }
   
@@ -1273,6 +1340,11 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   if(sjpos){
     d <- dplyr::filter(d, !!as.symbol(sj) > 0)  
   }
+  
+  # now that this is done, log rfs regressors: 
+  # if(rfs_reg){
+  #   d <- dplyr::mutate(d, !!as.symbol(regressors) := log(!!as.symbol(regressors)))  
+  # }
   
   # - are in study period 
   d <- dplyr::filter(d, year >= start_year)
@@ -1593,29 +1665,27 @@ rfs_res_list_continents <- list(America = list(),
                                 Africa = list(), 
                                 Asia = list())
 
-for(CNT in c("America", "Asia")){#, "Africa",, , "Africa", "Asia"
+#all_exposures_rfs <- mapmat[,"Crops"][!(mapmat[,"Crops"] %in% c("Oat,", "Olive"))]
+
+for(CNT in c("America", "Africa", "Asia")){#, "Africa",, , "Africa", "Asia"
   elm <- 1
-  for(lags in 1){
-    for(j_crop in c("Fodder", "Soybean","Oilpalm")){#"Fodder", "Soybean","Oilpalm", "Cocoa", "Coffee", "Rubber"
+  for(leads in 0){
+    for(exp_rfs in mapmat[,"Crops"]){#biofuel_feedstocks_gaez 
       rfs_res_list_continents[[CNT]][[elm]] <- make_main_reg(continent = CNT,
-                                                             original_sj = j_crop, 
-                                                             original_Pk = mapmat[mapmat[,"Crops"]==j_crop, "Prices"], 
+                                                             original_sj = "Soybean", 
+                                                             original_Pk = mapmat[mapmat[,"Crops"]=="Soybean", "Prices"], 
                                                              estimated_effect = "alpha", 
-                                                             placebo_test = FALSE,
+                                                             
                                                              rfs_reg = TRUE,
+                                                             placebo_rfs = FALSE,
                                                              original_rfs_treatments = c("init_conv_bio"),
-                                                             rfs_lag = lags,
-                                                             control_interact_sj = FALSE,
-                                                             control_direct = FALSE,
-                                                             control_sjPj = FALSE, 
-                                                             control_skPk = FALSE,
-                                                             incl_sjPj = FALSE, 
-                                                             incl_skPk = FALSE,
-                                                             s_trend = TRUE,
-                                                             fc_trend = TRUE,
-                                                             fc_s_trend = TRUE,
-                                                             aggregate_K = "",
-                                                             biofuel_focus = FALSE, 
+                                                             rfs_lag = 0,
+                                                             rfs_lead = leads,
+                                                             original_exposure_rfs = exp_rfs, # biofuel_feedstocks_gaez, # exp_rfs, # mapmat[,"Crops"],
+                                                             group_exposure_rfs = FALSE,
+                                                             control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                             control_all_absolute_rfs = TRUE,
+                                                             
                                                              sjpos = est_parameters[["sjpos"]],
                                                              standardization = est_parameters[["standardization"]],
                                                              price_dyn = est_parameters[["price_dyn"]],
@@ -1623,12 +1693,99 @@ for(CNT in c("America", "Asia")){#, "Africa",, , "Africa", "Asia"
                                                              pasture_shares = est_parameters[["pasture_shares"]]
       )
       
-      names(rfs_res_list_continents[[CNT]])[elm] <- paste0(j_crop,"_X_rfs_lag", lags)
+      names(rfs_res_list_continents[[CNT]])[elm] <- paste0(exp_rfs,"_X_init_conv_bio","_lead", leads)
       elm <- elm + 1
     }
+    rfs_res_list_continents[[CNT]][[elm]] <- make_main_reg(continent = CNT,
+                                                           original_sj = "Soybean", 
+                                                           original_Pk = mapmat[mapmat[,"Crops"]=="Soybean", "Prices"], 
+                                                           estimated_effect = "alpha", 
+                                                           
+                                                           rfs_reg = TRUE,
+                                                           placebo_rfs = FALSE,
+                                                           original_rfs_treatments = c("init_conv_bio"),
+                                                           rfs_lag = 0,
+                                                           rfs_lead = leads,
+                                                           original_exposure_rfs = biofuel_feedstocks_gaez, # exp_rfs, # mapmat[,"Crops"],
+                                                           group_exposure_rfs = TRUE,
+                                                           control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                           control_all_absolute_rfs = TRUE,
+                                                           
+                                                           sjpos = est_parameters[["sjpos"]],
+                                                           standardization = est_parameters[["standardization"]],
+                                                           price_dyn = est_parameters[["price_dyn"]],
+                                                           distribution = est_parameters[["distribution"]], 
+                                                           pasture_shares = est_parameters[["pasture_shares"]]
+    )
+    
+    names(rfs_res_list_continents[[CNT]])[elm] <- paste0("bfgrp_X_init_conv_bio","_lead", leads)
+    elm <- elm + 1
   }
 }
 
+### PLOT COEFFICIENTS ### 
+# prepare regression outputs in a tidy data frame readable by dwplot
+rm(df)
+cnt_df_list <- list()
+for(CNT in c("America", "Africa", "Asia")){
+  cnt_df <- lapply(rfs_res_list_continents[[CNT]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
+  cnt_df$term <- gsub(pattern = "_.*$", x = row.names(cnt_df), replacement = "") # replace everything after the first underscore with nothing
+  cnt_df$model <- CNT
+  cnt_df_list[[CNT]] <- cnt_df
+}
+ df <- bind_rows(cnt_df_list)
+ df$significant01 <- if_else(df[,"Pr(>|t|)"] < 0.1, "Significant at 10%", "")
+#df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+row.names(df) <- NULL
+
+title <- "Impacts of RFS ramping up on tropical deforestation, via exposures to different land uses, 2001-2019"
+
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# %>%  add_brackets(brackets)
+# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
+#                  c("Biofuel feedstock", "Sugar", "Maize"))
+{dwplot(df,
+        dot_args = list(size = 2.5,aes( alpha = significant01)),
+        whisker_args = list(size = 1.5, aes(alpha = significant01)),
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(Banana = "Banana", 
+                         Barley = "Barley", 
+                         Fodder = "Pasture", 
+                         Citrus = "Citrus", 
+                         Cocoa  = "Cocoa", 
+                         Coconut = "Coconut", 
+                         Coffee = "Coffee", 
+                         Cotton = "Cotton", 
+                         Groundnut = "Groundnut", 
+                         Maizegrain = "Maize", 
+                         Oat = "Oats", 
+                         Olive = "Olive", 
+                         Oilpalm = "Oil palm", 
+                         Rapeseed = "Rapeseed", 
+                         Rice = "Rice (wet or dry)", 
+                         Rubber = "Rubber", 
+                         Sorghum2 = "Sorghum", 
+                         Soybean = "Soy", 
+                         Sugar = "Sugar (cane or beet)", 
+                         Sunflower = "Sunflower", 
+                         Tea = "Tea", 
+                         Tobacco = "Tobacco", 
+                         Wheat = "Wheat"
+                         )) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.007, 0.001),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank())}  
+
+
+#vecest <- sapply(rfs_res_list_continents[[CNT]], FUN = function(x){x[1,1]})
 
 #### ALPHA DISAGGREGATED sj #### 
 # Here, we run the regression over every j-k combinations of interest, and store and plot the estimates 
