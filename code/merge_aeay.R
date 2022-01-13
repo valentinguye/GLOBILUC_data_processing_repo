@@ -392,6 +392,10 @@ driverloss <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "
 names(driverloss) <- paste0("driven_loss.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
 
 
+driverloss_commodity <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_commodity.tif")) 
+# Rename layers 
+names(driverloss_commodity) <- paste0("driven_loss_commodity.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
+
 ### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
 
 mask <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers.tif"))
@@ -400,10 +404,10 @@ mask(x = gaez,
      mask = mask,
      maskvalue = 0, # necessary here, because the there is no NA in the mask, only 0 and 1 (see the prepare_loss_drivers.R script)
      updatevalue = NA, 
-     filename = here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "driverloss_masked_high_input_all.tif"), 
+     filename = here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "driverloss_masked_high_input_all.tif"), 
      overwrite = TRUE)
 
-gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "driverloss_masked_high_input_all.tif"))
+gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "driverloss_masked_high_input_all.tif"))
 # Rename layers (important, as writing the masked gaez lost the layer names)
 names(gaez_m) <- gaez_crops
 
@@ -414,11 +418,10 @@ names(gaez_m) <- gaez_crops
 fc2k <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_fc_2000.tif"))
 names(fc2k) <- "fc_2000"
 
-
 ### STACK RASTERS TO MERGE ###
 
 # Stack together the annual layers of driverloss-GLC data and GAEZ crop cross sections 
-driverloss_gaez <- stack(driverloss, gaez_m, fc2k)
+driverloss_gaez <- stack(driverloss, driverloss_commodity, gaez_m, fc2k)
 names(driverloss_gaez)
 
 
@@ -442,12 +445,16 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 
 # the dot is, by construction of all variable names, only in the names of time varying variables. 
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
-varying_vars <- names(driverloss_gaez)[grep(".", names(driverloss_gaez), fixed = TRUE)]
+# Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
+# Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
+varying_vars <- list(names(driverloss), 
+                     names(driverloss_commodity))
+#varying_vars <- names(driverloss_gaez)[grep(".", names(driverloss_gaez), fixed = TRUE)]
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
-                          v.names = "driven_loss",
+                          v.names = c("driven_loss","driven_loss_commodity"),
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -462,6 +469,11 @@ years <- seq(2001, 2019, 1) # notice here again that it is not the same years as
 long_df <- mutate(long_df, year = years[year])
 
 long_df <- dplyr::arrange(long_df, grid_id, year)
+
+# d <- long_df[long_df$driven_loss != long_df$driven_loss_commodity,]
+# d <- mutate(d, diff = driven_loss - driven_loss_commodity)
+# summary(d$diff)
+# d[d$diff>0 , c("driven_loss", "driven_loss_commodity")]
 
 
 saveRDS(long_df, here(targetdir, "driverloss_aeay_long.Rdata"))

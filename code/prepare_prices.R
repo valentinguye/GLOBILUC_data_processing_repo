@@ -75,6 +75,7 @@ ps_commo <- c("Banana, US",
               "Coffee, Robusta", 
               "Cotton, A Index",
               "Rice, Thai 5%",
+              "Groundnuts",
               "Groundnut oil", 
               "Maize",
               "Palm oil", 
@@ -103,6 +104,7 @@ names(ps2)[names(ps2) == "Coconut oil"] <- "Coconut_oil"
 names(ps2)[names(ps2) == "Coffee, Arabica"] <- "Coffee" # for the sake of simplicity, because this is the one we will use with GAEZ. 
 names(ps2)[names(ps2) == "Cotton, A Index"] <- "Cotton"
 names(ps2)[names(ps2) == "Crude oil, average"] <- "Crude_oil"
+names(ps2)[names(ps2) == "Groundnuts"] <- "Groundnuts"
 names(ps2)[names(ps2) == "Groundnut oil"] <- "Groundnut_oil"
 names(ps2)[names(ps2) == "Meat, chicken"] <- "Chicken"
 names(ps2)[names(ps2) == "Meat, sheep"] <- "Sheep"
@@ -362,8 +364,8 @@ for(wc in c(names(oil_sha))){
 
 ip <- left_join(ip, soy[,c("year", "soyshare_Soybean_meal", "soyshare_Soybean_oil")], "year")
 
-ip <- mutate(ip, ln_Soy_index := soyshare_Soybean_meal * ln_Soybean_meal + 
-                                 soyshare_Soybean_oil * ln_Soybean_oil)
+ip <- mutate(ip, Soy_index = soyshare_Soybean_meal * Soybean_meal + soyshare_Soybean_oil * Soybean_oil)
+ip <- mutate(ip, ln_Soy_index = log(Soy_index))
 
 
 ## IF WE ARE TO MERGE MACRO FROM USDA
@@ -411,12 +413,25 @@ for(voi in ip_variables){
     
   }
   
+  # past year averages
   for(py in c(2:5)){
     ## Past-year averages (2, 3 and 4 years)  
     # note that we DON'T add voi column (not lagged) in the row mean
     inter_prices$newv <- rowMeans(x = inter_prices[,paste0(voi,"_lag",c(1:py))], na.rm = FALSE)
     inter_prices[is.nan(inter_prices$newv),"newv"] <- NA
     colnames(inter_prices)[colnames(inter_prices)=="newv"] <- paste0(voi,"_",py,"pya")
+  }
+  
+  # leads
+  for(lead in 1){
+    inter_prices <- dplyr::arrange(inter_prices, year)
+    inter_prices <- DataCombine::slide(inter_prices,
+                                       Var = voi, 
+                                       TimeVar = "year",
+                                       NewVar = paste0(voi,"_lead",lead),
+                                       slideBy = lead, 
+                                       keepInvalid = FALSE)
+    inter_prices <- dplyr::arrange(inter_prices, year)
   }
 }
 

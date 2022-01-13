@@ -13,8 +13,8 @@
 
 # These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
 neededPackages = c("Matrix",
-                   "plyr", "dplyr", "here", #"tibble", "data.table",
-                   "foreign", # "readxl",
+                   "plyr", "dplyr", "here",#"tibble", "data.table",
+                   "foreign", "readxl",
                    "raster", "rgdal",  "sp", "sf", # "spdep",
                    "DataCombine",
                    "knitr", "kableExtra",

@@ -1,10 +1,25 @@
+##### 0. PACKAGES, WD, OBJECTS #####
+
+
+### WORKING DIRECTORY SHOULD BE CORRECT IF THIS SCRIPT IS RUN WITHIN R_project_for_individual_runs
+### OR CALLED FROM LUCFP PROJECT master.do FILE.
+### IN ANY CASE IT SHOULD BE (~/LUCFP/data_processing) 
+
 
 ### PACKAGES ###
 # see this project's README for a better understanding of how packages are handled in this project. 
 
-# These are the packages needed in this particular script. 
-neededPackages = c("plyr", "dplyr", "foreign", "here",
-                   "rgdal", "sf", "tmap") #"nngeo"
+# These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
+neededPackages = c("Matrix",
+                   "plyr", "dplyr", "here", #"tibble", "data.table",
+                   "foreign", # "readxl",
+                   "raster", "rgdal",  "sp", "sf", # "spdep",
+                   "DataCombine",
+                   "knitr", "kableExtra",
+                   "fixest", "boot",#,"msm", "car",  "sandwich", "lmtest",  "multcomp",
+                   "ggplot2", "dotwhisker", #"tmap",# "leaflet", "htmltools"
+                   "foreach", "parallel"
+) #"nngeo"
 #install.packages("sf", source = TRUE)
 # library(sf)
 # 
@@ -331,17 +346,17 @@ for(name in dataset_names){
   ## Aggregate suitability indexes to match price data (for Sugar, Fodder, Rice and Sorghum) 
   # and also aggregate crops with common use, including those that would match a price (eg. oat and cotton) bc we do not match SI with prices
   df_cs <- df_cs %>% rowwise(grid_id) %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
-                                                  Fodder = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop  
+                                                  Fodder = max(c(Alfalfa, Napiergrass)), # To adjust once we have Grass as a GAEZ crop.   
                                                   Rice = max(c(Drylandrice, Wetlandrice)),
-                                                  Sorghum2 = max(c(Sorghum, Sorghumbiomass)),
-                                                  bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Switchgrass)),
-                                                  cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye, Oat)),
-                                                  pulses_crops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea, Groundnut)),
-                                                  roots_crops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
+                                                  #Sorghum2 = max(c(Sorghum, Sorghumbiomass)),
+                                                  bioenergyCrops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Sorghum, Sorghumbiomass, Switchgrass)), # from their wikipedia pages, those seem more often used for bioenergy than for feed. 
+                                                  cerealCrops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye, Oat)),
+                                                  pulsesCrops = max(c(Chickpea, Cowpea, Drypea, Gram, Phaseolousbean, Pigeonpea)),
+                                                  rootsCrops = max(c(Cassava, Sweetpotato, Whitepotato, Yam)),
                                                   # oil_crops = max(c(Groundnut, Jatropha, Olive, Rapeseed, Sunflower)), # we have prices for all of them
-                                                  vegetables_crops = max(c(Cabbage, Carrot, Onion, Tomato)),
+                                                  vegetablesCrops = max(c(Cabbage, Carrot, Onion, Tomato))
                                                   # fruits_crops = max(c(Banana, Citrus, Coconut)), # For coconut we have price only for the oil but it does not matter because it's the AESI workstream anyway 
-                                                  industrial_crops = max(c(Flax, Cotton)) # Rubber, directly responsible for deforestation, are not mixed with these.
+                                                  # industrial_crops = max(c(Flax)) # Rubber, directly responsible for deforestation, are not mixed with these.
                                                   # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
                                                   
   ) %>% as.data.frame()
@@ -352,18 +367,18 @@ for(name in dataset_names){
   # indivcrops_to_std <- c("Cocoa", "Coffee", "Fodder", "Oilpalm", "Rubber", "Soybean")
   
   # we need a slightly modified version of gaez_crops, that does not include elements of aggregated crops, but includes aggregated crops
-  # (necessary for Fodder, Sugar, Rice, Sorghum2, but not for the _crops variables actually, in the current version that does not 
-  # account for the number of crops having equal suitable indexes. 
-  all_crops <- gaez_crops[!(gaez_crops %in% c("Alfalfa", "Napiergrass", "Sugarbeet", "Sugarcane", 
-                                              "Drylandrice", "Wetlandrice", "Sorghum", "Sorghumbiomass", 
-                                              "Jatropha", "Miscanthus", "Reedcanarygrass", "Switchgrass", 
-                                              "Buckwheat", "Foxtailmillet", "Pearlmillet", "Rye", 
-                                              "Chickpea", "Cowpea", "Drypea", "Gram", "Phaseolousbean", "Pigeonpea", 
-                                              "Cassava", "Sweetpotato", "Whitepotato", "Yam", 
+  # (necessary for Fodder, Sugar, Rice, Sorghum2)
+  all_crops <- gaez_crops[!(gaez_crops %in% c("Alfalfa", "Napiergrass", "Sugarbeet", "Sugarcane", "Drylandrice", "Wetlandrice", 
+                                              "Jatropha", "Miscanthus", "Reedcanarygrass", "Sorghum", "Sorghumbiomass", "Switchgrass",
+                                              "Buckwheat", "Foxtailmillet", "Pearlmillet", "Rye", "Oat",
+                                              "Chickpea", "Cowpea", "Drypea", "Gram", "Phaseolousbean", "Pigeonpea",
+                                              "Cassava", "Sweetpotato", "Whitepotato", "Yam",
                                               "Cabbage", "Carrot", "Onion", "Tomato", 
-                                              "Flax"))]
-  
-  all_crops <- c(all_crops, "Fodder", "Sugar", "Rice", "Sorghum2")#"bioenergy_crops", "cereal_crops", "pulses_crops", "roots_crops", "vegetables_crops", "industrial_crops"
+                                              "Flax"
+                                              ))]
+  # keep only major commercial crops, or crops directly substitutable to maize. 
+  all_crops <- c(all_crops, "Fodder", "Sugar", "Rice", # "Sorghum2",
+                  "bioenergyCrops", "cerealCrops") #, "pulsesCrops", "rootsCrops", "vegetablesCrops", "industrial_crops" 
   
   ## First way to standardize, sum (the denominator) over all crops
   # To understand these lines, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
@@ -404,7 +419,7 @@ for(name in dataset_names){
   
   # _std do not sum up to 1, because the _crops vars weight in the denominator but are not counted in the sum. 
   # _std1 do sum up to 1. 
-  # df_cs[876,paste0(indivcrops_to_std, "_std")]%>%sum()
+  # df_cs[87687,paste0(all_crops, "_std1")]%>%sum()
   
   ## N = 2: 2nd highest:
   # work on a separate dataset, because the following modifies the base SI data (needed to make SI of non-top2 crops equal to 0)
@@ -466,9 +481,10 @@ for(name in dataset_names){
   
   # Select variables to save: only newly constructed variables (not grouped crops), and id
   var_names <- c(paste0(all_crops, "_std"), paste0(all_crops, "_std1"), paste0(all_crops, "_std2"))
-  # this is to add if we want non stded grouped crops too: | grepl(pattern = "_crops", x = names(df_cs_saved))
   # and we want the new variables in non std format too 
-  df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2", var_names)]
+  df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar", #"Sorghum2", 
+                    "bioenergyCrops", "cerealCrops", # "pulsesCrops", "rootsCrops", "vegetablesCrops", 
+                    var_names)]
   
   saveRDS(df_cs, paste0(here(origindir, name), "_stdsi.Rdata"))  
   rm(df_cs, working_df_cs, path)
@@ -572,6 +588,58 @@ dataset_names <- c("glass_aeay_long",
                    "phtfloss_aeay_long", 
                    "driverloss_aeay_long")
 
+name <- dataset_names[4]
+
+
+prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
+
+### This matrix is used for maping crops from GAEZ with commodities from price data sets
+mapmat_data <- c(
+  "Banana","Banana",
+  "Barley", "Barley",
+  "Beef", "Fodder", # these crop categories are gonna be created in the present script 
+  "Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
+  "Cocoa", "Cocoa",
+  # "Coconut_oil", "Coconut", See below, in conversion part, why we exclude coconut 
+  "Coffee", "Coffee",
+  "Cotton", "Cotton",
+  "Groundnuts", "Groundnut",
+  "Maize", "Maizegrain",
+  "Oat", "Oat",
+  "Olive_oil", "Olive",  
+  "Palm_oil", "Oilpalm",
+  "Rapeseed_oil", "Rapeseed",
+  "Rice", "Rice",
+  "Rubber", "Rubber",
+  "Sorghum", "Sorghum2", # these crop categories are gonna be created in the present script
+  "Soybean", "Soybean",
+  "Soybean_meal", "Soybean_meal", # these crop categories are gonna be created in the present script
+  "Soybean_oil", "Soybean_oil", # these crop categories are gonna be created in the present script
+  "Sugar", "Sugar", # these crop categories are gonna be created in the present script
+  # "Sugarbeet", "Sugarbeet",
+  # "Sugarcane", "Sugarcane",
+  "Sunflower_oil", "Sunflower",
+  "Tea", "Tea",
+  "Tobacco", "Tobacco", 
+  "Wheat", "Wheat")
+
+mapmat <- matrix(data = mapmat_data, 
+                 nrow = length(mapmat_data)/2,
+                 ncol = 2, 
+                 byrow = TRUE)
+
+colnames(mapmat) <- c("Prices", "Crops")
+
+
+# no vlaue missing for any of these commodities in the broad period 1991-2019
+working_prices <- prices[,c("year", mapmat[,"Prices"])]%>%filter(year>1990 & year < 2020)
+
+# make average prices
+price_avg <- prices %>% 
+  filter(year>=2000 & year <= 2019) %>% 
+  summarise(across(.cols = any_of(mapmat[,"Prices"]), 
+                   .fns = mean, na.rm = TRUE))
+
 #### GROUP AEAY CROPS #### 
 # name = dataset_names[1]
 
@@ -601,6 +669,99 @@ for(name in dataset_names){
                                           # # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
   ) %>% as.data.frame()
   
+  ## TONS OF WHAT? For some crops, the AEAY quantity does not necessarily match the market price unit  
+  # "For most crops the agro-climatic potential yield is given as kg dry weight per hectare. 
+  # For alfalfa, miscanthus, switchgrass, reed canary grass, napier grass, pasture legumes and grasses the yield is given in 10 kg dry weight per hectare. 
+  # For sugar beet and sugarcane (and hence Sugar, the max of them) yields are in kg sugar per hectare, 
+  # and for oil palm and olives in kg oil per hectare. Cotton yield is given as kg lint per hectare." 
+  # https://gaez.fao.org/pages/theme-details-theme-3
+  
+  
+  # COCONUT. 
+  # Coconut cannot be converted to coconut oil, as it is made of only a by product of coconut; 
+  # We would not correctly estimate the value of coconut if we counted the whole coconut yield as the copra byproduct;   
+  
+  # COTTON.
+  # From FAO documentation and v4 data visualization, the unit of cotton AEAY is kg lint/ha. 
+  # cotton lint is "raw ginned cotton which is ready for baling" (baling is 'packing' cotton in standard volumes), see there for definitions http://agropedia.iitk.ac.in/content/glossary-useful-terms-related-cotton
+  # the price in pink sheet is in $/kg and comes from Cotton Outlook A Index, which is expressed for 'raw cotton', see there https://www.cotlook.com/information-2/the-cotlook-indices-an-explanation/
+  # which I understand as being raw ginned cotton, as it is given for a particular grade, and ginned (baled) cotton is graded, not pure raw cotton (before ginning)
+  # THUS, the price is expressed in the same unit as the AEAY
+  
+  # FODDER. 
+  # Convert fodder crop yield into beef by a feed conversion ratio. 
+  # Following Galloway et al. 2007 who get a ratio of 20 (feed to meat conversion rate of 0.05) for ruminants (beef and sheep and goats) on non arable land (i.e. for fodder, not feed from crops which is more efficient)
+  # This is quite similar to Alexander et al. 2016, 25 tons of feed transform into 1 ton of beef meat (in edible weight). 
+  # Galloway being more specific about FCR of non-arable land feed, we retain this. 
+  # Lower (more efficient) FCR found in the literature, typically below 10, represent feed, not fodder (often necessary to compare with non-ruminants)
+  # Thus, every ton of fodder (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/20 ton of beef meat  
+  df_cs <- dplyr::mutate(df_cs, Fodder = Fodder * 0.05)
+  
+  
+  # GROUNDNUT. 
+  # Oil content is 45-56% in https://link.springer.com/chapter/10.1007%2F978-94-011-0733-4_6 as reporte by https://link.springer.com/article/10.1007/s11746-017-2981-3
+  # it is 31% in table 32 in https://www.ers.usda.gov/webdocs/publications/41880/33132_ah697_002.pdf
+  # Because it's a bit unclear what the value is in the literature, and price is available in PS for groudnuts (not oil), we don't convert. 
+  
+  # OLIVE AND OIL PALM. 
+  # They are expressed in oil already, as in the price data. Hence nothing to do. 
+  
+  # RAPESEED.
+  # Seeds contain around 41% oil see Table 4 in Yasar 2018, and https://www.agmrc.org/commodities-products/grains-oilseeds/rapeseed 
+  df_cs <- dplyr::mutate(df_cs, Rapeseed = Rapeseed * 0.41)
+  
+  # RUBBER. 
+  # "In general, latex contains about 30-40 % of rubber particles and 55-65 % of water. However, fresh latex shows 15-45 % of rubber hydrocarbon and about
+  # 2-4 % of non-rubber ingredients [2]. Latex is usually sold either in the form of dry rubber sheet or concentrated rubber solution."
+  # https://www.measurement.sk/2014/Kerdtongmee.pdf
+  # So the RSS3 product the PS price is for, is Ribbed Smoked Sheet (dry rubber sheet), i.e. a raw form of latex, that is said to have a dry rubber content of 30-40%. 
+  # Dry rubber content from this page (60%) is for concentrated rubber/latex, not RSS http://www.unistarglobal.com/natural_rubber.php 
+  # So here 1 ton of dry rubber is diluted to produce a higher weight of RSS. 
+  df_cs <- dplyr::mutate(df_cs, Rubber = Rubber / 0.35)
+  
+  
+  # SUNFLOWER
+  # The oil content is set at 42%, https://www.sciencedirect.com/science/article/pii/B9780123849472006747
+  # it is 40.5% in table 32 in https://www.ers.usda.gov/webdocs/publications/41880/33132_ah697_002.pdf and https://www.agmrc.org/commodities-products/grains-oilseeds/sunflower-profile 
+  # in Table 4 in Yasar 2018 it's 40-50%, 
+  # 22–55% oil content (Flagella et al. 2002; Gonzalez-Martin et al. 2013) as reported in https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5976617/
+  df_cs <- dplyr::mutate(df_cs, Sunflower = Sunflower * 0.42)
+  
+  # SOY
+  # 18% of the seed is extracted as oil and 82% as meal, so we make two distinct yields 
+  df_cs <- dplyr::mutate(df_cs, Soybean_oil = Soybean * 0.18)
+  df_cs <- dplyr::mutate(df_cs, Soybean_meal = Soybean * 0.82)
+  # Compute also the value for mere Soy beans
+
+  # TOBACCO. 
+  # prices are for unmanufactured tobacco 
+  
+  ## CONVERT TO FROM kg/ha to ton/ha
+  # All prices have been converted to $/ton in prepare_prices.R but all yields are expressed in kg/ha
+  df_cs <- dplyr::mutate(df_cs, across(.cols = all_of(mapmat[,"Crops"]),
+                                       .fns = ~./1000)) 
+  # Convert Nappier grass and alfalfa (components of Fodder) from now 10 tons to tons. 
+  df_cs <- dplyr::mutate(df_cs, across(.cols = all_of("Fodder"),
+                                       .fns = ~.*10)) 
+  
+  ## Interact with average prices to get Expected Agro-Ecological Attainable Revenue (EAEAR)
+  
+  # Prices have been converted to $/t in prepare_prices.R
+  for(aeay_i in mapmat[,"Crops"]){
+    price_i <- price_avg[mapmat[mapmat[,"Crops"]==aeay_i,"Prices"]]%>%as.numeric()
+    eaear_i <- paste0("eaear_", aeay_i)
+    df_cs <- dplyr::mutate(df_cs, 
+                           !!as.symbol(eaear_i) := !!as.symbol(aeay_i) * price_i)
+  }
+  
+  # and for Soy commodities: 
+  df_cs <- dplyr::mutate(df_cs, eaear_Soy_compo = eaear_Soybean_oil + eaear_Soybean_meal)
+  
+  # the highest values for Soy_compo represent the value added from processing into oil/meals
+  summary(df_cs$eaear_Soybean)
+  summary(df_cs$eaear_Soy_compo)
+  
+  ### STANDARDIZE ### 
   # Select only newly constructed variables, and id
   df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2")]
   
