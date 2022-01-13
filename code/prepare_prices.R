@@ -872,6 +872,12 @@ rm(prices, fao, imf, ip, ps, ps2, crops, fpi_2014_16, muv_index_2014_16, period,
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
+coffee_p <- prices[,names(prices)%in%c("year", "country_name", "ppslc.Coffee", "ip_Coffee", "ip_Coffee, Robusta")]
+coffee_p <- dplyr::filter(coffee_p, year > 2000, year < 2020)
+unique(coffee_p$country_name)
+summary(coffee_p$ppslc.Coffee)
+summary(coffee_p$ip_Coffee)
+summary(coffee_p$`ip_Coffee, Robusta`)
 # # Map Pink Sheet and IMF commodities with GAEZ crops
 # # Rename layers (will be lost when writing the masked_gaez in the current code, so useless here and we rename later)
 # gaez_crops <- list.files(path = here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input"), 

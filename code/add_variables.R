@@ -611,7 +611,7 @@ mapmat_data <- c(
   "Rapeseed_oil", "Rapeseed",
   "Rice", "Rice",
   "Rubber", "Rubber",
-  "Sorghum", "Sorghum2", # these crop categories are gonna be created in the present script
+  "Sorghum", "Sorghum", 
   "Soybean", "Soybean",
   "Soybean_meal", "Soybean_meal", # these crop categories are gonna be created in the present script
   "Soybean_oil", "Soybean_oil", # these crop categories are gonna be created in the present script
@@ -640,7 +640,7 @@ price_avg <- prices %>%
   summarise(across(.cols = any_of(mapmat[,"Prices"]), 
                    .fns = mean, na.rm = TRUE))
 
-#### GROUP AEAY CROPS #### 
+#### GROUP AND STANDARDIZE AEAY CROPS #### 
 # name = dataset_names[1]
 
 for(name in dataset_names){
@@ -656,7 +656,7 @@ for(name in dataset_names){
   df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
                                           Fodder = max(c(Alfalfa, Napiergrass)),   
                                           Rice = max(c(Drylandrice, Wetlandrice)),
-                                          Sorghum2 = max(c(Sorghum, Sorghumbiomass))
+                                          # Sorghum2 = max(c(Sorghum, Sorghumbiomass)) don't add Sorghumbiomass because only Sorghum will match the price time series we have
                                           # We surely wont need these in the AEAY workflow, as we need to interact these variables with a price and there is no price for those. 
                                           # bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Sorghumbiomass, Switchgrass)),
                                           # cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye)),
@@ -669,6 +669,8 @@ for(name in dataset_names){
                                           # # narcotics_crops = max(c(Cocoa, Coffee, Tea, Tobacco)), # We have prices for all of them
   ) %>% as.data.frame()
   
+  # keep only crops of interest 
+  df_cs <- df_cs[, names(df_cs) %in% c("grid_id", "lon", "lat", mapmat[,"Crops"])]
   ## TONS OF WHAT? For some crops, the AEAY quantity does not necessarily match the market price unit  
   # "For most crops the agro-climatic potential yield is given as kg dry weight per hectare. 
   # For alfalfa, miscanthus, switchgrass, reed canary grass, napier grass, pasture legumes and grasses the yield is given in 10 kg dry weight per hectare. 
@@ -755,23 +757,129 @@ for(name in dataset_names){
   }
   
   # and for Soy commodities: 
-  df_cs <- dplyr::mutate(df_cs, eaear_Soy_compo = eaear_Soybean_oil + eaear_Soybean_meal)
+  df_cs <- dplyr::mutate(df_cs, eaear_Soy_compo =  eaear_Soybean_meal + eaear_Soybean_oil)
   
   # the highest values for Soy_compo represent the value added from processing into oil/meals
   summary(df_cs$eaear_Soybean)
   summary(df_cs$eaear_Soy_compo)
+  # Retain processed soy commodities, because this is more traded, and more comparable to the other oil seeds that are expressed in oil too. 
+  df_cs <- dplyr::select(df_cs, -eaear_Soybean, -eaear_Soybean_meal, -eaear_Soybean_oil)
   
   ### STANDARDIZE ### 
-  # Select only newly constructed variables, and id
-  df_cs <- df_cs[,c("grid_id", "Fodder", "Rice", "Sugar", "Sorghum2")]
   
-  # # merge back to panel - NOPE, not anymore
-  # df <- left_join(df, df_cs, by = "grid_id")
+  # crops to standardize 
+  crops2std <- grep(names(df_cs), pattern = "eaear_", value = TRUE)
   
-  # Keep only new variables and id
-  # df_cs <- df_cs[,(names(df_cs)=="grid_id" | grepl(pattern = "_std", x = names(df_cs)))]
+  # divide each revenue variable by the sum of them, to standardize.
+  # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
+  df_cs <- dplyr::mutate(df_cs, eaear_sum = rowSums(across(.cols = any_of(crops2std))))
   
-  saveRDS(df_cs, paste0(here(origindir, name), "_groupedcrops.Rdata"))  
+  df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(crops2std),
+                                       .fns = ~./eaear_sum, 
+                                       .names = paste0("{.col}", "_std"))) 
+  
+  df_cs <- dplyr::select(df_cs, -eaear_sum)
+  
+  ## Second way to standardize: for each crop that can be matched with a price, 
+  # standardize by dividing by the sum of the suitability indexes of the N (N = 1,2) crops with the highest suitability (among all, not only among the six drivers), 
+  # and give a 0 value to the crops that are not in the top N suitability index. 
+  # if N = 1, this procedure is equivalent to sj = 1[Sj = max(Si)]
+  
+  # this code is intricate but it handles potential but unlikely cases where two crops have equal EAEAR
+  
+  # identify the highest suitability index values (in every grid cell)
+  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_eaear = max(c_across(cols = any_of(crops2std)))) %>% as.data.frame()
+  
+  ## N = 1
+  # if N = 1, this procedure is equivalent to sj = 1[Sj = max(Si)]
+  df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(crops2std),
+                                       .fns = ~if_else(.==max_eaear, true = 1, false = 0), 
+                                       .names = paste0("{.col}", "_ismax")))
+  
+  # and then standardize by the number of different crops being the highest
+  all_crops_ismax <- paste0(crops2std,"_ismax")
+  df_cs <- dplyr::mutate(df_cs, n_max = rowSums(across(.cols = (any_of(all_crops_ismax)))))
+  
+  unique(df_cs$n_max) # 22 is when GAEZ is NA
+  # df_cs[df_cs$n_max==22,]
+
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops_ismax)),
+                                       .fns = ~./n_max, 
+                                       .names = paste0("{.col}", "_std1")))
+  
+  # remove those columns
+  df_cs <- dplyr::select(df_cs, !ends_with("_ismax"))  
+  
+  # rename new ones 
+  names(df_cs)[grepl("_std1", names(df_cs))] <- paste0(crops2std, "_std1")
+  
+  # _std1 do sum up to 1. 
+  # df_cs[87687,paste0(crops2std, "_std")]%>%sum()
+  
+  ## N = 2: 2nd highest:
+  # work on a separate dataset, because the following modifies the base SI data (needed to make SI of non-top2 crops equal to 0)
+  working_df_cs <- df_cs
+  
+  # loop is not efficient but don't know how to code 2nd highest with dplyr
+  working_df_cs$max_si_2nd <- NA
+  for(i in 1:nrow(working_df_cs)){
+    # vector of interest
+    x <- working_df_cs[i,crops2std]
+    # max value of the row
+    #row_max_eaear <- working_df_cs[i,"max_eaear"]
+    
+    # second max value
+    # we want to include 2 highest values even if there are more than one crop that have the max value and the 2nd max value, hence the lines below are commented out
+    working_df_cs[i,"max_eaear_2nd"] <- max(x[x<working_df_cs[i,"max_eaear"]])
+    # if we wanted to handle cases with more than one max values
+    #   if(length(which(x == row_max_si))==1){# i.e. if there is only one crop with the highest value
+    #     df_cs[i,"max_si_2nd"] <-  row_max_si_2nd
+    #   }else{
+    #     df_cs[i,"max_si_2nd"] <- row_max_si
+    #   }
+    
+    # /!\ modify SI values (to 0) for all the crops that are not in the top 2 - this is equivalent to weighting by 1 if crop is in top 2, and by 0 if not. 
+    working_df_cs[i,names(x[which(x < working_df_cs[i,"max_eaear_2nd"])])] <- 0
+  }
+  rm(row_max_si, x)
+  
+  # then we are able to sum over all crops with weights = 1 if crop is in top 2, 0 if not. 
+  working_df_cs <- dplyr::mutate(working_df_cs, eaear_sum_top2wgted = rowSums(across(.cols = (any_of(crops2std)))))
+  # and standardize 
+  working_df_cs <- dplyr::mutate(working_df_cs, across(.cols = (any_of(crops2std)),
+                                                       .fns = ~./(eaear_sum_top2wgted), 
+                                                       .names = paste0("{.col}", "_std2")))
+  
+  # w <- working_df_cs
+  # df_cs[875,crops2std]
+  # df_cs[875, c(indivcrops_to_std,"si_sum")]
+  # df_cs[875, c(paste0(indivcrops_to_std,"_std"),"si_sum")]
+  # w[875, c(crops2std,"max_si", "max_si_2nd", "si_sum_top2wgted")]
+  # w[875, paste0(crops2std, "_std1")] %>% sum()
+  # working_df_cs <- dplyr::mutate(working_df_cs, sum_2_max_si = rowSums(across(.cols = c(max_si, max_si_2nd))))#contains("_crops") |
+  
+  
+  
+  # working_df_cs <- dplyr::mutate(working_df_cs, across(.cols = (any_of(crops2std)),#contains("_crops") |
+  #                                      .fns = ~./(sum_2_max_si),
+  #                                      .names = paste0("{.col}", "_std2")))
+  
+  # Add standardized variables to the initial data
+  std2_var_names <- names(working_df_cs)[grepl(pattern = "_std2", x = names(working_df_cs))]
+  df_cs <- inner_join(df_cs, working_df_cs[,c("grid_id",std2_var_names)], by = "grid_id")
+  
+  ## Crops we need a standardized version of SI: those that can be matched with a price
+  # indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder",
+  #                        "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber",
+  #                        "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
+  # Adding up the *_std2 over indivcrops_to_std won't equal 1, but this is not an issue. 
+  
+  # Select variables to save: only newly constructed variables (not grouped crops), and id
+  var_names <- grep(pattern = "eaear_", names(df_cs), value = TRUE) 
+  # and we want the new variables in non std format too 
+  df_cs <- df_cs[,c("grid_id", var_names)]
+
+  saveRDS(df_cs, paste0(here(origindir, name), "_stdeaear.Rdata"))  
   rm(df_cs, path)
 }
 
@@ -809,29 +917,32 @@ for(name in dataset_names){
   final <- left_join(final, df_continent, by = "grid_id")
   rm(df_continent)
   
-  # Grouped crops
-  grouped_path <- paste0(here(origindir, name), "_groupedcrops.Rdata")
-  df_grouped <- readRDS(grouped_path)  
+  # Standardized EAEAR
+  stdeaear_path <- paste0(here(origindir, name), "_stdeaear.Rdata")
+  df_stdeaear <- readRDS(stdeaear_path)  
   
-  final <- left_join(final, df_grouped, by = "grid_id")
-  rm(df_grouped)
+  df_stdeaear <- dplyr::select(df_stdeaear, -Fodder, -Rice, -Sugar)
+  df_stdeaear <- left_join(df_stdeaear, df_cs, by = "grid_id")
+  
+  final <- left_join(final, df_stdeaear, by = "grid_id")
+  rm(df_stdeaear)
   
   # Pasture 2000 share of area variable
   if(name == "driverloss_aeay_long"){
     df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
     names(df_pasture)[names(df_pasture)=="driverloss_masked_pasture"] <- "pasture_share"
     
-    final <- left_join(final, df_pasture, by = c("lon", "lat"))
+    final <- left_join(final, df_pasture, by = c("lon", "lat")) # /!\ THIS ACTUALLY DOES NOT MATCH PERFECTLY. HANDLE IF WE REALLY WANT TO USE PASTURE SHARES
     rm(df_pasture)
     
     # remaining
     # was run only on aesi, hence aesi in the name, but works for aeay too. 
     df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
-    final <- left_join(final, df_remain, by = c("grid_id", "year"))
+    final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
     rm(df_remain)
   }
   
-  # Create country trends variable
+  # Create country year fixed effect
   final <- mutate(final, country_year = paste0(country_name, "_", year))
   
   saveRDS(final, paste0(here(origindir, name), "_final.Rdata"))
@@ -842,4 +953,31 @@ for(name in dataset_names){
 
 
 
-  
+
+
+### Compare with actual production from GAEZ project
+coffee <- read.csv(here("input_data", "cof_rg2_High_CRUTS32", "cof_CRUTS32_Hist_8110Hr_rg2.csv")) # 8110 for 1981-2010, H for high input, r for rainfed
+coffee <- coffee[,c("WRLDREG_NAME", "AEZ", "PROD_VS", "PROD_S", "PROD_MS", "PROD_mS", "PROD_vmS", "P_VS...mS")]
+
+coffee_cnt <- ddply(coffee, "WRLDREG_NAME", summarise, 
+                    PROD_VS = mean(PROD_VS, na.rm = TRUE), 
+                    PROD_S = mean(PROD_S, na.rm = TRUE),
+                    PROD_S = mean(PROD_S, na.rm = TRUE),
+                    PROD_mS = mean(PROD_mS, na.rm = TRUE),
+                    PROD_vmS = mean(PROD_vmS, na.rm = TRUE),
+                    P_VS...mS = mean(P_VS...mS, na.rm = TRUE))
+
+
+rubber <- read.csv(here("input_data", "rub_rg2_High_CRUTS32", "rub_CRUTS32_Hist_8110Hr_rg2.csv")) # 8110 for 1981-2010, H for high input, r for rainfed
+
+
+rubber <- rubber[,c("WRLDREG_NAME", "AEZ", "PROD_VS", "PROD_S", "PROD_MS", "PROD_mS", "PROD_vmS", "P_VS...mS")]
+
+rubber_cnt <- ddply(rubber, "WRLDREG_NAME", summarise, 
+                    PROD_VS = mean(PROD_VS, na.rm = TRUE), 
+                    PROD_S = mean(PROD_S, na.rm = TRUE),
+                    PROD_S = mean(PROD_S, na.rm = TRUE),
+                    PROD_mS = mean(PROD_mS, na.rm = TRUE),
+                    PROD_vmS = mean(PROD_vmS, na.rm = TRUE),
+                    P_VS...mS = mean(P_VS...mS, na.rm = TRUE))
+
