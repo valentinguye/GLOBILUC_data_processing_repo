@@ -11,27 +11,21 @@
 
 # These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
 neededPackages = c("Matrix",
-                   "plyr", "dplyr", "here", #"tibble", "data.table",
-                   "foreign", # "readxl",
+                   "plyr", "dplyr", "here",#"tibble", "data.table",
+                   "foreign", "readxl",
                    "raster", "rgdal",  "sp", "sf", # "spdep",
                    "DataCombine",
                    "knitr", "kableExtra",
                    "fixest", "boot",#,"msm", "car",  "sandwich", "lmtest",  "multcomp",
                    "ggplot2", "dotwhisker", #"tmap",# "leaflet", "htmltools"
                    "foreach", "parallel"
-) #"nngeo"
-#install.packages("sf", source = TRUE)
-# library(sf)
-# 
-# neededPackages = c("tidyverse","data.table", "readxl","foreign", "data.table", "readstata13", "here",
-#                    "rgdal", "raster", "velox","sp", "lwgeom", "rnaturalearth", 
-#                    "rlist", "parallel", "foreach", "iterators", "doParallel" )
-# 
+)
+# "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
 
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
 
-# Load them 
+# Load them
 lapply(neededPackages, library, character.only = TRUE)
 
 # /!\/!\ IF renv::restore(neededPackages) FAILS TO INSTALL SOME PACKAGES /!\/!\ 
@@ -574,7 +568,7 @@ for(name in dataset_names){
 
 
 
-#### Define GAEZ AEAY variables ####
+#### DEFINE GAEZ AEAY VARIABLES ####
 gaez_crops <- list.files(path = here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
@@ -630,6 +624,22 @@ mapmat <- matrix(data = mapmat_data,
 
 colnames(mapmat) <- c("Prices", "Crops")
 
+# this vector is used to convert potential production in dry weight from GAEZ into weight of traded commodities. 
+# Olive, Oil palm, and Sugar crops are already provided in GAEZ in units of traded goods (oil or sugar)
+conv_fac <- c(Wheat = 0.87, 
+              Rice = 0.87, 
+              Maizegrain = 0.86, 
+              Sorghum = 0.87, 
+              Barley = 0.87, 
+              Oat = 0.87, 
+              Soybean = 0.90, 
+              Rapeseed = 0.90, 
+              Sunflower = 0.92, 
+              Groundnut = 0.65, # this is applied to go from shelled groundnuts to GAEZ dry weight 
+              # Cotton = 0.33, we won't use this, see below paragraph on cotton
+              Banana = 0.25, # from banana to dry weight banana
+              Tobacco = 0.75) # from traded tobacco dry leaves to GAEZ dry weight (i.e. traded leaves have water content of 25%)  
+
 
 # no vlaue missing for any of these commodities in the broad period 1991-2019
 working_prices <- prices[,c("year", mapmat[,"Prices"])]%>%filter(year>1990 & year < 2020)
@@ -678,6 +688,13 @@ for(name in dataset_names){
   # and for oil palm and olives in kg oil per hectare. Cotton yield is given as kg lint per hectare." 
   # https://gaez.fao.org/pages/theme-details-theme-3
   
+  # BANANA. 
+  # Just convert from dry matter weight
+  df_cs <- dplyr::mutate(df_cs, Banana = Banana / conv_fac["Banana"])
+  
+  # BARLEY. 
+  # Just convert from dry matter weight
+  df_cs <- dplyr::mutate(df_cs, Barley = Barley / conv_fac["Barley"])
   
   # COCONUT. 
   # Coconut cannot be converted to coconut oil, as it is made of only a by product of coconut; 
@@ -689,6 +706,7 @@ for(name in dataset_names){
   # the price in pink sheet is in $/kg and comes from Cotton Outlook A Index, which is expressed for 'raw cotton', see there https://www.cotlook.com/information-2/the-cotlook-indices-an-explanation/
   # which I understand as being raw ginned cotton, as it is given for a particular grade, and ginned (baled) cotton is graded, not pure raw cotton (before ginning)
   # THUS, the price is expressed in the same unit as the AEAY
+  # NOTE that the conversion factor of 0.33 used in GAEZ should not be applied, because it converts from seed cotton to cotton lint to match with FAOSTAT data, which is expressed in seed cotton weight. 
   
   # FODDER. 
   # Convert fodder crop yield into beef by a feed conversion ratio. 
@@ -697,20 +715,31 @@ for(name in dataset_names){
   # Galloway being more specific about FCR of non-arable land feed, we retain this. 
   # Lower (more efficient) FCR found in the literature, typically below 10, represent feed, not fodder (often necessary to compare with non-ruminants)
   # Thus, every ton of fodder (coming from agro-climatically achievable yields in ton/ha) is scaled to 1/20 ton of beef meat  
-  df_cs <- dplyr::mutate(df_cs, Fodder = Fodder * 0.05)
-  
+  # BUT needs to account for a dry matter content conversion to actually grazed feed. 
+  # We apply an dry matter content of 0.271 as reported for summer green chop alfalfa in https://www.ccof.org/sites/default/files/Feed%20Type%20DMI%20Table%20Final.pdf
+  # (which has a similar dry matter content as napier grass)
+  df_cs <- dplyr::mutate(df_cs, Fodder = Fodder * 0.05 / 0.271)
   
   # GROUNDNUT. 
   # Oil content is 45-56% in https://link.springer.com/chapter/10.1007%2F978-94-011-0733-4_6 as reporte by https://link.springer.com/article/10.1007/s11746-017-2981-3
   # it is 31% in table 32 in https://www.ers.usda.gov/webdocs/publications/41880/33132_ah697_002.pdf
-  # Because it's a bit unclear what the value is in the literature, and price is available in PS for groudnuts (not oil), we don't convert. 
+  # Because it's a bit unclear what the value is in the literature, and price is available in PS for groudnuts (not oil), we don't convert to oil.
+  # Nevertheless, we convert from DM weight to shelled weight
+  df_cs <- dplyr::mutate(df_cs, Groundnut = Groundnut / conv_fac["Groundnut"])
   
+  # MAIZE. 
+  # Just convert from dry matter weight
+  df_cs <- dplyr::mutate(df_cs, Maizegrain = Maizegrain / conv_fac["Maizegrain"])
+  
+  # OAT
+  df_cs <- dplyr::mutate(df_cs, Oat = Oat / conv_fac["Oat"])
+
   # OLIVE AND OIL PALM. 
   # They are expressed in oil already, as in the price data. Hence nothing to do. 
   
   # RAPESEED.
   # Seeds contain around 41% oil see Table 4 in Yasar 2018, and https://www.agmrc.org/commodities-products/grains-oilseeds/rapeseed 
-  df_cs <- dplyr::mutate(df_cs, Rapeseed = Rapeseed * 0.41)
+  df_cs <- dplyr::mutate(df_cs, Rapeseed = Rapeseed * 0.41 / conv_fac["Rapeseed"])
   
   # RUBBER. 
   # "In general, latex contains about 30-40 % of rubber particles and 55-65 % of water. However, fresh latex shows 15-45 % of rubber hydrocarbon and about
@@ -721,22 +750,36 @@ for(name in dataset_names){
   # So here 1 ton of dry rubber is diluted to produce a higher weight of RSS. 
   df_cs <- dplyr::mutate(df_cs, Rubber = Rubber / 0.35)
   
+  # SORGHUM. 
+  # Just convert from dry matter weight
+  df_cs <- dplyr::mutate(df_cs, Sorghum = Sorghum / conv_fac["Sorghum"])
   
   # SUNFLOWER
   # The oil content is set at 42%, https://www.sciencedirect.com/science/article/pii/B9780123849472006747
   # it is 40.5% in table 32 in https://www.ers.usda.gov/webdocs/publications/41880/33132_ah697_002.pdf and https://www.agmrc.org/commodities-products/grains-oilseeds/sunflower-profile 
   # in Table 4 in Yasar 2018 it's 40-50%, 
   # 22–55% oil content (Flagella et al. 2002; Gonzalez-Martin et al. 2013) as reported in https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5976617/
-  df_cs <- dplyr::mutate(df_cs, Sunflower = Sunflower * 0.42)
+  df_cs <- dplyr::mutate(df_cs, Sunflower = Sunflower * 0.42 / conv_fac["Sunflower"])
   
   # SOY
   # 18% of the seed is extracted as oil and 82% as meal, so we make two distinct yields 
-  df_cs <- dplyr::mutate(df_cs, Soybean_oil = Soybean * 0.18)
-  df_cs <- dplyr::mutate(df_cs, Soybean_meal = Soybean * 0.82)
+  df_cs <- dplyr::mutate(df_cs, Soybean_oil = Soybean * 0.18 / conv_fac["Soybean"])
+  df_cs <- dplyr::mutate(df_cs, Soybean_meal = Soybean * 0.82 / conv_fac["Soybean"])
   # Compute also the value for mere Soy beans
 
+  # RICE 
+  # Just convert from dry matter weight
+  df_cs <- dplyr::mutate(df_cs, Rice = Rice / conv_fac["Rice"])
+  
   # TOBACCO. 
   # prices are for unmanufactured tobacco 
+  # Just convert from dry matter weight
+  df_cs <- dplyr::mutate(df_cs, Tobacco = Tobacco / conv_fac["Tobacco"])
+  
+  # WHEAT. 
+  # Just convert from dry matter weight
+  df_cs <- dplyr::mutate(df_cs, Wheat = Wheat / conv_fac["Wheat"])
+  
   
   ## CONVERT TO FROM kg/ha to ton/ha
   # All prices have been converted to $/ton in prepare_prices.R but all yields are expressed in kg/ha

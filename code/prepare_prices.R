@@ -1,13 +1,24 @@
-#### PACKAGES ####
+
+### PACKAGES ###
 # see this project's README for a better understanding of how packages are handled in this project. 
 
-# These are the packages needed in this particular script. 
-neededPackages = c("plyr", "dplyr", "readxl", "foreign", "here", 
-                   "DataCombine") 
+# These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
+neededPackages = c("Matrix",
+                   "plyr", "dplyr", "here",#"tibble", "data.table",
+                   "foreign", "readxl",
+                   "raster", "rgdal",  "sp", "sf", # "spdep",
+                   "DataCombine",
+                   "knitr", "kableExtra",
+                   "fixest", "boot",#,"msm", "car",  "sandwich", "lmtest",  "multcomp",
+                   "ggplot2", "dotwhisker", #"tmap",# "leaflet", "htmltools"
+                   "foreach", "parallel"
+)
+# "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
+
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
 
-# Load them 
+# Load them
 lapply(neededPackages, library, character.only = TRUE)
 
 # /!\/!\ IF renv::restore(neededPackages) FAILS TO INSTALL SOME PACKAGES /!\/!\ 
@@ -142,29 +153,18 @@ imf <- read_xls(here("input_data", "price_data", "external-dataAPR.xls"), col_na
 
 length(unique(colnames(imf))) == ncol(imf)
 names(imf)[1] <- "year"
+imf <- as.data.frame(imf)
 # Select columns we need 
-colnames(imf)
-needed_imf_col <- c("year", 
-                    colnames(imf)[grepl(pattern = "oat", x = imf[1,], ignore.case = TRUE)], 
-                    colnames(imf)[grepl(pattern = "olive", x = imf[1,], ignore.case = TRUE)], 
-                    colnames(imf)[grepl(pattern = "milk", x = imf[1,], ignore.case = TRUE)], 
-                    colnames(imf)[grepl(pattern = "rapeseed", x = imf[1,], ignore.case = TRUE)], 
-                    colnames(imf)[grepl(pattern = "sunflower", x = imf[1,], ignore.case = TRUE)],
-                    # colnames(imf)[grepl(pattern = "arabica", x = imf[1,], ignore.case = TRUE)],
-                    colnames(imf)[grepl(pattern = "pork", x = imf[1,], ignore.case = TRUE)],
-                    colnames(imf)[grepl(pattern = "fertilizer", x = imf[1,], ignore.case = TRUE)],
-                    # PFOOD is the name of the column for the food price index 
-                    colnames(imf)[grepl(pattern = "pfood", x = imf[1,], ignore.case = TRUE)]) 
-imf <- imf[, needed_imf_col]
+imf <- imf[,(colnames(imf) %in% c("year", "POATS", "POLVOIL", "PFOOD", "PBEVE", "PMILK",   "PROIL", "PSUNO", "PPORK", "PFERT"))]
 
 # drop first, unnecessary rows
 imf <- imf[-c(1,2,3),]
 
-imf <- as.data.frame(imf)
+head(imf)
 
-# Rename /!\ ORDER MATTERS HERE ! 
+# Rename /!\ ORDER MATTERS HERE it must match the observed order, not the one in column selection above
 names(imf)
-names(imf) <- c("year", "Oat", "Olive_oil", "FPI", "Milk", "Rapeseed_oil", "Sunflower_oil",  "Pork", "Fertilizer")#"Coffee",
+names(imf) <- c("year", "FPI", "BPI", "Fertilizer", "Rapeseed_oil", "Olive_oil",  "Pork", "Sunflower_oil", "Oat", "Milk")#"Coffee",
 
 # Convert in $/mt 
 # Oat is in USD/bushel (ratio from https://www.sagis.org.za/conversion_table.html)
@@ -181,15 +181,16 @@ imf$year <- gsub("M.*", "", imf$year) %>% as.numeric()
 
 
 imf <- ddply(imf, "year", summarise, 
-                    Oat = Oat %>% as.numeric() %>% mean(), 
-                    Olive_oil = Olive_oil %>% as.numeric() %>% mean(), 
-                    Milk = Milk %>% as.numeric() %>% mean(), 
-                    Rapeseed_oil = Rapeseed_oil %>% as.numeric() %>% mean(), 
-                    Sunflower_oil = Sunflower_oil %>% as.numeric() %>% mean(), 
+                    Oat = Oat %>% as.numeric() %>% mean(na.rm = TRUE), 
+                    Olive_oil = Olive_oil %>% as.numeric() %>% mean(na.rm = TRUE), 
+                    Milk = Milk %>% as.numeric() %>% mean(na.rm = TRUE), 
+                    Rapeseed_oil = Rapeseed_oil %>% as.numeric() %>% mean(na.rm = TRUE), 
+                    Sunflower_oil = Sunflower_oil %>% as.numeric() %>% mean(na.rm = TRUE), 
                     # Coffee = mean(Coffee), 
-                    Pork = Pork %>% as.numeric() %>% mean(), 
-                    Fertilizer = Fertilizer %>% as.numeric() %>% mean(), 
-                    FPI = FPI %>% as.numeric() %>% mean())
+                    Pork = Pork %>% as.numeric() %>% mean(na.rm = TRUE), 
+                    Fertilizer = Fertilizer %>% as.numeric() %>% mean(na.rm = TRUE), 
+                    FPI = FPI %>% as.numeric() %>% mean(na.rm = TRUE), 
+                    BPI = BPI %>% as.numeric() %>% mean(na.rm = TRUE))
 
 # From 1992 on, use the Food price index (FPI) from the IMF, in base 2016=100, to deflate the nominal time series.
 # Except for fertilizers, which is already an index base 100 in 2016
@@ -202,8 +203,10 @@ imf[imf$year >=1992,] <- mutate(imf[imf$year >=1992,], Oat = as.numeric(Oat)/(FP
 
 # Then change the base from 2016 to 2014-2016, to match FAOSTAT (including fertilizers)
 fpi_2014_16 <- mean(c(as.numeric(imf[imf$year >= 2014 & imf$year <= 2016, "FPI"])))
+# do it for the Beverage Price Index too
+bpi_2014_16 <- mean(c(as.numeric(imf[imf$year >= 2014 & imf$year <= 2016, "BPI"])))
 
-imf <- dplyr::mutate(imf, across(.cols = (!contains("year")), 
+imf <- dplyr::mutate(imf, across(.cols = (!contains("year") & !contains("BPI")), 
                                  .fns = ~.*fpi_2014_16/100)) 
 
 # For years prior 1992, we deflate with the MUV index base 2014-2016 from the Pink Sheet (do not include fertilizer index)
@@ -222,6 +225,36 @@ imf[imf$year < 1992,] <- mutate(imf[imf$year < 1992,], Oat = as.numeric(Oat)/(MU
 
 
 class(imf[,2])
+
+
+#### ICO DATA for COFFEE ####
+# data are downloaded here
+# https://www.ico.org/new_historical.asp
+
+ico <- read_excel(here("input_data", "price_data", "ICO_indicator_prices.xlsx")) %>% as.data.frame()
+# two first columns are time and ico composite indicator 
+ico <- ico[,1:2]
+colnames(ico) <- c("year", "Coffee")
+ico <- ico[(grepl(pattern = "19", ico$year) | grepl(pattern = "20", ico$year)), ]
+ico$year <- as.numeric(ico$year)
+ico$Coffee <- as.numeric(ico$Coffee)
+ico$Coffee <- round(ico$Coffee, 2)
+ico$Coffee <- ico$Coffee*0.01/0.000453592 
+
+# Deflate using IMF beverage price index
+# keep only prices 
+ico <- left_join(ico, imf[,c("year", "BPI")], by = "year")
+ico <- mutate(ico, Coffee = Coffee*(bpi_2014_16/100) / (BPI/100) )
+
+
+# compare with arabicas from PS
+summary(ps2[ps2$year >= 2000, "Coffee"])
+summary(ico[ico$year >= 2000, "Coffee"])
+
+# the distribution is not the same. 2 things explain the difference: first and mostly, it's that ico ts is deflated with BPI, not pinksheet index 
+# second, ico ts is composite of arabica and robusta
+# for both reasons, we prefer to use ico time series
+ps2 <- dplyr::select(ps2, -Coffee)
 
 
 #### WEIGHTS ####
@@ -287,8 +320,8 @@ names(soy)[names(soy)=="Market_Year"] <- "year"
 #### Consolidate international price annual time series data frame #### 
 # keep all years from each sources
 ip <- full_join(x = ps2, y = imf, by = "year") 
-
-ip <- ip %>% dplyr::select(-MUV_index, -FPI, -MUV_index_10, - MUV_index_2014_16)
+ip <- full_join(x = ip, y = ico[,c("year", "Coffee")],  by = "year") # necessary to not merge BPI column again
+ip <- ip %>% dplyr::select(-MUV_index, -FPI, -BPI, -MUV_index_10, - MUV_index_2014_16)
 
 ### Make calorie prices
 
