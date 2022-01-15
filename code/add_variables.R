@@ -624,6 +624,13 @@ mapmat <- matrix(data = mapmat_data,
 
 colnames(mapmat) <- c("Prices", "Crops")
 
+# crops to standardize. There is not fodder, rubber, citrus, cocoa, coffee, and tea
+eaear2std <- paste0("eaear_", c("Banana", "Barley", "Cotton", "Groundnut", "Maizegrain", "Oat", "Olive", "Oilpalm", "Rapeseed", "Rice", "Sorghum",
+                                "Soy_compo", "Sugar", "Sunflower", "Tobacco", "Wheat")) 
+# add cocoa, coffee and tea for std2 
+eaear2std_bis <- paste0("eaear_", c("Banana", "Barley", "Cotton", "Cocoa", "Coffee", "Groundnut", "Maizegrain", "Oat", "Olive", "Oilpalm", "Rapeseed", "Rice", "Sorghum",
+                                    "Soy_compo", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")) 
+
 # this vector is used to convert potential production in dry weight from GAEZ into weight of traded commodities. 
 # Olive, Oil palm, and Sugar crops are already provided in GAEZ in units of traded goods (oil or sugar)
 conv_fac <- c(Wheat = 0.87, 
@@ -763,6 +770,7 @@ for(name in dataset_names){
   
   # SOY
   # 18% of the seed is extracted as oil and 82% as meal, so we make two distinct yields 
+  df_cs <- dplyr::mutate(df_cs, Soybean = Soybean / conv_fac["Soybean"])
   df_cs <- dplyr::mutate(df_cs, Soybean_oil = Soybean * 0.18 / conv_fac["Soybean"])
   df_cs <- dplyr::mutate(df_cs, Soybean_meal = Soybean * 0.82 / conv_fac["Soybean"])
   # Compute also the value for mere Soy beans
@@ -810,14 +818,11 @@ for(name in dataset_names){
   
   ### STANDARDIZE ### 
   
-  # crops to standardize 
-  crops2std <- grep(names(df_cs), pattern = "eaear_", value = TRUE)
-  
   # divide each revenue variable by the sum of them, to standardize.
   # To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
-  df_cs <- dplyr::mutate(df_cs, eaear_sum = rowSums(across(.cols = any_of(crops2std))))
+  df_cs <- dplyr::mutate(df_cs, eaear_sum = rowSums(across(.cols = any_of(eaear2std))))
   
-  df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(crops2std),
+  df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(eaear2std),
                                        .fns = ~./eaear_sum, 
                                        .names = paste0("{.col}", "_std"))) 
   
@@ -831,20 +836,23 @@ for(name in dataset_names){
   # this code is intricate but it handles potential but unlikely cases where two crops have equal EAEAR
   
   # identify the highest suitability index values (in every grid cell)
-  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_eaear = max(c_across(cols = any_of(crops2std)))) %>% as.data.frame()
+  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_eaear = max(c_across(cols = any_of(eaear2std)))) %>% as.data.frame()
+  
+  # and for the alternative set of crops
+  df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_eaearbis = max(c_across(cols = any_of(eaear2std_bis)))) %>% as.data.frame()
   
   ## N = 1
   # if N = 1, this procedure is equivalent to sj = 1[Sj = max(Si)]
-  df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(crops2std),
+  df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(eaear2std),
                                        .fns = ~if_else(.==max_eaear, true = 1, false = 0), 
                                        .names = paste0("{.col}", "_ismax")))
   
   # and then standardize by the number of different crops being the highest
-  all_crops_ismax <- paste0(crops2std,"_ismax")
+  all_crops_ismax <- paste0(eaear2std,"_ismax")
   df_cs <- dplyr::mutate(df_cs, n_max = rowSums(across(.cols = (any_of(all_crops_ismax)))))
   
-  unique(df_cs$n_max) # 22 is when GAEZ is NA
-  # df_cs[df_cs$n_max==22,]
+  unique(df_cs$n_max) # 16 is when GAEZ is NA
+  # df_cs[df_cs$n_max==16,]
 
   df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops_ismax)),
                                        .fns = ~./n_max, 
@@ -854,72 +862,82 @@ for(name in dataset_names){
   df_cs <- dplyr::select(df_cs, !ends_with("_ismax"))  
   
   # rename new ones 
-  names(df_cs)[grepl("_std1", names(df_cs))] <- paste0(crops2std, "_std1")
+  names(df_cs)[grepl("_std1", names(df_cs))] <- paste0(eaear2std, "_std1")
   
-  # _std1 do sum up to 1. 
-  # df_cs[87687,paste0(crops2std, "_std")]%>%sum()
+  # _std do sum up to 1. 
+  # df_cs[87687,paste0(eaear2std, "_std2")]%>%sum()
   
   ## N = 2: 2nd highest:
-  # work on a separate dataset, because the following modifies the base SI data (needed to make SI of non-top2 crops equal to 0)
-  working_df_cs <- df_cs
+  # helper function to apply within dplyr rowwise framework
+  max2nd <- function(x){max(x[x!=max(x)])}
+
+  df_cs <- df_cs %>% rowwise() %>% mutate(max_eaear_2nd = max2nd(c_across(cols = (any_of(eaear2std))))) %>% as.data.frame()
+  # this returns a warning about aucun argument pour max ; -Inf est renvoyé" when there are only zero values for every crop in the grid cell
+  # not a problem
   
-  # loop is not efficient but don't know how to code 2nd highest with dplyr
-  working_df_cs$max_si_2nd <- NA
-  for(i in 1:nrow(working_df_cs)){
-    # vector of interest
-    x <- working_df_cs[i,crops2std]
-    # max value of the row
-    #row_max_eaear <- working_df_cs[i,"max_eaear"]
-    
-    # second max value
-    # we want to include 2 highest values even if there are more than one crop that have the max value and the 2nd max value, hence the lines below are commented out
-    working_df_cs[i,"max_eaear_2nd"] <- max(x[x<working_df_cs[i,"max_eaear"]])
-    # if we wanted to handle cases with more than one max values
-    #   if(length(which(x == row_max_si))==1){# i.e. if there is only one crop with the highest value
-    #     df_cs[i,"max_si_2nd"] <-  row_max_si_2nd
-    #   }else{
-    #     df_cs[i,"max_si_2nd"] <- row_max_si
-    #   }
-    
-    # /!\ modify SI values (to 0) for all the crops that are not in the top 2 - this is equivalent to weighting by 1 if crop is in top 2, and by 0 if not. 
-    working_df_cs[i,names(x[which(x < working_df_cs[i,"max_eaear_2nd"])])] <- 0
+  # new column for each crop, telling whether it's in the top 2 or not
+  df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(eaear2std),
+                                       .fns = ~if_else(.>=max_eaear_2nd, true = 1, false = 0), 
+                                       .names = paste0("{.col}", "_istop2")))
+
+  all_crops_istop2 <- paste0(eaear2std,"_istop2")
+  
+  df_cs <- dplyr::mutate(df_cs, n_top2 = rowSums(across(.cols = (any_of(all_crops_istop2)))))
+  unique(df_cs$n_top2) # 16 is when GAEZ is NA
+  # df_cs[df_cs$n_max==16,]
+  # in other words there is always only 2 crops in the top 2     
+  
+  # multiply istop2 columns with their corresponding EAEAR columns
+  for(crop in eaear2std){
+    df_cs <- mutate(df_cs, !!as.symbol(paste0(crop, "_istop2")) := !!as.symbol(paste0(crop, "_istop2")) * !!as.symbol(crop) )
   }
-  rm(row_max_si, x)
   
-  # then we are able to sum over all crops with weights = 1 if crop is in top 2, 0 if not. 
-  working_df_cs <- dplyr::mutate(working_df_cs, eaear_sum_top2wgted = rowSums(across(.cols = (any_of(crops2std)))))
-  # and standardize 
-  working_df_cs <- dplyr::mutate(working_df_cs, across(.cols = (any_of(crops2std)),
-                                                       .fns = ~./(eaear_sum_top2wgted), 
-                                                       .names = paste0("{.col}", "_std2")))
+  # sum them, and standardize with this sum
+  df_cs <- dplyr::mutate(df_cs, sum_top2 = rowSums(across(.cols = (any_of(all_crops_istop2)))))
   
-  # w <- working_df_cs
-  # df_cs[875,crops2std]
-  # df_cs[875, c(indivcrops_to_std,"si_sum")]
-  # df_cs[875, c(paste0(indivcrops_to_std,"_std"),"si_sum")]
-  # w[875, c(crops2std,"max_si", "max_si_2nd", "si_sum_top2wgted")]
-  # w[875, paste0(crops2std, "_std1")] %>% sum()
-  # working_df_cs <- dplyr::mutate(working_df_cs, sum_2_max_si = rowSums(across(.cols = c(max_si, max_si_2nd))))#contains("_crops") |
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops_istop2)),
+                                       .fns = ~./sum_top2, 
+                                       .names = paste0("{.col}", "_std2")))
+  
+  # remove those columns
+  df_cs <- dplyr::select(df_cs, !ends_with("_istop2"))  
+  # rename columns
+  names(df_cs)[grepl("_istop2_std2", names(df_cs))] <- paste0(eaear2std, "_std2")  
   
   
+  ### ### ### 
+  ## Repeat std2 for the broader set of crops 
+  df_cs <- df_cs %>% rowwise() %>% mutate(max_eaear_2nd_bis = max2nd(c_across(cols = (any_of(eaear2std_bis))))) %>% as.data.frame()
   
-  # working_df_cs <- dplyr::mutate(working_df_cs, across(.cols = (any_of(crops2std)),#contains("_crops") |
-  #                                      .fns = ~./(sum_2_max_si),
-  #                                      .names = paste0("{.col}", "_std2")))
+  # new column for each crop, telling whether it's in the top 2 or not
+  df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(eaear2std_bis),
+                                       .fns = ~if_else(.>=max_eaear_2nd_bis, true = 1, false = 0), 
+                                       .names = paste0("{.col}", "_istop2")))
   
-  # Add standardized variables to the initial data
-  std2_var_names <- names(working_df_cs)[grepl(pattern = "_std2", x = names(working_df_cs))]
-  df_cs <- inner_join(df_cs, working_df_cs[,c("grid_id",std2_var_names)], by = "grid_id")
+  all_crops_istop2_bis <- paste0(eaear2std_bis,"_istop2")
   
-  ## Crops we need a standardized version of SI: those that can be matched with a price
-  # indivcrops_to_std <- c("Banana", "Barley", "Citrus", "Cocoa", "Coconut", "Coffee", "Cotton", "Fodder",
-  #                        "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Olive", "Rapeseed", "Rice", "Rubber",
-  #                        "Sorghum2", "Soybean", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")
-  # Adding up the *_std2 over indivcrops_to_std won't equal 1, but this is not an issue. 
+  # multiply istop2 columns with their corresponding EAEAR columns
+  for(crop in eaear2std_bis){
+    df_cs <- mutate(df_cs, !!as.symbol(paste0(crop, "_istop2")) := !!as.symbol(paste0(crop, "_istop2")) * !!as.symbol(crop) )
+  }
   
-  # Select variables to save: only newly constructed variables (not grouped crops), and id
+  # sum them, and standardize with this sum
+  df_cs <- dplyr::mutate(df_cs, sum_top2_bis = rowSums(across(.cols = (any_of(all_crops_istop2_bis)))))
+  
+  df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops_istop2_bis)),
+                                       .fns = ~./sum_top2_bis, 
+                                       .names = paste0("{.col}", "_std2bis")))
+  
+  # remove those columns
+  df_cs <- dplyr::select(df_cs, !ends_with("_istop2"))  
+  # rename columns
+  names(df_cs)[grepl("_istop2_std2bis", names(df_cs))] <- paste0(eaear2std_bis, "_std2bis")  
+  
+  ### ### ### ### ### 
+  
+  # Select variables to save: all the eaear variables, standardized or not
+  df_cs <- dplyr::select(df_cs, -max_eaear_2nd, - max_eaear_2nd_bis)
   var_names <- grep(pattern = "eaear_", names(df_cs), value = TRUE) 
-  # and we want the new variables in non std format too 
   df_cs <- df_cs[,c("grid_id", var_names)]
 
   saveRDS(df_cs, paste0(here(origindir, name), "_stdeaear.Rdata"))  
@@ -963,9 +981,6 @@ for(name in dataset_names){
   # Standardized EAEAR
   stdeaear_path <- paste0(here(origindir, name), "_stdeaear.Rdata")
   df_stdeaear <- readRDS(stdeaear_path)  
-  
-  df_stdeaear <- dplyr::select(df_stdeaear, -Fodder, -Rice, -Sugar)
-  df_stdeaear <- left_join(df_stdeaear, df_cs, by = "grid_id")
   
   final <- left_join(final, df_stdeaear, by = "grid_id")
   rm(df_stdeaear)
