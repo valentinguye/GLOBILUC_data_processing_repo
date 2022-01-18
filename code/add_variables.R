@@ -624,8 +624,8 @@ mapmat <- matrix(data = mapmat_data,
 
 colnames(mapmat) <- c("Prices", "Crops")
 
-# crops to standardize. There is not fodder, rubber, citrus, cocoa, coffee, and tea
-eaear2std <- paste0("eaear_", c("Banana", "Barley", "Cotton", "Groundnut", "Maizegrain", "Oat", "Olive", "Oilpalm", "Rapeseed", "Rice", "Sorghum",
+# crops to standardize. There is not fodder, rubber, citrus, banana, cocoa, coffee, olive and tea
+eaear2std <- paste0("eaear_", c("Barley", "Cotton", "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Rapeseed", "Rice", "Sorghum",
                                 "Soy_compo", "Sugar", "Sunflower", "Tobacco", "Wheat")) 
 # add cocoa, coffee and tea for std2 
 eaear2std_bis <- paste0("eaear_", c("Banana", "Barley", "Cotton", "Cocoa", "Coffee", "Groundnut", "Maizegrain", "Oat", "Olive", "Oilpalm", "Rapeseed", "Rice", "Sorghum",
@@ -649,7 +649,7 @@ conv_fac <- c(Wheat = 0.87,
 
 
 # no vlaue missing for any of these commodities in the broad period 1991-2019
-working_prices <- prices[,c("year", mapmat[,"Prices"])]%>%filter(year>1990 & year < 2020)
+# working_prices <- prices[,c("year", mapmat[,"Prices"])]%>%filter(year>1990 & year < 2020)
 
 # make average prices
 price_avg <- prices %>% 

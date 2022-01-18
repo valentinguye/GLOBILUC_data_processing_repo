@@ -597,7 +597,8 @@ unique(uspsd$Commodity_Description)
 
 
 # select those we want
-focal_commodities <- c("Animal Numbers, Cattle", "Corn",
+focal_commodities <- c("Animal Numbers, Cattle", 
+                       "Corn",
                        "Meal, Rapeseed", "Meal, Soybean", "Meal, Sunflowerseed", # these categories are only in TS and DC, not in AH
                        "Oil, Rapeseed", "Oil, Soybean", "Oil, Sunflowerseed", # these categories are only in TS and DC, not in AH
                        "Oilseed, Rapeseed", "Oilseed, Soybean", "Oilseed, Sunflowerseed", 
@@ -688,7 +689,7 @@ psd <- psd[, !grepl("year.", names(psd))]
 
 # and quantities of interest (ratios?)
 
-
+saveRDS(psd, here("temp_data", "prepared_psd.Rdata"))
 
 
 
