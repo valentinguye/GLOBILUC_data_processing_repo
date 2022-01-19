@@ -654,6 +654,7 @@ conv_fac <- c(Wheat = 0.87,
 # make average prices
 price_avg <- prices %>% 
   filter(year>=2000 & year <= 2019) %>% 
+  #filter(year==2000) %>% 
   summarise(across(.cols = any_of(mapmat[,"Prices"]), 
                    .fns = mean, na.rm = TRUE))
 
@@ -804,7 +805,7 @@ for(name in dataset_names){
     price_i <- price_avg[mapmat[mapmat[,"Crops"]==aeay_i,"Prices"]]%>%as.numeric()
     eaear_i <- paste0("eaear_", aeay_i)
     df_cs <- dplyr::mutate(df_cs, 
-                           !!as.symbol(eaear_i) := !!as.symbol(aeay_i) * price_i)
+                           !!as.symbol(eaear_i) := !!as.symbol(aeay_i))# * price_i
   }
   
   # and for Soy commodities: 

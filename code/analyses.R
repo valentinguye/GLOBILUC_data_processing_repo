@@ -264,13 +264,15 @@ prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 # renewable fuel standards, as from https://www.epa.gov/renewable-fuel-standard-program/renewable-fuel-annual-standards
 # remember: biodiesel are nested within advanced biofuels, which are themeselves nested within total
 # conventional biofuels are the part of the total that is not "advanced"
-rfs <- data.frame(year = 2000:2022, 
+rfs <- data.frame(year = min(prices$year):2022, 
                   statute_total = 0, final_total = 0, 
                   statute_advanced = 0, final_advanced = 0, 
-                  statute_biodiesel = 0, final_biodiesel = 0)
+                  statute_biodiesel = 0, final_biodiesel = 0, 
+                  statute_conv_earliest = 0)
 
 rfs <- dplyr::arrange(rfs, year)
-rfs[rfs$year >= 2006 & rfs$year <= 2022, c("statute_total")] <- c(4, 4, 9, 11.1, 12.95,	13.95,	15.2,	16.55,	18.15,	20.5,	22.25,	24.0,	26.0,	28.0, 30.0, 33.0, 36.0)
+# this is if RFS2 takes over as soon as 2008 (9bgal)
+rfs[rfs$year >= 2006 & rfs$year <= 2022, c("statute_total")] <- c(4, 4.7, 9, 11.1, 12.95,	13.95,	15.2,	16.55,	18.15,	20.5,	22.25,	24.0,	26.0,	28.0, 30.0, 33.0, 36.0)
 rfs[rfs$year >= 2006 & rfs$year <= 2022, c("final_total")] <- c(4, 4, 9, 11.1, 12.95,	13.95,	15.2,	16.55,	16.28,	16.93,	18.11,	19.28,	19.29,	19.92, 20.09, NA, NA)
 
 rfs[rfs$year >= 2006 & rfs$year <= 2022, c("statute_advanced")] <- c(0, 0, 0, 0.6, 0.95,	1.35,	2.0,	2.75,	3.75,	5.5,	7.25,	9.0,	11.0,	13.0, 15.0, 18.0, 21.0)
@@ -281,6 +283,8 @@ rfs[rfs$year >= 2009 & rfs$year <= 2022, c("statute_biodiesel")] <- c(0.5, 0.65,
 
 rfs <- mutate(rfs, statute_conv = statute_total - statute_advanced)
 rfs <- mutate(rfs, final_conv = final_total - final_advanced)
+# RFS mandates with for each year, the earliest set target (by RFS1 up to 2012 included, and by RFS2 afterwards)
+rfs[rfs$year >= 2006 & rfs$year <= 2022, c("statute_conv_earliest")] <- c(4, 4.7, 5.4, 6.1, 6.8, 7.4, 7.5, 13.8, 14.4, 15, 15, 15, 15, 15, 15, 15, 15)
 #rfs[rfs$year >= 2006 & rfs$year <= 2020, c("statute_conv")] <- c(4, 4, 9, 10.5, 12, 12.6, 13.2, 13.8, 14.4, 15, 15, 15, 15, 15, 15)
 
 # rfs <- mutate(rfs, amendments = final_conv - statute_conv) # in 2014 it ramped up to 13.61 instead of 14.4, which is thus a negative shock on demand of .79 bgal
@@ -296,7 +300,7 @@ rfs <- mutate(rfs, final_conv = final_total - final_advanced)
 prices <- full_join(prices, rfs, by = "year")
 
 # make lags and leads
-rfs_vars <- c("statute_conv")#, "amendments", "blendwall"
+rfs_vars <- c("statute_conv", "statute_conv_earliest")#, "amendments", "blendwall"
 for(voi in rfs_vars){
   for(lead in c(1:5)){
     prices <- dplyr::arrange(prices, year)
@@ -307,6 +311,13 @@ for(voi in rfs_vars){
                                  slideBy = lead, 
                                  keepInvalid = FALSE)
     prices <- dplyr::arrange(prices, year)
+    
+    # up to 2005, leads are actually 0 because mandates were not known/disclosed
+    prices[prices$year <= 2005, paste0(voi,"_lead", lead)] <- 0
+    # and in 2006, the expected mandates are those of the RFS1 
+    prices[prices$year == 2006, paste0(voi,"_lead", lead)] <- prices[prices$year == 2006+lead, "statute_conv_earliest"]
+    # "The EISA, enacting RFS2, "passed in the House without amendment in January 2007" Wikipedia page https://en.wikipedia.org/wiki/Energy_Independence_and_Security_Act_of_2007
+    # so for 2007 we assume the expected mandates in the next years are those of RFS2. 
   }  
   
   for(lag in c(1:5)){
@@ -320,26 +331,26 @@ for(voi in rfs_vars){
     prices <- dplyr::arrange(prices, year)
   }  
   
+  
   for(py in c(1:4)){
-    ## Future-year averages (1, 2, 3, and 4 years, after and including contemporaneous)  
+    ## Future-year averages (1, 2, 3, and 4 years, after and INCLUDING contemporaneous)  
     # note that we DO add voi column (not lagged) in the row mean
     prices$newv <- rowMeans(x = prices[,c(voi, paste0(voi,"_lead",c(1:py)))], na.rm = FALSE)
     prices[is.nan(prices$newv),"newv"] <- NA
     colnames(prices)[colnames(prices)=="newv"] <- paste0(voi,"_",py,"fya")
     
-    ## Past-year averages (1, 2, 3, and 4 years, before and including contemporaneous)  
+    ## Past-year averages (1, 2, 3, and 4 years, before and EXCLUDING contemporaneous)  
     # note that we DON't add voi column (not lagged) in the row mean
     prices <- mutate(prices, 
                      !!as.symbol(paste0(voi,"_",py,"pya")) := rowMeans(across(.cols = any_of(paste0(voi,"_lag",c(1:py)))), 
                                                                        na.rm = TRUE) 
     )
-    # prices$newv <- rowMeans(x = prices[,c(paste0(voi,"_lag",c(1:py)))], na.rm = FALSE)
-    # prices[is.nan(prices$newv),"newv"] <- NA
-    # colnames(prices)[colnames(prices)=="newv"] <- paste0(voi,"_",py,"pya")
+    
+    # AS A CONSEQUENCE, IT IS NORMAL THAT ABS. EXPOSURE CONTROLS ARE INTERACTED WITH 1fya AND 2pya: BOTH ARE AVERAGES OF TWO YEARS
   }
 }
 
-# prices[,c("year", grep(names(prices), pattern = "statute_conv", value = TRUE))] %>% tail(20)
+# prices[,c("year", grep(names(prices), pattern = "statute_conv", value = TRUE))] %>% tail(25)
 
 # # Those shares vary in time.
 # cer_sha <- readRDS(here("temp_data", "fao_cereals_shares_global_supply.Rdata"))
@@ -445,7 +456,7 @@ names(w_rfs)[names(w_rfs)=="RFS"] <- "RFS mandates (right axis)"
 names(w_rfs)[names(w_rfs)=="BOG"] <- "Billions of gallons (ethanol-equivalent)"
 
 coeff <- 0.4
-  
+
 ggplot(w_rfs, aes(x=year, y=`Billions of gallons (ethanol-equivalent)`/coeff, fill=`RFS mandates (right axis)`)) + 
   geom_area(alpha=0.6 , size=.5, colour="white") +
   geom_line(aes(x = year, y = us_ah_maize_mha)) +
@@ -460,6 +471,28 @@ ggplot(w_rfs, aes(x=year, y=`Billions of gallons (ethanol-equivalent)`/coeff, fi
         axis.title.x=element_text(size=10,face="bold", hjust = 0.5))
 
 
+#### DES STATS SUITABILITY INDEX ####
+si <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))
+si <- si[!duplicated(si$grid_id),]
+
+cor_mat_abs <-  cor(dplyr::select(si, all_of(mapmat_si[,"Crops"])))
+#cor_mat_std2 <-  cor(dplyr::select(si, all_of(paste0(mapmat_si[,"Crops"], "_std2"))), use = "complete.obs")
+
+cortests <- cor_mat_abs
+j_exposures <- list()
+length(j_exposures) <- length(mapmat_si[,"Crops"])
+names(j_exposures) <- mapmat_si[,"Crops"]
+
+for(serie1 in colnames(cortests)){
+  
+  for(serie2 in row.names(cortests)){
+    
+    cortests[serie1, serie2] <- cor.test(si[,serie1], si[,serie2], )$p.value
+  }
+  j_exposures[[serie1]] <- cor_mat_abs[cortests[serie1, ] < 0.05, serie1]
+}
+j_exposures[["Maizegrain"]]
+
 
 #### DES STATS EAEAR #### 
 
@@ -467,7 +500,7 @@ for(CNT in c("America", "Africa", "Asia")){
   
   d <- dplyr::filter(main_data, continent_name == CNT)
   d <- dplyr::filter(d, year >= 2001 & year <= 2019)
-
+  
   regressors <- eaear_mapmat[,"Crops"]
   
   controls <- c()
@@ -482,11 +515,11 @@ for(CNT in c("America", "Africa", "Asia")){
   }
   
   model <- as.formula(paste0("driven_loss_commodity ~ ",
-                              paste0(regressors, collapse = "+"),
-                              " + ",
-                              paste0(controls, collapse = "+"),
-                              " | country_name"
-                              ))
+                             paste0(regressors, collapse = "+"),
+                             " + ",
+                             paste0(controls, collapse = "+"),
+                             " | country_name"
+  ))
   
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
   used_vars <- unique(c("grid_id", "year", "lon", "lat", "country_name", "country_year", "continent_name", # "sj_year",
@@ -512,19 +545,19 @@ for(CNT in c("America", "Africa", "Asia")){
   }
   
   cnst_reg <- fixest::feglm(model,
-                             data = d, 
-                             family = "quasipoisson",# "gaussian",#  # "poisson" ,
-                             vcov = vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical"),
-                             # this is just to get the same p value by recomputing by hand below. 
-                             # see https://cran.r-project.org/web/packages/fixest/vignettes/standard_errors.html
-                             ssc = ssc(cluster.df = "conventional", t.df = "conventional"),
-                             # glm.iter = 25,
-                             #fixef.iter = 100000,
-                             nthreads = 3,
-                             fixef.rm = "perfect",
-                             notes = TRUE, 
-                             verbose = 4) %>% summary()
-
+                            data = d, 
+                            family = "quasipoisson",# "gaussian",#  # "poisson" ,
+                            vcov = vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical"),
+                            # this is just to get the same p value by recomputing by hand below. 
+                            # see https://cran.r-project.org/web/packages/fixest/vignettes/standard_errors.html
+                            ssc = ssc(cluster.df = "conventional", t.df = "conventional"),
+                            # glm.iter = 25,
+                            #fixef.iter = 100000,
+                            nthreads = 3,
+                            fixef.rm = "perfect",
+                            notes = TRUE, 
+                            verbose = 4) %>% summary()
+  
 }
 
 
@@ -693,13 +726,13 @@ price_dyn <- "_lag1"
 
 estimated_effect = "alpha"
 rfs_reg <- TRUE
-placebo_rfs <- FALSE
+rfs_rando <- "between"
 original_rfs_treatments <- c("statute_conv")
-rfs_lead <- 0
-rfs_lag <- 0
-rfs_fya <- 2 
-rfs_pya <- 2
-original_exposure_rfs <- "Soybean"
+rfs_lead <- 1
+rfs_lag <- 2
+rfs_fya <- 0 
+rfs_pya <- 0
+original_exposure_rfs <- "eaear_Soy_compo"
 group_exposure_rfs <- FALSE
 control_absolute_rfs <- c()
 control_all_absolute_rfs <- TRUE
@@ -761,7 +794,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           # available price dynamics are "_lag1", "_2pya", "_3pya", "_4pya", "_5pya",
                           estimated_effect = "alpha",# if "alpha", estimates the (aggregated or not) cross-elasticity effect. If different from "alpha" (e.g. "gamma") it estimates the ILUC effect from price covariation. 
                           rfs_reg = TRUE,
-                          placebo_rfs = FALSE,
+                          rfs_rando = "between", # either "between", "within", or empty, NULL or anything. If one of the former two, randomization inference of the type is performed
                           original_rfs_treatments = c("statute_conv"),
                           rfs_lead = 0,
                           rfs_lag = 0,
@@ -888,6 +921,8 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   original_all_treatments <- mapmat_si[,"Prices"]
   all_treatments <- paste0("ln_", original_all_treatments, price_info)
   
+  all_rfs_treatments <- grep(pattern = original_rfs_treatments, names(prices), value = TRUE)
+  
   # weighted prices, necessary if control_interact_sj (we don"t need an original version)
   w_treatments <- c(paste0("w_kca_ln_", vegetable_oils, price_info), paste0("w_kca_ln_", cereals_feeds, price_info))
   # note that "Soybean" is not one of them. Only Soybean_meal and Soybean_oil. 
@@ -928,6 +963,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   }
   if(rfs_fya >=1 & rfs_pya >=1){
     for(rfs_var in original_rfs_treatments){
+      # ORDER MATTERS
       rfs_treatments <- c(paste0(rfs_var, "_", rfs_fya, "fya"), paste0(rfs_var, "_", rfs_pya, "pya") )
     }
   }
@@ -949,7 +985,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                  unique(c(original_all_exposures, all_exposures))))) #sj, 
   
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", unique(c(treatments, all_treatments, w_treatments, rfs_treatments)))], by = c("year"))#, all_treatments
+  d <- left_join(d, prices[,c("year", unique(c(treatments, all_treatments, all_rfs_treatments, w_treatments, rfs_treatments)))], by = c("year"))#, all_treatments
   
   
   # If we want the exposure to deforestation for pasture to be proxied with the share of pasture area in 2000, rather than suitability index, 
@@ -1291,25 +1327,41 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # gamma_controls <- c() 
   # delta_controls <- c() 
   
+  # IT IS NORMAL THAT ABS. EXPOSURE CONTROLS ARE INTERACTED WITH 1fya AND 2pya: BOTH ARE AVERAGES OF TWO YEARS. 
+  # 1fya is the avg of current and lead1 values, which are grouped together because they reflect the same kind of mechanism. 
   if(control_all_absolute_rfs){
     all_abs <- exp_matmap[, "Crops"][!(exp_matmap[, "Crops"] %in% original_exposure_rfs)]
     for(abs in all_abs){
-      if(length(rfs_treatments) == 1){
-        varname <- paste0(abs, "_X_", rfs_treatments)
+      # if there are several rfs treatments due to lags and leads, then we interact exposures to other crops with an average of those only, not with each
+      if(rfs_lead>=1){
+        rfs_control <- paste0(original_rfs_treatments, "_", rfs_lead, "fya")  
+        varname <- paste0(abs, "_X_", rfs_control)
         controls <- c(controls, varname)
-        d <- mutate(d, !!as.symbol(varname) := !!as.symbol(abs) * !!as.symbol(rfs_treatments))
-      }else{
-        # if there are more than one rfs treatment (because we investigate blendwall or a lead or lag, then only control for interaction with the additional treatment)
-        # varname <- paste0(abs, "_X_", rfs_treatments[2])
-        # controls <- c(controls, varname)
-        # d <- mutate(d, !!as.symbol(varname) := !!as.symbol(abs) * !!as.symbol(rfs_treatments[2]))
+        d <- mutate(d, !!as.symbol(varname) := !!as.symbol(abs) * !!as.symbol(rfs_control))
+      }
+      if(rfs_lag>=1){
+        rfs_control <- paste0(original_rfs_treatments, "_", rfs_lag, "pya")  
+        varname <- paste0(abs, "_X_", rfs_control)
+        controls <- c(controls, varname)
+        d <- mutate(d, !!as.symbol(varname) := !!as.symbol(abs) * !!as.symbol(rfs_control))
+      }
+      # this is typically the case rfs_lag==1 and rfs_lead==0
+      # note the use of the original_rfs_treatments vector: if no lead is specified, we still want to control for interactions with contemporaneous RFS
+      if(rfs_lead==0){
+        for(ogn_rfs_var in original_rfs_treatments){
+          varname <- paste0(abs, "_X_", ogn_rfs_var)
+          controls <- c(controls, varname)
+          d <- mutate(d, !!as.symbol(varname) := !!as.symbol(abs) * !!as.symbol(ogn_rfs_var))
+        }
+      }
+      if(rfs_lead==0 & rfs_lag==0){
         for(rfs_var in rfs_treatments){
           varname <- paste0(abs, "_X_", rfs_var)
           controls <- c(controls, varname)
           d <- mutate(d, !!as.symbol(varname) := !!as.symbol(abs) * !!as.symbol(rfs_var))
-        }
+        }    
       }
-    }
+    }  
   }
   
   if(length(control_absolute_rfs)>0){
@@ -1592,7 +1644,6 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                      fe))
   }
   
-  
   ### KEEP OBSERVATIONS THAT: ####
   
   # - are suitable to crop j 
@@ -1619,10 +1670,10 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   
   if(estimated_effect == "alpha"){
     used_vars <- unique(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", "accu_defo_since2k", # "sj_year",
-                          outcome_variable, regressors, controls, "remaining_fc"))
+                          original_exposure_rfs, original_rfs_treatments, rfs_treatments, outcome_variable, regressors, controls, "remaining_fc"))
   }else{
     used_vars <- unique(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", "accu_defo_since2k", # "sj_year",
-                          outcome_variable, regressors, controls, gamma_controls, "remaining_fc"))
+                          original_exposure_rfs, original_rfs_treatments, rfs_treatments, outcome_variable, regressors, controls, gamma_controls, "remaining_fc"))
   }
   
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
@@ -1722,6 +1773,37 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     }
     
     ## MAKE AGGREGATE RESULTS 
+    if(rfs_lead>=1 | rfs_lag>=1){
+      df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
+      
+      # ORDER MATTERS
+      aggr_names <- paste0(original_exposure_rfs, c("_X_aggrleads", "_X_aggrlags"))
+      row.names(df_res)[1:2] <- aggr_names
+      # regressors of interest
+      base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
+      # Contemporaneous value is in leads
+      lead_roi <- c(base_reg_name, 
+                    grep(pattern = paste0(base_reg_name,"_lead"), 
+                         regressors, value = TRUE))
+      # but not in lags!
+      lag_roi <- grep(pattern = paste0(base_reg_name,"_lag"), 
+                      regressors, value = TRUE)
+      
+      df_res[aggr_names[1],"Estimate"] <- alpha_reg_res$coefficients[lead_roi] %>% sum()
+      df_res[aggr_names[2],"Estimate"] <- alpha_reg_res$coefficients[lag_roi] %>% sum()
+      
+      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+      df_res[aggr_names[1],"Std. Error"] <- alpha_reg_res$cov.scaled[lead_roi, lead_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      df_res[aggr_names[2],"Std. Error"] <- alpha_reg_res$cov.scaled[lag_roi, lag_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      
+      df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
+      df_res[aggr_names[2],"t value"]  <- (df_res[aggr_names[2],"Estimate"] - 0)/(df_res[aggr_names[2],"Std. Error"])
+      
+      df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pnorm(abs(df_res[aggr_names[1],"t value"]), lower.tail = FALSE))
+      df_res[aggr_names[2],"Pr(>|t|)"]  <- (2*pnorm(abs(df_res[aggr_names[2],"t value"]), lower.tail = FALSE))
+    }
+    
     if(aggregate_K != ""){
       df_res <- rbind(df_res, rep(NA, ncol(df_res)))
       
@@ -1875,6 +1957,69 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     df_res <- dplyr::mutate(df_res, p.value =  (2*pnorm(abs(t.statistic), lower.tail = FALSE)) )
   }
   
+  # take data set as exactly used in estimation
+  d_clean <- d_clean[alpha_reg_res$obs_selection[[1]], ]
+    
+  if(rfs_rando=="between"){
+    # in this case, we resample exposures (without replacement), and keep rfs history intact. i.e. we randomize the between units variation
+    
+    exp_dfcs <- d_clean[!duplicated(d_clean$grid_id), c("grid_id", exposure_rfs)]
+    nrow_dfcs <- nrow(exp_dfcs)
+    
+    # remove the exposure column in the original order from data (and its interactions with treatments)
+    d_clean <- dplyr::select(d_clean, !matches(exposure_rfs))
+    
+    #~just to gain some time
+    sym_exposure_rfs <- as.symbol(exposure_rfs)
+    
+    # store permutation results there
+    perm_res_list <- list()
+    
+    start_time <- Sys.time()
+    for(i in 1:10){
+      # sample and merge back the permuted values  
+      exp_dfcs[,exposure_rfs] <- sample(exp_dfcs[,exposure_rfs], size = nrow_dfcs, replace = FALSE)
+      
+      d_clean_i <- left_join(d_clean, exp_dfcs, by = "grid_id")
+      
+      # build regressors and exposure trend
+      for(rfs_var in rfs_treatments){
+        d_clean_i <- mutate(d_clean_i, 
+                          !!as.symbol(paste0(exposure_rfs, "_X_", rfs_var)) := !!sym_exposure_rfs * !!as.symbol(rfs_var) ) 
+      }
+      d_clean_i <- mutate(d_clean_i, 
+                        !!as.symbol(paste0(exposure_rfs, "_trend")) := !!sym_exposure_rfs * year)
+      
+      # rerun regression
+      perm_i_res <- fixest::feglm(alpha_model,
+                                   data = d_clean_i,
+                                   family = distribution,
+                                   vcov = se,
+                                   nthreads = 3,
+                                   fixef.rm = "perfect")
+      
+      # aggregate coefficients on leads and lags 
+
+      perm_i_coeffs <- c(sum(perm_i_res$coefficients[lead_roi]), sum(perm_i_res$coefficients[lag_roi]) )
+      names(perm_i_coeffs) <- aggr_names
+      perm_res_list[[i]] <- perm_i_coeffs
+    }
+    end_time <- Sys.time()
+    
+    end_time - start_time
+    
+    # 10 replications take 5 minutes 
+    # so for 1000 replications, it would take 500/60 = 8.3 hours
+    
+    # without the regression, the loop takes 3s. which, replicated 1000 times mores, makes less than an hour (0.83). 
+    # to apply to all 20 crops in three continents this would take between 50 and 60h 
+    
+    all_perms <- bind_rows(perm_res_list)
+    
+    
+  }
+  
+  
   
   # store info on SE method
   if(se == "conley"){
@@ -1917,6 +2062,9 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
 
 
 
+#### RFS MAIN EFFECTS ####
+
+
 est_parameters <- list(outcome_variable  = "driven_loss_commodity",
                        sjpos = FALSE,
                        standardization = "",
@@ -1927,19 +2075,18 @@ est_parameters <- list(outcome_variable  = "driven_loss_commodity",
                        distribution = "quasipoisson", 
                        pasture_shares = FALSE)
 
-
-#### RFS MAIN EFFECTS ####
 ## ABSOLUTE EAEAR EXPOSURES ####
-ya <- 3
-rfs_eaear_3ya <- list(America = list(), 
+#ya <- 3
+rfs_l <- 3
+rfs_eaear_3ll <- list(America = list(), 
                       Africa = list(), 
                       Asia = list())
 
-for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia""Africa", 
+for(CNT in c("America","Africa", "Asia")){#, , , "Africa", "Asia" 
   elm <- 1
   for(rfs_exp in eaear_mapmat[,"Crops"]){
-    #for(ya in c(1:4)){
-    rfs_eaear_3ya[[CNT]][[elm]] <- make_main_reg(continent = CNT,
+    #for(rfs_l in c(1:3)){
+    rfs_eaear_3ll[[CNT]][[elm]] <- make_main_reg(continent = CNT,
                                                  original_sj = "Fodder", 
                                                  original_Pk = "Beef", 
                                                  estimated_effect = "alpha", 
@@ -1947,10 +2094,10 @@ for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia""Africa",
                                                  rfs_reg = TRUE,
                                                  placebo_rfs = FALSE,
                                                  original_rfs_treatments = c("statute_conv"),
-                                                 rfs_lag = est_parameters[["lags"]],
-                                                 rfs_lead = est_parameters[["leads"]],
-                                                 rfs_fya = ya,  #est_parameters[["fya"]], 
-                                                 rfs_pya = ya,  #est_parameters[["pya"]],
+                                                 rfs_lead = rfs_l - 1, # lead one year less because contemporaneous is considered as a lead kind
+                                                 rfs_lag = rfs_l,
+                                                 rfs_fya = est_parameters[["fya"]],  #ya,
+                                                 rfs_pya = est_parameters[["pya"]], #ya,
                                                  original_exposure_rfs = rfs_exp, # exp_rfs, # mapmat_si[,"Crops"],
                                                  group_exposure_rfs = FALSE,
                                                  control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
@@ -1966,7 +2113,7 @@ for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia""Africa",
                                                  pasture_shares = est_parameters[["pasture_shares"]]
     )
     
-    names(rfs_eaear_3ya[[CNT]])[elm] <- paste0("absexp_X_statute_conv_", ya, "fya&pya")
+    names(rfs_eaear_3ll[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_", rfs_l, "leadlags")
     elm <- elm + 1
     #}
   }
@@ -1977,14 +2124,15 @@ for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia""Africa",
 CNT <- "Asia"
 rm(df)
 dyn_df_list <- list()
-dyn_des <- c("anticipated 3 years", "mediated 3 years")
-for(dyn in 1:2){ # 1 and 2 correspond respectively to fya and pya
-  dyn_df <- lapply(rfs_eaear_3ya[[CNT]], FUN = function(x){as.data.frame(x)[dyn,] }) %>% bind_rows()
+dyn_des <- c(paste0("Anticipated RFS, next ", rfs_l, " years"), paste0("Mediated RFS, last ", rfs_l, " years"))
+for(dyn in 1:2){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags 
+  dyn_df <- lapply(rfs_eaear_3ll[[CNT]], FUN = function(x){as.data.frame(x)[dyn,] }) %>% bind_rows()
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
   dyn_df$model <- dyn_des[dyn]
   dyn_df_list[[dyn_des[dyn]]] <- dyn_df
 }
 df <- bind_rows(dyn_df_list)
+df$term <- rep(eaear_mapmat[,"Crops"], 2)
 df$significant01 <- if_else(df[,"Pr(>|t|)"] < 0.1, "Significant at 10%", "")
 #df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
 
@@ -1995,44 +2143,52 @@ row.names(df) <- NULL
 #title <- "Impacts of RFS ramping up on tropical deforestation, via exposures to different land uses, 2001-2019"
 title <- CNT
 # If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
-# %>%  add_brackets(brackets)
-# brackets <- list(c("Oil crops", "Soybean oil", "Palm oil", "Olilve oil", "Rapeseed oil", "Sunflower oil", "Coconut oil"), 
-#                  c("Biofuel feedstock", "Sugar", "Maize"))
+# A list of brackets; each element of the list should be a character vector consisting of 
+# (1) a label for the bracket, (2) the name of the topmost variable to be enclosed by the bracket, 
+# and (3) the name of the bottom most variable to be enclosed by the bracket.
+crop_groups <- list(c("Group 1", "Barley", "Wheat"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
+                    c("Group 2", "Pasture", "Tobacco"), # "Citrus", "Cotton", 
+                    c("Group 3", "Oil palm", "Oil palm"), 
+                    c("Group 4", "Banana", "Tea") # "Cocoa", "Coffee", "Rubber", 
+)
 
 {dwplot(df,
-        dot_args = list(size = 2.5,aes( alpha = significant01)),
-        whisker_args = list(size = 1.5, aes(alpha = significant01)),
+        dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),
+        whisker_args = list(size = 1, aes(alpha = significant01)),
         vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
-    relabel_predictors(c(eaear_Banana = "Banana", 
-                         eaear_Barley = "Barley", 
-                         eaear_Citrus = "Citrus", 
-                         eaear_Cocoa  = "Cocoa", 
-                         eaear_Coconut = "Coconut", 
-                         eaear_Coffee = "Coffee", 
-                         eaear_Cotton = "Cotton", 
+    relabel_predictors(c(eaear_Barley = "Barley",
                          eaear_Groundnut = "Groundnut", 
                          eaear_Maizegrain = "Maize", 
-                         eaear_Oilpalm = "Oil palm", 
                          eaear_Rapeseed = "Rapeseed", 
-                         eaear_Fodder = "Pasture", 
-                         eaear_Rice = "Rice (wet or dry)", 
-                         eaear_Rubber = "Rubber", 
+                         eaear_Rice = "Rice (wet or dry)",
                          eaear_Sorghum = "Sorghum", 
                          eaear_Soy_compo = "Soy", 
                          eaear_Sugar = "Sugar (cane or beet)", 
-                         eaear_Sunflower = "Sunflower", 
-                         eaear_Tea = "Tea", 
+                         eaear_Sunflower = "Sunflower",
+                         eaear_Wheat = "Wheat",
+                         
+                         eaear_Fodder = "Pasture", 
+                         eaear_Citrus = "Citrus",
+                         eaear_Cotton = "Cotton",
                          eaear_Tobacco = "Tobacco", 
-                         eaear_Wheat = "Wheat"
+                         
+                         eaear_Coconut = "Coconut", 
+                         eaear_Oilpalm = "Oil palm",
+                         
+                         eaear_Banana = "Banana", 
+                         eaear_Cocoa  = "Cocoa", 
+                         eaear_Coffee = "Coffee", 
+                         eaear_Rubber = "Rubber", 
+                         eaear_Tea = "Tea"
     )) +
     theme_bw() + xlab("Coefficient Estimate") + ylab("") +
     geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
     ggtitle(title) +
     theme(plot.title = element_text(face="bold", size=c(10)),
-          legend.position = c(0.007, 0.001),
+          legend.position = c(0.8, 0.05),
           legend.justification = c(0, 0), 
           legend.background = element_rect(colour="grey80"),
-          legend.title = element_blank())}  
+          legend.title = element_blank()) } %>%  add_brackets(crop_groups, face = "italic")
 
 
 ## ABSOLUTE AESI EXPOSURES ####
