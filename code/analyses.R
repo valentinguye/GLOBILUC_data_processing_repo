@@ -314,10 +314,8 @@ for(voi in rfs_vars){
     
     # up to 2005, leads are actually 0 because mandates were not known/disclosed
     prices[prices$year <= 2005, paste0(voi,"_lead", lead)] <- 0
-    # and in 2006, the expected mandates are those of the RFS1 
+    # and in 2006 the expected mandates are those of the RFS1 (the EISA was discussed in Senate as of January 2007)
     prices[prices$year == 2006, paste0(voi,"_lead", lead)] <- prices[prices$year == 2006+lead, "statute_conv_earliest"]
-    # "The EISA, enacting RFS2, "passed in the House without amendment in January 2007" Wikipedia page https://en.wikipedia.org/wiki/Energy_Independence_and_Security_Act_of_2007
-    # so for 2007 we assume the expected mandates in the next years are those of RFS2. 
   }  
   
   for(lag in c(1:5)){
@@ -692,6 +690,7 @@ for(serie1 in colnames(cortests)){
 }
 
 
+
 #### REGRESSION FUNCTION #### 
 
 ### TEMPORARY OBJECTS 
@@ -748,7 +747,7 @@ reference_crop <- c("Oat", "Olive")#
 remaining <- FALSE
 fc_trend <- TRUE
 s_trend <- TRUE
-fc_s_trend <- TRUE
+fc_s_trend <- FALSE
 
 sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
 # open_path <- FALSE
@@ -768,7 +767,7 @@ glm_iter <- 25
 
 rm(outcome_variable, start_year, end_year, continent, further_lu_evidence, original_sj, original_Pk, pasture_shares, 
    standardization, price_dyn, estimated_effect, group_prices, biofuel_focus, aggregate_K, control_interact_sj, control_interact_Pk, reference_crop, control_direct, 
-   rfs_reg, placebo_rfs, original_rfs_treatments, rfs_lead, rfs_lag, original_exposure_rfs, group_exposure_rfs, control_absolute_rfs, control_all_absolute_rfs, remaining, sjpos, fe, distribution, invhypsin, conley_cutoff, se, boot_cluster, coefs_to_aggregate, 
+   rfs_reg, original_rfs_treatments, rfs_lead, rfs_lag, original_exposure_rfs, group_exposure_rfs, control_absolute_rfs, control_all_absolute_rfs, remaining, sjpos, fe, distribution, invhypsin, conley_cutoff, se, boot_cluster, coefs_to_aggregate, 
    output, glm_iter)
 
 
@@ -794,7 +793,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           # available price dynamics are "_lag1", "_2pya", "_3pya", "_4pya", "_5pya",
                           estimated_effect = "alpha",# if "alpha", estimates the (aggregated or not) cross-elasticity effect. If different from "alpha" (e.g. "gamma") it estimates the ILUC effect from price covariation. 
                           rfs_reg = TRUE,
-                          rfs_rando = "between", # either "between", "within", or empty, NULL or anything. If one of the former two, randomization inference of the type is performed
+                          rfs_rando = NULL, # either "between", "within", or empty, NULL or anything. If one of the former two, randomization inference of the type is performed
                           original_rfs_treatments = c("statute_conv"),
                           rfs_lead = 0,
                           rfs_lag = 0,
@@ -926,11 +925,6 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # weighted prices, necessary if control_interact_sj (we don"t need an original version)
   w_treatments <- c(paste0("w_kca_ln_", vegetable_oils, price_info), paste0("w_kca_ln_", cereals_feeds, price_info))
   # note that "Soybean" is not one of them. Only Soybean_meal and Soybean_oil. 
-  
-  # rfs treatments are the non lagged + all the lagged values up to the furthest one (specified), for each rfs variable.  
-  # if(placebo_rfs){
-  #   original_rfs_treatments <- paste0(original_rfs_treatments, "_placebo")
-  # } placebo is handled differently now
   
   rfs_treatments <- original_rfs_treatments
   if(rfs_lead >= 1){
@@ -1373,7 +1367,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   }
   
   # from here, if we are in rfs process, sj may refer to the group of exposures
-  if((rfs_reg | placebo_rfs) & group_exposure_rfs){
+  if((rfs_reg) & group_exposure_rfs){
     sj <- "grp_exp"
   }
   
@@ -1959,7 +1953,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   
   # take data set as exactly used in estimation
   d_clean <- d_clean[alpha_reg_res$obs_selection[[1]], ]
-    
+  
   if(rfs_rando=="between"){
     # in this case, we resample exposures (without replacement), and keep rfs history intact. i.e. we randomize the between units variation
     
@@ -1975,8 +1969,9 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     # store permutation results there
     perm_res_list <- list()
     
-    start_time <- Sys.time()
-    for(i in 1:10){
+    set.seed(145)
+    #start_time <- Sys.time()
+    for(i in 1:1000){
       # sample and merge back the permuted values  
       exp_dfcs[,exposure_rfs] <- sample(exp_dfcs[,exposure_rfs], size = nrow_dfcs, replace = FALSE)
       
@@ -1985,28 +1980,27 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
       # build regressors and exposure trend
       for(rfs_var in rfs_treatments){
         d_clean_i <- mutate(d_clean_i, 
-                          !!as.symbol(paste0(exposure_rfs, "_X_", rfs_var)) := !!sym_exposure_rfs * !!as.symbol(rfs_var) ) 
+                            !!as.symbol(paste0(exposure_rfs, "_X_", rfs_var)) := !!sym_exposure_rfs * !!as.symbol(rfs_var) ) 
       }
       d_clean_i <- mutate(d_clean_i, 
-                        !!as.symbol(paste0(exposure_rfs, "_trend")) := !!sym_exposure_rfs * year)
+                          !!as.symbol(paste0(exposure_rfs, "_trend")) := !!sym_exposure_rfs * year)
       
       # rerun regression
       perm_i_res <- fixest::feglm(alpha_model,
-                                   data = d_clean_i,
-                                   family = distribution,
-                                   vcov = se,
-                                   nthreads = 3,
-                                   fixef.rm = "perfect")
+                                  data = d_clean_i,
+                                  family = distribution,
+                                  vcov = se,
+                                  nthreads = 0,
+                                  fixef.rm = "perfect")
       
       # aggregate coefficients on leads and lags 
-
+      
       perm_i_coeffs <- c(sum(perm_i_res$coefficients[lead_roi]), sum(perm_i_res$coefficients[lag_roi]) )
       names(perm_i_coeffs) <- aggr_names
       perm_res_list[[i]] <- perm_i_coeffs
     }
-    end_time <- Sys.time()
-    
-    end_time - start_time
+    #end_time <- Sys.time()
+    #end_time - start_time
     
     # 10 replications take 5 minutes 
     # so for 1000 replications, it would take 500/60 = 8.3 hours
@@ -2014,8 +2008,15 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     # without the regression, the loop takes 3s. which, replicated 1000 times mores, makes less than an hour (0.83). 
     # to apply to all 20 crops in three continents this would take between 50 and 60h 
     
-    all_perms <- bind_rows(perm_res_list)
+    # on server 10 replications is 2.16 minutes with all available threads used. 
+    # 216/60 # 4 hours for 1000 replications, 40h for 10000
     
+    all_perms <- bind_rows(perm_res_list) %>% as.data.frame()
+    
+    raninf_pvals <- c()
+    raninf_pvals[1] <- sum( abs(all_perms[,aggr_names[1]]) > abs(df_res[aggr_names[1], "Estimate"]) ) / (i)
+    raninf_pvals[2] <- sum( abs(all_perms[,aggr_names[2]]) > abs(df_res[aggr_names[2], "Estimate"]) ) / (i)
+    names(raninf_pvals) <- aggr_names
     
   }
   
@@ -2050,8 +2051,8 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     toreturn <- df_res
   }
   
-  if(placebo_rfs){
-    
+  if(rfs_rando=="between" | rfs_rando=="within"){
+    toreturn <- list(raninf_pvals, all_perms)
   }
   
   
@@ -2077,8 +2078,8 @@ est_parameters <- list(outcome_variable  = "driven_loss_commodity",
 
 ## ABSOLUTE EAEAR EXPOSURES ####
 #ya <- 3
-rfs_l <- 3
-rfs_eaear_3ll <- list(America = list(), 
+rfs_l <- 2
+rfs_eaear_1ll <- list(America = list(), 
                       Africa = list(), 
                       Asia = list())
 
@@ -2086,13 +2087,12 @@ for(CNT in c("America","Africa", "Asia")){#, , , "Africa", "Asia"
   elm <- 1
   for(rfs_exp in eaear_mapmat[,"Crops"]){
     #for(rfs_l in c(1:3)){
-    rfs_eaear_3ll[[CNT]][[elm]] <- make_main_reg(continent = CNT,
+    rfs_eaear_1ll[[CNT]][[elm]] <- make_main_reg(continent = CNT,
                                                  original_sj = "Fodder", 
                                                  original_Pk = "Beef", 
                                                  estimated_effect = "alpha", 
                                                  
                                                  rfs_reg = TRUE,
-                                                 placebo_rfs = FALSE,
                                                  original_rfs_treatments = c("statute_conv"),
                                                  rfs_lead = rfs_l - 1, # lead one year less because contemporaneous is considered as a lead kind
                                                  rfs_lag = rfs_l,
@@ -2113,7 +2113,7 @@ for(CNT in c("America","Africa", "Asia")){#, , , "Africa", "Asia"
                                                  pasture_shares = est_parameters[["pasture_shares"]]
     )
     
-    names(rfs_eaear_3ll[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_", rfs_l, "leadlags")
+    names(rfs_eaear_1ll[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_", rfs_l, "leadlags")
     elm <- elm + 1
     #}
   }
@@ -2126,7 +2126,7 @@ rm(df)
 dyn_df_list <- list()
 dyn_des <- c(paste0("Anticipated RFS, next ", rfs_l, " years"), paste0("Mediated RFS, last ", rfs_l, " years"))
 for(dyn in 1:2){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags 
-  dyn_df <- lapply(rfs_eaear_3ll[[CNT]], FUN = function(x){as.data.frame(x)[dyn,] }) %>% bind_rows()
+  dyn_df <- lapply(rfs_eaear_1ll[[CNT]], FUN = function(x){as.data.frame(x)[dyn,] }) %>% bind_rows()
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
   dyn_df$model <- dyn_des[dyn]
   dyn_df_list[[dyn_des[dyn]]] <- dyn_df
@@ -2209,7 +2209,6 @@ for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia""Africa",
                                                 estimated_effect = "alpha", 
                                                 
                                                 rfs_reg = TRUE,
-                                                placebo_rfs = FALSE,
                                                 original_rfs_treatments = c("statute_conv"),
                                                 rfs_lag = est_parameters[["lags"]],
                                                 rfs_lead = est_parameters[["leads"]],
@@ -2300,6 +2299,102 @@ title <- CNT
 
 
 
+
+
+#### RANDOMIZATION INFERENCE #### 
+rfs_l <- 2
+rfs_eaear_2ll_raninf <- list(America = list(), 
+                             Africa = list(), 
+                             Asia = list())
+
+start_soy_time <- Sys.time()
+rfs_eaear_2ll_raninf[["America"]] <- make_main_reg(continent = "America",
+                                                   original_sj = "Fodder", 
+                                                   original_Pk = "Beef", 
+                                                   estimated_effect = "alpha", 
+                                                   
+                                                   rfs_reg = TRUE,
+                                                   rfs_rando = "between",
+                                                   original_rfs_treatments = c("statute_conv"),
+                                                   rfs_lead = rfs_l - 1, # lead one year less because contemporaneous is considered as a lead kind
+                                                   rfs_lag = rfs_l,
+                                                   rfs_fya = est_parameters[["fya"]],  #ya,
+                                                   rfs_pya = est_parameters[["pya"]], #ya,
+                                                   original_exposure_rfs = "eaear_Soy_compo", # exp_rfs, # mapmat_si[,"Crops"],
+                                                   group_exposure_rfs = FALSE,
+                                                   control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                   control_all_absolute_rfs = TRUE,
+                                                   
+                                                   fc_trend = TRUE, 
+                                                   s_trend = TRUE, 
+                                                   fc_s_trend = FALSE,
+                                                   
+                                                   sjpos = est_parameters[["sjpos"]],
+                                                   standardization = est_parameters[["standardization"]],
+                                                   distribution = est_parameters[["distribution"]], 
+                                                   pasture_shares = est_parameters[["pasture_shares"]]
+)
+end_soy_time <- Sys.time()
+# Oil palm
+rfs_eaear_2ll_raninf[["Asia"]] <- make_main_reg(continent = "America",
+                                                original_sj = "Fodder", 
+                                                original_Pk = "Beef", 
+                                                estimated_effect = "alpha", 
+                                                
+                                                rfs_reg = TRUE,
+                                                rfs_rando = "between",
+                                                original_rfs_treatments = c("statute_conv"),
+                                                rfs_lead = rfs_l - 1, # lead one year less because contemporaneous is considered as a lead kind
+                                                rfs_lag = rfs_l,
+                                                rfs_fya = est_parameters[["fya"]],  #ya,
+                                                rfs_pya = est_parameters[["pya"]], #ya,
+                                                original_exposure_rfs = "eaear_Oilpalm", # exp_rfs, # mapmat_si[,"Crops"],
+                                                group_exposure_rfs = FALSE,
+                                                control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                control_all_absolute_rfs = TRUE,
+                                                
+                                                fc_trend = TRUE, 
+                                                s_trend = TRUE, 
+                                                fc_s_trend = FALSE,
+                                                
+                                                sjpos = est_parameters[["sjpos"]],
+                                                standardization = est_parameters[["standardization"]],
+                                                distribution = est_parameters[["distribution"]], 
+                                                pasture_shares = est_parameters[["pasture_shares"]]
+)
+end_oilpalm_time <- Sys.time()
+# Cotton
+rfs_eaear_2ll_raninf[["America"]] <- make_main_reg(continent = "America",
+                                                   original_sj = "Fodder", 
+                                                   original_Pk = "Beef", 
+                                                   estimated_effect = "alpha", 
+                                                   
+                                                   rfs_reg = TRUE,
+                                                   rfs_rando = "between",
+                                                   original_rfs_treatments = c("statute_conv"),
+                                                   rfs_lead = rfs_l - 1, # lead one year less because contemporaneous is considered as a lead kind
+                                                   rfs_lag = rfs_l,
+                                                   rfs_fya = est_parameters[["fya"]],  #ya,
+                                                   rfs_pya = est_parameters[["pya"]], #ya,
+                                                   original_exposure_rfs = "eaear_Cotton", # exp_rfs, # mapmat_si[,"Crops"],
+                                                   group_exposure_rfs = FALSE,
+                                                   control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                   control_all_absolute_rfs = TRUE,
+                                                   
+                                                   fc_trend = TRUE, 
+                                                   s_trend = TRUE, 
+                                                   fc_s_trend = FALSE,
+                                                   
+                                                   sjpos = est_parameters[["sjpos"]],
+                                                   standardization = est_parameters[["standardization"]],
+                                                   distribution = est_parameters[["distribution"]], 
+                                                   pasture_shares = est_parameters[["pasture_shares"]]
+)
+end_cotton_time <- Sys.time()
+
+
+
+
 ## (OLD) WITH RELATIVE EXPOSURES ####
 est_parameters[["standardization"]] <- "_std2"
 #all_exposures_rfs <- mapmat_si[,"Crops"][!(mapmat_si[,"Crops"] %in% c("Oat,", "Olive"))]
@@ -2313,7 +2408,6 @@ for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia"
                                                            estimated_effect = "alpha", 
                                                            
                                                            rfs_reg = TRUE,
-                                                           placebo_rfs = FALSE,
                                                            original_rfs_treatments = c("statute_conv"),
                                                            rfs_lag = est_parameters[["lags"]],
                                                            rfs_lead = est_parameters[["leads"]],
@@ -2344,7 +2438,6 @@ for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia"
                                                          estimated_effect = "alpha", 
                                                          
                                                          rfs_reg = TRUE,
-                                                         placebo_rfs = FALSE,
                                                          original_rfs_treatments = c("statute_conv"),
                                                          rfs_lag = est_parameters[["lags"]],
                                                          rfs_lead = est_parameters[["leads"]],
@@ -2450,7 +2543,6 @@ for(CNT in c("America", "Asia")){#, "Africa",, , "Africa", "Asia"
                                                               estimated_effect = "alpha",
                                                               
                                                               rfs_reg = TRUE,
-                                                              placebo_rfs = FALSE,
                                                               original_rfs_treatments = c("blendwall"),
                                                               rfs_lag = est_parameters[["lags"]],
                                                               rfs_lead = est_parameters[["leads"]],
@@ -2474,7 +2566,6 @@ for(CNT in c("America", "Asia")){#, "Africa",, , "Africa", "Asia"
                                                             estimated_effect = "alpha", 
                                                             
                                                             rfs_reg = TRUE,
-                                                            placebo_rfs = FALSE,
                                                             original_rfs_treatments = c("blendwall"),
                                                             rfs_lag = est_parameters[["lags"]],
                                                             rfs_lead = est_parameters[["leads"]],
