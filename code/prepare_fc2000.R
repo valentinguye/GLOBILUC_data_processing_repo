@@ -100,3 +100,14 @@ mask(resampled,
      filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_fc_2000.tif"), 
      overwrite = TRUE)
 
+# AND WITH ANY DRIVER ALAYS-ZERO MASK 
+any_mask <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers_any.tif"))
+# plot(mask)
+
+mask(resampled, 
+     mask = any_mask, 
+     maskvalue = 0, # necessary here, because the always_zero function used converted to 0 and not to NA
+     updatevalue = NA, 
+     filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_fc_2000_any.tif"), 
+     overwrite = TRUE)
+

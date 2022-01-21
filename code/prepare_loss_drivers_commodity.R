@@ -92,13 +92,57 @@ drivers <- crop(drivers, ext)
 # 0 is minor loss
 # NA is mask for water and <.5% loss 
 
-make_binary <- function(x){if_else(condition = (x==1 ), true = 1, false = 0)}#| x==2
+# One of commodity, shifting, forestry, or fire
+make_binary_any <- function(x){if_else(condition = (x==1 | x==2 | x==3 | x==4), true = 1, false = 0)}
+
+anydrivers_b_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "anydrivers_binary_commodity.tif")
+
+calc(drivers, 
+     fun = make_binary_any,
+     filename = anydrivers_b_output_name, 
+     overwrite = TRUE)
+
+# commodity
+make_binary_commodity <- function(x){if_else(condition = (x==1 ), true = 1, false = 0)}#| x==2
 
 drivers_b_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "drivers_binary_commodity.tif")
 
 calc(drivers, 
-     fun = make_binary,
+     fun = make_binary_commodity,
      filename = drivers_b_output_name, 
+     overwrite = TRUE)
+
+
+# compute for different drivers 
+
+# shifting
+make_binary_shifting <- function(x){if_else(condition = (x==2), true = 1, false = 0)}
+
+drivers_shifting_b_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "drivers_binary_shifting.tif")
+
+calc(drivers, 
+     fun = make_binary_shifting,
+     filename = drivers_shifting_b_output_name, 
+     overwrite = TRUE)
+
+# forestry
+make_binary_forestry <- function(x){if_else(condition = (x==3), true = 1, false = 0)}
+
+drivers_forestry_b_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "drivers_binary_forestry.tif")
+
+calc(drivers, 
+     fun = make_binary_forestry,
+     filename = drivers_forestry_b_output_name, 
+     overwrite = TRUE)
+
+# wild fires
+make_binary_fire <- function(x){if_else(condition = (x==4), true = 1, false = 0)}
+
+drivers_fire_b_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "drivers_binary_fire.tif")
+
+calc(drivers, 
+     fun = make_binary_fire,
+     filename = drivers_fire_b_output_name, 
      overwrite = TRUE)
 
 
@@ -135,10 +179,26 @@ resample(x = aggregated,
 
 
 ### MASK LOSS WITH DRIVERS ### 
+drivers_any <- raster(anydrivers_b_output_name)
 
 drivers_b <- raster(drivers_b_output_name)
+drivers_shifting <- raster(drivers_shifting_b_output_name)
+drivers_forestry <- raster(drivers_forestry_b_output_name)
+drivers_fire <- raster(drivers_fire_b_output_name)
+
 resampled <- brick(resampled_output_name) # this is loss data
 
+# ANY DRIVER 
+any_lossdrivers_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "any_lossdrivers_commodity.tif")
+
+mask(resampled, 
+     mask = drivers_any, 
+     maskvalue = 0, 
+     updatevalue = 0, 
+     filename = any_lossdrivers_output_name, 
+     overwrite = TRUE)
+        
+# COMMODITY DRIVER
 agri_lossdrivers_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "agri_lossdrivers_commodity.tif")
 
 mask(resampled, 
@@ -147,6 +207,38 @@ mask(resampled,
      updatevalue = 0, 
      filename = agri_lossdrivers_output_name, 
      overwrite = TRUE)
+
+# SHIFTING AGRICULTURE 
+shifting_lossdrivers_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "agri_lossdrivers_shifting.tif")
+
+mask(resampled, 
+     mask = drivers_shifting, 
+     maskvalue = 0, 
+     updatevalue = 0, 
+     filename = shifting_lossdrivers_output_name, 
+     overwrite = TRUE)
+
+# FORESTRY
+forestry_lossdrivers_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "agri_lossdrivers_forestry.tif")
+
+mask(resampled, 
+     mask = drivers_forestry, 
+     maskvalue = 0, 
+     updatevalue = 0, 
+     filename = forestry_lossdrivers_output_name, 
+     overwrite = TRUE)
+
+# WILD FIRES
+fire_lossdrivers_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "agri_lossdrivers_fire.tif")
+
+mask(resampled, 
+     mask = drivers_fire, 
+     maskvalue = 0, 
+     updatevalue = 0, 
+     filename = fire_lossdrivers_output_name, 
+     overwrite = TRUE)
+
+
 
 # so the output of this has either forest loss area if it is driven by agriculture, or 0 if it is either 
 # somewhere without forest loss on land or in the sea *** i.e. there is no NAs at this stage! *** 
@@ -157,15 +249,65 @@ mask(resampled,
 # Read in a GAEZ grid, because we want to align to it. 
 gaez <- raster(here("temp_data", "GAEZ", "v4", "AES_index_value", "Rain-fed", "High-input", "Alfalfa.tif"))
 
+# ANY DRIVER
+any_lossdrivers <- brick(any_lossdrivers_output_name)
+
+any_gaez_resampled_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers_any.tif")
+
+resample(x = any_lossdrivers, 
+         y = gaez, 
+         method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
+         # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
+         filename = any_gaez_resampled_output_name, 
+         overwrite = TRUE)
+
+# COMMODITY
 agri_lossdrivers <- brick(agri_lossdrivers_output_name)
 
-gaez_resampled_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers_commodity.tif")
+commodity_gaez_resampled_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers_commodity.tif")
 
 resample(x = agri_lossdrivers, 
          y = gaez, 
          method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
          # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
-         filename = gaez_resampled_output_name, 
+         filename = commodity_gaez_resampled_output_name, 
+         overwrite = TRUE)
+
+# SHIFTING
+shifting_lossdrivers <- brick(shifting_lossdrivers_output_name)
+
+shifting_gaez_resampled_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers_shifting.tif")
+
+resample(x = shifting_lossdrivers, 
+         y = gaez, 
+         method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
+         # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
+         filename = shifting_gaez_resampled_output_name, 
+         overwrite = TRUE)
+
+
+# FORESTRY
+forestry_lossdrivers <- brick(forestry_lossdrivers_output_name)
+
+forestry_gaez_resampled_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers_forestry.tif")
+
+resample(x = forestry_lossdrivers, 
+         y = gaez, 
+         method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
+         # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
+         filename = forestry_gaez_resampled_output_name, 
+         overwrite = TRUE)
+
+# WILD FIRES
+fire_lossdrivers <- brick(fire_lossdrivers_output_name)
+
+fire_gaez_resampled_output_name <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers_fire.tif")
+
+resample(x = fire_lossdrivers, 
+         y = gaez, 
+         method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
+         # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
+         filename = fire_gaez_resampled_output_name, 
          overwrite = TRUE)
 
 # resampled <- brick(gaez_resampled_output_name)
@@ -199,24 +341,26 @@ resample(x = agri_lossdrivers,
 # ### MASK ALWAYS 0 PIXELS
 # Yes, but with the mask from more general lossdriver definition, so that when merging both (by stacking rasters), we use the least restricting mask, i.e. that of the 
 # larger deforestation definition
-# ## Create the mask layer
-# # Create a layer that has values either : NA if lossdrivers always 0 across all years, 1 otherwise
-# final_lossdrivers <- brick(gaez_resampled_output_name)
-# # # not using if_else here to allow NA as an output...
-# # always_zero <- function(y){
-# #   if(sum(y) == 0){d <- NA}else{d <- 1}
-# #   return(d)}
-# # don't know why but it will work only with the function like this, converting to 0 and not to NA 
-# # (which we handle in the masking function next)
+## Create the mask layer
+# Create a layer that has values either : NA if lossdrivers always 0 across all years, 1 otherwise
+final_lossdrivers <- brick(commodity_gaez_resampled_output_name)
+# # not using if_else here to allow NA as an output...
+# always_zero <- function(y){
+#   if(sum(y) == 0){d <- NA}else{d <- 1}
+#   return(d)}
+# don't know why but it will work only with the function like this, converting to 0 and not to NA
+# (which we handle in the masking function next)
 # always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
 # mask_path <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers_commodity.tif")
 # 
-# overlay(x = final_lossdrivers, 
-#         fun = always_zero, 
+# overlay(x = final_lossdrivers,
+#         fun = always_zero,
 #         filename = mask_path,
 #         na.rm = TRUE, # but there is no NA anyway
-#         overwrite = TRUE)  
+#         overwrite = TRUE)
 
+# this file is currently not produced anymore in script above. It's just available on my computer. 
+# It corresponds to commodity + shifting agriculture driver
 mask_path <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers.tif")
 mask <- raster(mask_path)
 # plot(mask)
@@ -232,6 +376,67 @@ mask(final_lossdrivers,
 # masked <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers.tif"))
 
 
+### ALWAYS ZERO FOR ANY DRIVER ### 
+
+# Make the mask
+any_lossdrivers <- brick(any_gaez_resampled_output_name)
+
+always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
+mask_path <- here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers_any.tif")
+
+overlay(x = any_lossdrivers,
+        fun = always_zero,
+        filename = mask_path,
+        na.rm = TRUE, # but there is no NA anyway
+        overwrite = TRUE)
+
+
+# mask driver loss data
+mask <- raster(mask_path)
+commodity_lossdrivers <- brick(commodity_gaez_resampled_output_name)
+shifting_lossdrivers <- brick(shifting_gaez_resampled_output_name)
+forestry_lossdrivers <- brick(forestry_gaez_resampled_output_name)
+fire_lossdrivers <- brick(fire_gaez_resampled_output_name)
+
+# ANY LOSS DRIVER
+mask(any_lossdrivers,
+     mask = mask,
+     maskvalue = 0, # necessary here, because the always_zero function used converted to 0 and not to NA
+     updatevalue = NA,
+     filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_any.tif"),
+     overwrite = TRUE)
+
+# COMMODITY
+mask(commodity_lossdrivers,
+     mask = mask,
+     maskvalue = 0, # necessary here, because the always_zero function used converted to 0 and not to NA
+     updatevalue = NA,
+     filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_commodity.tif"),
+     overwrite = TRUE)
+
+# SHIFTING
+mask(shifting_lossdrivers,
+     mask = mask,
+     maskvalue = 0, # necessary here, because the always_zero function used converted to 0 and not to NA
+     updatevalue = NA,
+     filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_shifting.tif"),
+     overwrite = TRUE)
+
+# FORESTRY
+mask(forestry_lossdrivers,
+     mask = mask,
+     maskvalue = 0, # necessary here, because the always_zero function used converted to 0 and not to NA
+     updatevalue = NA,
+     filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_forestry.tif"),
+     overwrite = TRUE)
+
+# FIRE
+mask(fire_lossdrivers,
+     mask = mask,
+     maskvalue = 0, # necessary here, because the always_zero function used converted to 0 and not to NA
+     updatevalue = NA,
+     filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_fire.tif"),
+     overwrite = TRUE)
 
 
 

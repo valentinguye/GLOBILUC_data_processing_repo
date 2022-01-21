@@ -130,3 +130,46 @@ wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
 saveRDS(wide_df, here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata"))
 
 rm(pasture_m, mask, wide_df)
+
+
+### REPEAT MASKING, BUT WITH MORE GENERAL MASK OF ALL DRIVERS  ####
+resampled <- raster(resampled_path)
+
+mask <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers_any.tif"))
+
+masked_pasture_output_name <- here("temp_data", "processed_pasture2000", "tropical_aoi", "any_driverloss_masked_pasture.tif")
+
+mask(x = resampled, 
+     mask = mask, 
+     maskvalue = 0, # necessary here, because there is no NA in the mask, only 0 and 1 (see the prepare_loss_drivers.R script)
+     updatevalue = NA, 
+     filename = masked_pasture_output_name,
+     overwrite = TRUE)
+
+
+# The pasture data have a bit more NAs (~30000) than the gaez data. 
+# This might be a question of what they respectively counted as the shore. 
+# Anyways, in order to merge the pasture data, we need either to trim the other 
+# data sets to the data available (i.e. not NA) in pasture (and loose information), 
+# or to merge based on the centroids
+
+### STACK RASTERS TO MERGE ###
+# we do not stack rasters to merge them here. It is just for one variable. 
+
+### RASTER TO DATAFRAME ### 
+pasture_m <- raster(masked_pasture_output_name)
+
+# na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
+# We also set long to false because we reshape with a proper function for more control
+wide_df <- raster::as.data.frame(pasture_m, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ~700s. 
+
+# Rename coordinate variables
+names(wide_df)
+head(wide_df[,c("x", "y")])
+wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+# We do not creat a sequantial ID, as this would be confounding (see explanation above)
+
+saveRDS(wide_df, here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_any_driverloss_df.Rdata"))
+
+rm(pasture_m, mask, wide_df)

@@ -62,9 +62,10 @@ origindir <- here("temp_data", "merged_datasets", "tropical_aoi")
 dataset_names <- c("glass_aesi_long",
                    "firstloss8320_aesi_long", 
                    "phtfloss_aesi_long", 
-                   "driverloss_aesi_long")
+                   "driverloss_aesi_long", 
+                   "driverloss_all_aesi_long")
 
-name <- dataset_names[4]
+name <- dataset_names[5]
 
 #### ADD COUNTRY INFORMATION #### 
 
@@ -117,7 +118,7 @@ for(name in dataset_names){
   #                  join = st_contains,
   #                  prepared = TRUE,
   #                  left = FALSE)# performs inner join so returns only records that spatially match.
-  #
+
 
   # However, we use st_nearest_feature so that all points match a country
   df_cs <- st_join(x = df_cs,
@@ -125,6 +126,8 @@ for(name in dataset_names){
                    join = st_nearest_feature,
                    left = TRUE)
 
+  rm(countries)
+  
   # names(df_cs)[names(df_cs) == "OBJECTID"] <- "country_id"
   names(df_cs)[names(df_cs) == "COUNTRY_NA"] <- "country_name"
 
@@ -580,10 +583,12 @@ origindir <- here("temp_data", "merged_datasets", "tropical_aoi")
 dataset_names <- c("glass_aeay_long",
                    "firstloss8320_aeay_long", 
                    "phtfloss_aeay_long", 
-                   "driverloss_aeay_long")
+                   "driverloss_aeay_long", 
+                   "driverloss_all_aeay_long")
 
-name <- dataset_names[4]
+name <- dataset_names[5]
 
+#### GROUP AND STANDARDIZE AEAY CROPS #### 
 
 prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 
@@ -658,7 +663,6 @@ price_avg <- prices %>%
   summarise(across(.cols = any_of(mapmat[,"Prices"]), 
                    .fns = mean, na.rm = TRUE))
 
-#### GROUP AND STANDARDIZE AEAY CROPS #### 
 # name = dataset_names[1]
 
 for(name in dataset_names){
@@ -961,6 +965,7 @@ for(name in dataset_names){
   if(name=="firstloss8320_aeay_long"){country_path <- paste0(here(origindir, "firstloss8320_aesi_long"), "_country_nf.Rdata")}
   if(name=="phtfloss_aeay_long"){country_path <- paste0(here(origindir, "phtfloss_aesi_long"), "_country_nf.Rdata")}
   if(name=="driverloss_aeay_long"){country_path <- paste0(here(origindir, "driverloss_aesi_long"), "_country_nf.Rdata")}
+  if(name=="driverloss_all_aeay_long"){country_path <- paste0(here(origindir, "driverloss_all_aesi_long"), "_country_nf.Rdata")}
   
   df_country <- readRDS(country_path)
   
@@ -973,6 +978,7 @@ for(name in dataset_names){
   if(name=="firstloss8320_aeay_long"){continent_path <- paste0(here(origindir, "firstloss8320_aesi_long"), "_continent.Rdata")}
   if(name=="phtfloss_aeay_long"){continent_path <- paste0(here(origindir, "phtfloss_aesi_long"), "_continent.Rdata")}
   if(name=="driverloss_aeay_long"){continent_path <- paste0(here(origindir, "driverloss_aesi_long"), "_continent.Rdata")}
+  if(name=="driverloss_all_aeay_long"){continent_path <- paste0(here(origindir, "driverloss_all_aesi_long"), "_continent.Rdata")}
   
   df_continent <- readRDS(continent_path)
   
@@ -986,8 +992,8 @@ for(name in dataset_names){
   final <- left_join(final, df_stdeaear, by = "grid_id")
   rm(df_stdeaear)
   
-  # Pasture 2000 share of area variable
   if(name == "driverloss_aeay_long"){
+  # Pasture 2000 share of area variable
     df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
     names(df_pasture)[names(df_pasture)=="driverloss_masked_pasture"] <- "pasture_share"
     
@@ -999,6 +1005,23 @@ for(name in dataset_names){
     df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
     final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
     rm(df_remain)
+  }
+  
+  if(name == "driverloss_all_aeay_long"){
+    # Pasture 2000 share of area variable
+    df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_any_driverloss_df.Rdata")) 
+    names(df_pasture)[names(df_pasture)=="any_driverloss_masked_pasture"] <- "pasture_share"
+    
+    df_pasture <- mutate(df_pasture, 
+                         lon = round(lon, 6), 
+                         lat = round(lat, 6))
+    
+    final <- mutate(final, 
+                     lon = round(lon, 6), 
+                     lat = round(lat, 6))
+    
+    final <- left_join(final, df_pasture, by = c("lon", "lat")) # /!\ THIS ACTUALLY DOES NOT MATCH PERFECTLY. HANDLE IF WE REALLY WANT TO USE PASTURE SHARES
+    rm(df_pasture)
   }
   
   # Create country year fixed effect
