@@ -281,12 +281,27 @@ for(name in dataset_names){
 
 #### REMAINING FOREST ####
 
-df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long.Rdata"))
+#df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long.Rdata"))
+df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aesi_long.Rdata"))
 
 # Remove gaez variables
 df <- dplyr::select(df,-all_of(gaez_crops))
 
 year_list <- list()
+
+df <- mutate(df, 
+             driven_loss_any = driven_loss_commodity + driven_loss_shifting + driven_loss_forestry + driven_loss_fire)
+
+# for some grid cells, deforestation from different drivers is positive in the same year. 
+# This probably comes from resampling/reprojecting operations, and can be observed here only when forest loss was positive in those places
+# dplyr::filter(df, driven_loss_commodity>0 & driven_loss_any > driven_loss_commodity)
+# df[df$grid_id == 110,]
+
+# just ensure that driven_loss_any is not counting 4 times too much deforestation in those places. 
+df[df$driven_loss_commodity>0 & df$driven_loss_any > df$driven_loss_commodity, ] <- dplyr::filter(df, 
+                                                                                                  driven_loss_commodity>0 & driven_loss_any > driven_loss_commodity) %>% 
+                                                                                            mutate(driven_loss_any = driven_loss_commodity)
+
 
 # in the first year (2001), the past year accumulated deforestation is null. 
 year_list[["2001"]] <- df[df$year == 2001, c("grid_id", "year")] 
@@ -297,7 +312,7 @@ years <- 2002:max(df$year)
 for(y in years){
   sub_ <- df[df$year < y,]
   year_list[[as.character(y)]] <- ddply(sub_, "grid_id", summarise,
-                                        accu_defo_since2k = sum(driven_loss, na.rm = TRUE))
+                                        accu_defo_since2k = sum(driven_loss_any, na.rm = TRUE))
   year_list[[as.character(y)]][,"year"] <- y
 }
 
@@ -310,13 +325,19 @@ df <- inner_join(df, accu_defo_df, by = c("grid_id", "year"))
 df <- dplyr::mutate(df, 
                      remaining_fc = fc_2000 - accu_defo_since2k)
 
+fc_2009 <- df[df$year == 2009, c("grid_id", "remaining_fc")]
+names(fc_2009) <- c("grid_id", "fc_2009")
+df <- left_join(df, fc_2009, by = "grid_id")
+
+
 # df[df$grid_id == 1267,c("grid_id", "year", "lucpfap_pixelcount", "accu_lucpfp_since2k", "remain_pf_pixelcount")] 
 
 # put keep only new variables in remaining
-remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k")]
+remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k", "fc_2009")] # fc_2000 is added as a raster layer in merge_* scripts
 
-saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_remaining.Rdata"))
+saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aesi_long_remaining.Rdata"))
 
+rm(year_list, sub_, accu_defo_df)
 
 #### STANDARDIZE AND AGGREGATE SUITABILITY INDICES ####  
  
@@ -589,7 +610,7 @@ dataset_names <- c("glass_aeay_long",
 name <- dataset_names[5]
 
 #### GROUP AND STANDARDIZE AEAY CROPS #### 
-
+# NOW, prices are needed only for SOME crops, those that are grouped but GAEZ yield in dry weights are not comparable. 
 prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 
 ### This matrix is used for maping crops from GAEZ with commodities from price data sets
@@ -599,7 +620,7 @@ mapmat_data <- c(
   "Beef", "Fodder", # these crop categories are gonna be created in the present script 
   "Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
   "Cocoa", "Cocoa",
-  # "Coconut_oil", "Coconut", See below, in conversion part, why we exclude coconut 
+  "Coconut_oil", "Coconut", # Coconut not excluded as we don't use prices anymore. See below, in conversion part, why we would exclude it if we needed price scaling 
   "Coffee", "Coffee",
   "Cotton", "Cotton",
   "Groundnuts", "Groundnut",
@@ -629,6 +650,9 @@ mapmat <- matrix(data = mapmat_data,
 
 colnames(mapmat) <- c("Prices", "Crops")
 
+# crops to group based on potential REVENUE
+crops2grp <- c("Barley", "Wheat", "Groundnut", "Rapeseed", "Sorghum", "Sunflower")
+
 # crops to standardize. There is not fodder, rubber, citrus, banana, cocoa, coffee, olive and tea
 eaear2std <- paste0("eaear_", c("Barley", "Cotton", "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Rapeseed", "Rice", "Sorghum",
                                 "Soy_compo", "Sugar", "Sunflower", "Tobacco", "Wheat")) 
@@ -656,9 +680,9 @@ conv_fac <- c(Wheat = 0.87,
 # no vlaue missing for any of these commodities in the broad period 1991-2019
 # working_prices <- prices[,c("year", mapmat[,"Prices"])]%>%filter(year>1990 & year < 2020)
 
-# make average prices
+# get prices for 2000
 price_avg <- prices %>% 
-  filter(year>=2000 & year <= 2019) %>% 
+  filter(year>=1995 & year <= 2004) %>% 
   #filter(year==2000) %>% 
   summarise(across(.cols = any_of(mapmat[,"Prices"]), 
                    .fns = mean, na.rm = TRUE))
@@ -675,6 +699,7 @@ for(name in dataset_names){
   rm(df)
   
   ## Aggregate suitability indexes to match price data
+  # makes sense for SUgar fodder and rice subcrops because yields expressed in comaprable units  
   df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
                                           Fodder = max(c(Alfalfa, Napiergrass)),   
                                           Rice = max(c(Drylandrice, Wetlandrice)),
@@ -804,13 +829,25 @@ for(name in dataset_names){
   
   ## Interact with average prices to get Expected Agro-Ecological Attainable Revenue (EAEAR)
   
+  # NOTE THAT WE MULTIPLY BY PRICES ONLY FOR CROPS THAT WE WANT TO GROUP !  
   # Prices have been converted to $/t in prepare_prices.R
-  for(aeay_i in mapmat[,"Crops"]){
+  for(aeay_i in crops2grp){
+    price_i <- price_avg[mapmat[mapmat[,"Crops"]==aeay_i,"Prices"]]%>%as.numeric()
+    df_cs <- dplyr::mutate(df_cs, 
+                           !!as.symbol(aeay_i) := !!as.symbol(aeay_i) * price_i)
+  }
+  
+  df_cs <- df_cs %>% rowwise() %>% mutate(Cereals = max(c(Barley, Wheat)), 
+                                          Oilfeed_crops = max(c(Groundnut, Rapeseed, Sorghum, Sunflower))) %>% as.data.frame()
+  
+  # This loop only changes the names currently, because everything is coded to handle these names currently
+  for(aeay_i in c(mapmat[,"Crops"], "Cereals", "Oilfeed_crops")){
     price_i <- price_avg[mapmat[mapmat[,"Crops"]==aeay_i,"Prices"]]%>%as.numeric()
     eaear_i <- paste0("eaear_", aeay_i)
     df_cs <- dplyr::mutate(df_cs, 
-                           !!as.symbol(eaear_i) := !!as.symbol(aeay_i))# * price_i
+                           !!as.symbol(eaear_i) := !!as.symbol(aeay_i))# * price_i #   NOTE THAT WE DO NOT MULTIPLY BY PRICES ANYMOOOORE
   }
+
   
   # and for Soy commodities: 
   df_cs <- dplyr::mutate(df_cs, eaear_Soy_compo =  eaear_Soybean_meal + eaear_Soybean_oil)
@@ -992,10 +1029,19 @@ for(name in dataset_names){
   final <- left_join(final, df_stdeaear, by = "grid_id")
   rm(df_stdeaear)
   
+  # necessary to merge with pasture data below
+  final <- mutate(final, 
+                  lon = round(lon, 6), 
+                  lat = round(lat, 6))
+  
   if(name == "driverloss_aeay_long"){
   # Pasture 2000 share of area variable
     df_pasture <- readRDS(here("temp_data", "processed_pasture2000", "tropical_aoi", "pasture_4_driverloss_df.Rdata")) 
     names(df_pasture)[names(df_pasture)=="driverloss_masked_pasture"] <- "pasture_share"
+    
+    df_pasture <- mutate(df_pasture, 
+                         lon = round(lon, 6), 
+                         lat = round(lat, 6))
     
     final <- left_join(final, df_pasture, by = c("lon", "lat")) # /!\ THIS ACTUALLY DOES NOT MATCH PERFECTLY. HANDLE IF WE REALLY WANT TO USE PASTURE SHARES
     rm(df_pasture)
@@ -1016,12 +1062,14 @@ for(name in dataset_names){
                          lon = round(lon, 6), 
                          lat = round(lat, 6))
     
-    final <- mutate(final, 
-                     lon = round(lon, 6), 
-                     lat = round(lat, 6))
-    
     final <- left_join(final, df_pasture, by = c("lon", "lat")) # /!\ THIS ACTUALLY DOES NOT MATCH PERFECTLY. HANDLE IF WE REALLY WANT TO USE PASTURE SHARES
     rm(df_pasture)
+    
+    # remaining
+    # was run only on aesi, hence aesi in the name, but works for aeay too. 
+    df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aesi_long_remaining.Rdata"))
+    final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
+    rm(df_remain)
   }
   
   # Create country year fixed effect

@@ -593,6 +593,8 @@ unique(uspsd_AH$Commodity_Description) # main crops (by crop, not commodity, for
 ## What commodities?
 unique(uspsd$Commodity_Description)
 
+# what aggregates
+unique(uspsd$Attribute_Description)
 
 
 
@@ -607,7 +609,7 @@ focal_commodities <- c("Animal Numbers, Cattle",
 psd_list <- list()
 elm <- 1
 for(country in c("United States", "European Union", "China")){
-  for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption")){
+  for(attribute_des in c("Area Harvested", "Total Supply", "Domestic Consumption", "Imports")){
     
     # select observations and variables we want
     tmpd<- psd %>% dplyr::filter(Country_Name == country &
