@@ -610,6 +610,8 @@ dataset_names <- c("glass_aeay_long",
 name <- dataset_names[5]
 
 #### GROUP AND STANDARDIZE AEAY CROPS #### 
+# all groupings in this section are motivated on the GAEZ v4 model documentation, and in particular Table A4-1.3
+
 # NOW, prices are needed only for SOME crops, those that are grouped but GAEZ yield in dry weights are not comparable. 
 prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 
@@ -617,12 +619,13 @@ prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 mapmat_data <- c(
   "Banana","Banana",
   "Barley", "Barley",
-  "Beef", "Fodder", # these crop categories are gonna be created in the present script 
+  "Crude_oil", "Biomass", # these crop categories are gonna be created in the present script
   "Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
   "Cocoa", "Cocoa",
   "Coconut_oil", "Coconut", # Coconut not excluded as we don't use prices anymore. See below, in conversion part, why we would exclude it if we needed price scaling 
   "Coffee", "Coffee",
   "Cotton", "Cotton",
+  "Beef", "Fodder", # these crop categories are gonna be created in the present script 
   "Groundnuts", "Groundnut",
   "Maize", "Maizegrain",
   "Oat", "Oat",
@@ -631,7 +634,7 @@ mapmat_data <- c(
   "Rapeseed_oil", "Rapeseed",
   "Rice", "Rice",
   "Rubber", "Rubber",
-  "Sorghum", "Sorghum", 
+  "Sorghum", "Sorghum", # this will be matched with barley and wheat, i.e. grains we have price data on.
   "Soybean", "Soybean",
   "Soybean_meal", "Soybean_meal", # these crop categories are gonna be created in the present script
   "Soybean_oil", "Soybean_oil", # these crop categories are gonna be created in the present script
@@ -651,14 +654,15 @@ mapmat <- matrix(data = mapmat_data,
 colnames(mapmat) <- c("Prices", "Crops")
 
 # crops to group based on potential REVENUE
-crops2grp <- c("Barley", "Wheat", "Groundnut", "Rapeseed", "Sorghum", "Sunflower")
+crops2grp <- c("Barley", "Sorghum", "Wheat", "Cocoa", "Coffee", "Groundnut", "Rapeseed", "Sunflower")
 
 # crops to standardize. There is not fodder, rubber, citrus, banana, cocoa, coffee, olive and tea
-eaear2std <- paste0("eaear_", c("Barley", "Cotton", "Groundnut", "Maizegrain", "Oat", "Oilpalm", "Rapeseed", "Rice", "Sorghum",
-                                "Soy_compo", "Sugar", "Sunflower", "Tobacco", "Wheat")) 
+eaear2std <- paste0("eaear_", c("Cereals", "Oilfeed_crops", "Cotton", "Maizegrain", "Oat", "Oilpalm", "Rice",
+                                "Soy_compo", "Sugar", "Tobacco")) 
 # add cocoa, coffee and tea for std2 
-eaear2std_bis <- paste0("eaear_", c("Banana", "Barley", "Cotton", "Cocoa", "Coffee", "Groundnut", "Maizegrain", "Oat", "Olive", "Oilpalm", "Rapeseed", "Rice", "Sorghum",
-                                    "Soy_compo", "Sugar", "Sunflower", "Tea", "Tobacco", "Wheat")) 
+eaear2std_bis <- paste0("eaear_", c("Banana", "Biomass", "Cereals", "Oilfeed_crops", "Cocoa_Coffee", "Cotton", 
+                                    "Maizegrain", "Oat", "Olive", "Oilpalm", "Rice",
+                                    "Soy_compo", "Sugar", "Tea", "Tobacco")) 
 
 # this vector is used to convert potential production in dry weight from GAEZ into weight of traded commodities. 
 # Olive, Oil palm, and Sugar crops are already provided in GAEZ in units of traded goods (oil or sugar)
@@ -700,10 +704,11 @@ for(name in dataset_names){
   
   ## Aggregate suitability indexes to match price data
   # makes sense for SUgar fodder and rice subcrops because yields expressed in comaprable units  
-  df_cs <- df_cs %>% rowwise() %>% mutate(Sugar = max(c(Sugarbeet, Sugarcane)),# Especially necessary to match the international price of sugar
+  df_cs <- df_cs %>% rowwise() %>% mutate(Biomass = max(c(Miscanthus, Reedcanarygrass, Sorghumbiomass*10, Switchgrass)), # sorghum biomass is expressed in kg/ha, and not 10kg/ha as it is the case for the three other crops
+                                          #  don't include Jatropha because it is expressed in seeds and not above ground biomass in GAEZ. 
                                           Fodder = max(c(Alfalfa, Napiergrass)),   
                                           Rice = max(c(Drylandrice, Wetlandrice)),
-                                          # Sorghum2 = max(c(Sorghum, Sorghumbiomass)) don't add Sorghumbiomass because only Sorghum will match the price time series we have
+                                          Sugar = max(c(Sugarbeet, Sugarcane)) # Especially necessary to match the international price of sugar
                                           # We surely wont need these in the AEAY workflow, as we need to interact these variables with a price and there is no price for those. 
                                           # bioenergy_crops = max(c(Jatropha, Miscanthus, Reedcanarygrass, Sorghumbiomass, Switchgrass)),
                                           # cereal_crops = max(c(Buckwheat, Foxtailmillet, Pearlmillet, Rye)),
@@ -761,7 +766,7 @@ for(name in dataset_names){
   # Oil content is 45-56% in https://link.springer.com/chapter/10.1007%2F978-94-011-0733-4_6 as reporte by https://link.springer.com/article/10.1007/s11746-017-2981-3
   # it is 31% in table 32 in https://www.ers.usda.gov/webdocs/publications/41880/33132_ah697_002.pdf
   # Because it's a bit unclear what the value is in the literature, and price is available in PS for groudnuts (not oil), we don't convert to oil.
-  # Nevertheless, we convert from DM weight to shelled weight
+  # Nevertheless, we convert from DM weight kernel (in GAEZ) to shelled weight (Pink Sheet), using GAEZ conversion factor
   df_cs <- dplyr::mutate(df_cs, Groundnut = Groundnut / conv_fac["Groundnut"])
   
   # MAIZE. 
@@ -819,35 +824,30 @@ for(name in dataset_names){
   df_cs <- dplyr::mutate(df_cs, Wheat = Wheat / conv_fac["Wheat"])
   
   
-  ## CONVERT TO FROM kg/ha to ton/ha
+  ## CONVERT FROM kg/ha to ton/ha
   # All prices have been converted to $/ton in prepare_prices.R but all yields are expressed in kg/ha
   df_cs <- dplyr::mutate(df_cs, across(.cols = all_of(mapmat[,"Crops"]),
                                        .fns = ~./1000)) 
-  # Convert Nappier grass and alfalfa (components of Fodder) from now 10 tons to tons. 
-  df_cs <- dplyr::mutate(df_cs, across(.cols = all_of("Fodder"),
+  # Convert Nappier grass and alfalfa (components of Fodder), and Biomass from now 10 tons to tons. 
+  df_cs <- dplyr::mutate(df_cs, across(.cols = all_of(c("Fodder", "Biomass")),
                                        .fns = ~.*10)) 
   
   ## Interact with average prices to get Expected Agro-Ecological Attainable Revenue (EAEAR)
   
-  # NOTE THAT WE MULTIPLY BY PRICES ONLY FOR CROPS THAT WE WANT TO GROUP !  
   # Prices have been converted to $/t in prepare_prices.R
-  for(aeay_i in crops2grp){
-    price_i <- price_avg[mapmat[mapmat[,"Crops"]==aeay_i,"Prices"]]%>%as.numeric()
-    df_cs <- dplyr::mutate(df_cs, 
-                           !!as.symbol(aeay_i) := !!as.symbol(aeay_i) * price_i)
-  }
-  
-  df_cs <- df_cs %>% rowwise() %>% mutate(Cereals = max(c(Barley, Wheat)), 
-                                          Oilfeed_crops = max(c(Groundnut, Rapeseed, Sorghum, Sunflower))) %>% as.data.frame()
-  
-  # This loop only changes the names currently, because everything is coded to handle these names currently
-  for(aeay_i in c(mapmat[,"Crops"], "Cereals", "Oilfeed_crops")){
+  # we actually need to convert yields to revenues only for crops that we want to group
+  # yet, for sthe sake of generality, we convert all crops to their revenues
+  # for non-grouped crops, it's not a big deal if the conversion to $/ha is not accurate, as comparisons will only be within crops, between grid cells 
+  for(aeay_i in mapmat[,"Crops"]){
     price_i <- price_avg[mapmat[mapmat[,"Crops"]==aeay_i,"Prices"]]%>%as.numeric()
     eaear_i <- paste0("eaear_", aeay_i)
     df_cs <- dplyr::mutate(df_cs, 
-                           !!as.symbol(eaear_i) := !!as.symbol(aeay_i))# * price_i #   NOTE THAT WE DO NOT MULTIPLY BY PRICES ANYMOOOORE
+                           !!as.symbol(eaear_i) := !!as.symbol(aeay_i) * price_i)
   }
-
+  
+  df_cs <- df_cs %>% rowwise() %>% mutate(eaear_Cereals = max(c(eaear_Barley, eaear_Sorghum, eaear_Wheat)), 
+                                          eaear_Oilfeed_crops = max(c(eaear_Groundnut, eaear_Rapeseed, eaear_Sunflower)), 
+                                          eaear_Cocoa_Coffee = max(c(eaear_Cocoa, eaear_Coffee))) %>% as.data.frame()
   
   # and for Soy commodities: 
   df_cs <- dplyr::mutate(df_cs, eaear_Soy_compo =  eaear_Soybean_meal + eaear_Soybean_oil)

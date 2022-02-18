@@ -47,10 +47,17 @@ dir.create(here("temp_data", "processed_lossdrivers", "tropical_aoi"), recursive
 rasterOptions(timer = TRUE, 
               progress = "text")
 
-### TROPICAL AOI 
-ext <- extent(c(-180, 179.9167, -30, 30))
 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+# This is to get the bounding box of Brazil as a region for Mapbiomass data aggregation in GEE 
+# countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
+# brazil <- countries[countries$COUNTRY_NA == "Brazil", "geometry"]
+# plot(brazil)
+# brazil_bb <- st_bbox(brazil) %>% st_as_sfc
+# plot(brazil_bb, add = T)
+# brazil_bb
 
-
+# initial data
+ir <- raster(here("input_data", "MAPBIOMASS", "brasil_coverage_2001.tif"))
+sir <- sampleRandom(ir, 1000) 
+r <- raster(here("input_data", "MapBiomass60_5km_pasture2001.tif"))
 

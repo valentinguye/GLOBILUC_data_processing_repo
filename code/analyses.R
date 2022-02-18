@@ -19,7 +19,7 @@ neededPackages = c("Matrix",
                    "DataCombine",
                    "knitr", "kableExtra",
                    "fixest", "boot",#,"msm", "car",  "sandwich", "lmtest",  "multcomp",
-                   "ggplot2", "dotwhisker", "viridis", "hrbrthemes", #"tmap",# "leaflet", "htmltools"
+                   "ggplot2", "dotwhisker", "viridis", "hrbrthemes", "rasterVis", #"tmap",# "leaflet", "htmltools"
                    "foreach", "parallel"
 )
 # "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
@@ -140,28 +140,32 @@ colnames(mapmat_si) <- c("Prices", "Crops")
 # this is mapmat for eaear 
 eaear_mapmat_data <- c(
   "Banana","eaear_Banana",
-  "Barley", "eaear_Barley",
+  #"Barley", "eaear_Barley",
+  "Cereals", "eaear_Cereals",
   "Beef", "eaear_Fodder", 
   "Orange", "eaear_Citrus",
-  "Cocoa", "eaear_Cocoa",
-  "Coconut_oil", "eaear_Coconut", 
-  "Coffee", "eaear_Coffee",
+  #"Cocoa", "eaear_Cocoa",
+  "Cocoa_Coffee", "eaear_Cocoa_Coffee",
+  "Coconut_oil", "eaear_Coconut",
+  #"Coffee", "eaear_Coffee",
   "Cotton", "eaear_Cotton",
-  "Groundnuts", "eaear_Groundnut",
+  #"Groundnuts", "eaear_Groundnut",
   "Maize", "eaear_Maizegrain",
+  "Oilfeed_crops", "eaear_Oilfeed_crops",
   # "Oat", "eaear_Oat",
   # "Olive_oil", "eaear_Olive",  
   "Palm_oil", "eaear_Oilpalm",
-  "Rapeseed_oil", "eaear_Rapeseed",
+  #"Rapeseed_oil", "eaear_Rapeseed",
   "Rice", "eaear_Rice",
   "Rubber", "eaear_Rubber",
   "Sorghum", "eaear_Sorghum", 
   "Soy_index", "eaear_Soy_compo",
   "Sugar", "eaear_Sugar", 
-  "Sunflower_oil", "eaear_Sunflower",
+  #"Sunflower_oil", "eaear_Sunflower",
   "Tea", "eaear_Tea",
-  "Tobacco", "eaear_Tobacco", 
-  "Wheat", "eaear_Wheat")
+  "Tobacco", "eaear_Tobacco" 
+  #"Wheat", "eaear_Wheat"
+)
 
 eaear_mapmat <- matrix(data = eaear_mapmat_data, 
                        nrow = length(eaear_mapmat_data)/2,
@@ -339,14 +343,14 @@ for(voi in rfs_vars){
     # prices[is.nan(prices$newv),"newv"] <- NA
     # colnames(prices)[colnames(prices)=="newv"] <- paste0(voi,"_",py,"fya")
     prices <- mutate(prices, 
-                     !!as.symbol(paste0(voi,"_",py,"pya")) := rowMeans(across(.cols = any_of(c(voi, paste0(voi,"_lag",c(1:py))))), 
-                                                                       na.rm = TRUE) 
+                     !!as.symbol(paste0(voi,"_",py,"pya")) := round(rowMeans(across(.cols = any_of(c(voi, paste0(voi,"_lag",c(1:py))))), 
+                                                                             na.rm = TRUE), 2)
     )
     ## Past-year averages (1, 2, 3, and 4 years, before and INCLUDING contemporaneous)  
     # note that we DO add voi column (not lagged) in the row mean
     prices <- mutate(prices, 
-                     !!as.symbol(paste0(voi,"_",py,"fya")) := rowMeans(across(.cols = any_of(paste0(voi,"_lead",c(1:py)))), 
-                                                                       na.rm = TRUE) 
+                     !!as.symbol(paste0(voi,"_",py,"fya")) := round(rowMeans(across(.cols = any_of(paste0(voi,"_lead",c(1:py)))), 
+                                                                             na.rm = TRUE), 2) 
     )
     
     # AS A CONSEQUENCE, IT IS NORMAL THAT ABS. EXPOSURE CONTROLS ARE INTERACTED WITH 1fya AND 2pya: BOTH ARE AVERAGES OF TWO YEARS
@@ -429,14 +433,14 @@ ran.gen_cluster_blc <- function(original_data, arg_list){
 # add PSD data to the chart 
 psd <- readRDS(here("temp_data", "prepared_psd.Rdata"))
 psd$us_ah_maize_mha <- psd$UnitedStates.Area_Harvested.Maize / 1000
-psd$us_imp_maize_mt <- psd$UnitedStates.Imports.Maize / 1000000
+
 #head(psd)
-w_rfs <- left_join(rfs, psd[,c("year", "us_ah_maize_mha", "us_imp_maize_mt")], by = "year")
+w_rfs <- left_join(rfs, psd[,c("year", "us_ah_maize_mha")], by = "year")
 
 w_rfs <- w_rfs %>% 
-  dplyr::filter(year<=2020 & year > 2000) %>% 
+  dplyr::filter(year<=2020) %>% 
   dplyr::select(year, statute_advanced, statute_conv, final_advanced, final_conv, 
-                us_ah_maize_mha, us_imp_maize_mt) %>% 
+                us_ah_maize_mha) %>% 
   dplyr::mutate(statute_conv = statute_conv - final_conv, 
                 statute_advanced = statute_advanced - final_advanced) %>%
   tidyr::gather(RFS, BOG, c("statute_advanced", "statute_conv", "final_advanced", "final_conv")) 
@@ -473,8 +477,7 @@ ggplot(w_rfs, aes(x=year, y=`Billions of gallons (ethanol-equivalent)`/coeff, fi
         axis.title.y.right=element_text(size=10,face="bold", hjust = 1),
         axis.title.x=element_text(size=10,face="bold", hjust = 0.5))
 
-# try adding this if we have time scale_color_discrete(guide = FALSE) +
-# geom_text(aes(label = names(lab), x = 12, colour = names(lab), y = c(lab), hjust = -.02))
+
 #### DES STATS SUITABILITY INDEX ####
 si <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))
 si <- si[!duplicated(si$grid_id),]
@@ -495,18 +498,123 @@ for(serie1 in colnames(cortests)){
   }
   j_exposures[[serie1]] <- cor_mat_abs[cortests[serie1, ] < 0.05, serie1]
 }
-j_exposures[["Maizegrain"]]
+for(crop in mapmat_si[,"Crops"]){
+  x <- j_exposures[[crop]]
+  names(x)[x == max(x[x<max(x)])] %>% paste0(" is first correlated with ", crop) %>% print()
+}
+j_exposures[["Maizegrain"]]%>%sort()
+## Correlations by ILUC theory groups
+# Group 1
+# Barley: the absolute highest is Wheat, conditional too. 
+# Groundnut : absolute highest is Soybean, highest conditional is Sorghum (although quite different uses)
+# Rapeseed: absolute highest is Wheat, highest conditional is Sunflower
+# Sorghum : absolute highest is cotton, highest conditional is groundnut
+# Sunflower : 
 
+# Group 4 
+# Cocoa: absolute highest and conditional highest is coffee! 
 
 #### DES STATS EAEAR #### 
 
 ### MAP OF TROPICAL COMMODITY DRIVEN DEFORESTATION ### 
 
 cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_commodity.tif")) 
-# here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers_commodity.tif")
+# here("temp_data", "processed_lossdrivers", "tropical_aoi", "resampled_loss_drivers_commodity.tif")masked_lossdrivers_commodity.tif
 
-cdl_accu <- sum(cdl)
-plot(cdl_accu)
+cdl_accu <- sum(cdl[[11:19]], na.rm = TRUE)
+vcdl <- values(cdl_accu)
+summary(vcdl)
+rm(vcdl)
+cdl_accu <- reclassify(accu_pct, cbind(0, NA))
+#plot(cdl_accu)
+a <- area(cdl_accu)
+cdl_accu <- stack(cdl_accu, a)
+accu_pct <- overlay(cdl_accu, fun = function(x, y){pct <- x/(100*y)
+pct <- if_else(pct>1, 1, pct)
+return(pct)})
+vpct <- values(accu_pct)
+summary(vpct)
+### MAKE CONTINENT PANEL MAPS
+
+america_coords <- matrix(c(-95, 25, -33, 25,
+                           -33, -30, -95, -30, 
+                           -95, 25), ncol = 2, byrow = TRUE)
+
+america_ext <- st_polygon(list(america_coords)) %>% st_sfc(crs = 4326)
+
+africa_coords <- matrix(c(-19, 20, 25, 20,
+                          25, -10, -19, -10, 
+                          -19, 20), ncol = 2, byrow = TRUE)
+
+africa_ext <- st_polygon(list(africa_coords)) %>% st_sfc(crs = 4326)
+
+asia_coords <- matrix(c(80, 30, 150, 30,
+                        150, -10, 80, -10, 
+                        80, 30), ncol = 2, byrow = TRUE)
+
+asia_ext <- st_polygon(list(asia_coords)) %>% st_sfc(crs = 4326)
+
+
+
+sfc <- c(asia_ext, america_ext, africa_ext)
+continents <- st_sf(data.frame(continent_name = c("Asia", "America", "Africa"), geom = sfc))
+
+
+land <- st_read(here("input_data", "ne_50m_land"))
+unique(land$scalerank)
+land <- land[land$scalerank==0, c("geometry")]
+#plot(land)
+spLand <- as(land, "Spatial")
+
+
+am <- crop(accu_pct, continents[continents$continent_name=="America",])
+af <- crop(accu_pct, continents[continents$continent_name=="Africa",])
+as <- crop(accu_pct, continents[continents$continent_name=="Asia",])
+
+#library(gridExtra)
+
+pam <- levelplot(am, margin = FALSE, 
+                 xlab = "", ylab = "",
+                 #colorkey=FALSE,
+                 #scales=list(draw = FALSE),            
+                 col.regions=magma(n = 10000, direction = -1),                   
+                 #at=seq(0, 10000),
+                 names.attr=rep('', 1)) + 
+  layer(sp.polygons(spLand, lwd=1)) 
+
+
+paf <-levelplot(af, margin = FALSE,
+                xlab = "", ylab = "",
+                colorkey=FALSE,
+                # scales=list(draw = FALSE), x=list(draw=FALSE)           
+                col.regions=magma(n = 10000, direction = -1),                   
+                #at=seq(0, 10000),
+                names.attr=rep('', 1)) + 
+  layer(sp.polygons(spLand, lwd=1)) 
+
+pas <-levelplot(as, margin = FALSE, 
+                xlab = "", ylab = "",
+                colorkey = FALSE,
+                # colorkey=list(
+                #   space='bottom',                   
+                #   labels=list(at=-5:5, font=4),
+                #   axis.line=list(col='black'),
+                #   width=0.75
+                # ),    
+                # par.settings=list(
+                #   strip.border=list(col='transparent'),
+                #   strip.background=list(col='transparent'),
+                #   axis.line=list(col='transparent')
+                # ),names.attr=rep('', 1),
+                #scales=list(draw = FALSE),            
+                col.regions=magma(n = 10000, direction = -1),                   
+                #at=seq(0, 10000),
+) + 
+  layer(sp.polygons(spLand, lwd=1)) 
+
+pam
+paf
+pas
 
 
 for(CNT in c("America", "Africa", "Asia")){
@@ -740,13 +848,14 @@ price_dyn <- "_lag1"
 
 estimated_effect = "alpha"
 rfs_reg <- TRUE
-rfs_rando <- "within"
+rfs_rando <- ""
 original_rfs_treatments <- c("statute_conv")
 rfs_lead <- 3
 rfs_lag <- 3
 rfs_fya <- 0 
 rfs_pya <- 0
-original_exposure_rfs <- "eaear_Soy_compo"
+aggr_dyn <- "all"
+original_exposure_rfs <- "eaear_Cereals"
 group_exposure_rfs <- FALSE
 control_absolute_rfs <- c()
 control_all_absolute_rfs <- TRUE
@@ -769,7 +878,7 @@ fc_s_trend <- FALSE
 sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
 # open_path <- FALSE
 # commoXcommo <- "Fodder_X_Beef"
-fe = "grid_id + country_year" # + country_year  
+fe = "grid_id + country_year" #   
 distribution <- "quasipoisson"
 offset <- FALSE
 invhypsin = TRUE
@@ -816,6 +925,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           rfs_lag = 0,
                           rfs_fya = 0, 
                           rfs_pya = 0,
+                          aggr_dyn = "all", # whether to report aggregate coefficients of all leads and lags ("all") or leads and lags separately ("leadlag"), or no aggregate (any other string)
                           original_exposure_rfs = "eaear_Soy_compo",
                           group_exposure_rfs = FALSE, # if original_exposure_rfs is length 1, it does noe matter whether this option is TRUE or FALSE
                           control_absolute_rfs = c(),# eaear_mapmat[,"Crops"], 
@@ -852,8 +962,9 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           distribution = "quasipoisson",#  "quasipoisson", 
                           invhypsin = TRUE, # if distribution is gaussian, should the dep. var. be transformed to inverse hyperbolic sine?
                           offset = FALSE,
-                          se = "twoway",# # passed to vcov argument. Currently, one of "cluster", "twoway", or an object of the form:    
-                          # vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical")
+                          se = "twoway",# # passed to vcov argument. Currently, one of "cluster", "twoway", or an object of the form: 
+                          # - "exposure2ways" for the two-way clustering to be customed as original_exposure_rfs + country_year, and not along FE.   
+                          # - vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical")
                           # with cutoff the distance, in km, passed to fixest::vcov_conley, if se = "conley"  
                           # boot_cluster ="grid_id",
                           # old argument: cluster ="grid_id", # the cluster level if se = "cluster" (i.e. one way)
@@ -1346,8 +1457,9 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # 1pya is the avg of current and lag1 values, which are grouped together because they reflect the same kind of mechanism. 
   if(control_all_absolute_rfs){
     all_abs <- exp_matmap[, "Crops"][!(exp_matmap[, "Crops"] %in% original_exposure_rfs)]
-    # add the share of pasture in grid cell in 2000 as an exposure to pastures
-    if(control_pasture){
+    
+    # add the share of pasture in grid cell in 2000 as an exposure to pastures (if the exposure of interest is not pasture)
+    if(control_pasture & !grepl("Fodder", original_exposure_rfs)){
       all_abs <- c(all_abs, "pasture_share")
     }
     
@@ -1430,9 +1542,9 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   
   # d <- mutate(d, sj_year := paste0(!!as.symbol(sj),"_",year))
   
-  if(fe == "country_year" | fe == "year"){
-    controls <- sj
-  }
+  # if(fe == "country_year" | fe == "year"){
+  #   controls <- sj
+  # }
   
   # add remainging forest cover as a control
   if(remaining & !offset){
@@ -1782,11 +1894,25 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     rm(obstormv)
   }
   
+  if(fe != "grid_id + country_year"){
+    # # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
+    obstormv <- obs2remove(fml = as.formula(paste0(outcome_variable, " ~ grid_id + country_year")),
+                           data = d,
+                           family = "poisson")
+    # this is necessary to handle cases when there is no obs. to remove
+    if(length(obstormv)>0){
+      d <- d[-obstormv,]
+    } else {
+      d <- d
+    }
+    rm(obstormv)
+  }
   
   # if we don't remove obs that have no remaining forest, and if we don't remove always 0 outcome obs. in previous step, d IS A BALANCED PANEL !!
-  if(!nrow(d) == length(unique(d$grid_id))*length(unique(d$year))){
-    warning("data is not balanced")
-  }
+  # this is a matter only if we do beta process, with cluster bootstrap
+  # if(!nrow(d) == length(unique(d$grid_id))*length(unique(d$year))){
+  #   warning("data is not balanced")
+  # }
   d_clean <- d
   rm(d)
   
@@ -1803,6 +1929,13 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   if(fe == "grid_id" & se == "twoway"){
     se <- as.formula("~ grid_id + country_year")
   }
+  if(fe == "country_year" & se == "twoway"){
+    se <- as.formula("~ grid_id + country_year")
+  }
+  if(se == "exposure2ways"){
+    se <- as.formula(paste0("~ ", original_exposure_rfs, " + country_year"))
+  }
+  
   
   if(estimated_effect == "alpha"){
     if(offset){
@@ -1849,7 +1982,8 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     
     fixest_df <- degrees_freedom(alpha_reg_res, type = "t")
     ## MAKE AGGREGATE RESULTS 
-    if(rfs_lead>=1 & rfs_lag == 0){ 
+    # In this case, we are interested in LEADS only
+    if(aggr_dyn == "leads"){ 
       # deprecated: in this case, there ARE lags in the specification, but we are not interested in them
       
       df_res <- rbind(rep(NA, ncol(df_res)), df_res)
@@ -1877,8 +2011,8 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                                  lower.tail = FALSE, 
                                                  df = fixest_df)) 
     }
-    # In this case, we are interested in LEADS AND LAGS
-    if(rfs_lead == 0 & rfs_lag >= 1){
+    # In this case, we are interested in LAGS only
+    if(aggr_dyn == "lags"){
       df_res <- rbind(rep(NA, ncol(df_res)), df_res)
       
       # ORDER MATTERS
@@ -1906,8 +2040,8 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                                  df = fixest_df)) 
     }
     
-    # In this case, we are interested in LAGS only
-    if(rfs_lead >= 1 & rfs_lag >= 1){
+    # In this case, we are interested in LEADS AND LAGS which we aggregate separately
+    if(aggr_dyn == "leadlag"){
       df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
       
       # ORDER MATTERS
@@ -1944,7 +2078,37 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                                  df = fixest_df)) 
     }
     
-    
+    # In this case, we aggregate all leads and lags together
+    if(aggr_dyn == "all"){
+      df_res <- rbind(rep(NA, ncol(df_res)), df_res)
+      
+      # ORDER MATTERS
+      aggr_names <- paste0(original_exposure_rfs, c("_X_aggrall"))
+      row.names(df_res)[1] <- aggr_names
+      # regressors of interest
+      base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
+      
+      # Contemporaneous, lead, and lag values
+      all_roi <- c(base_reg_name, 
+                   grep(pattern = paste0(base_reg_name,"_lead"), 
+                        regressors, value = TRUE),
+                   grep(pattern = paste0(base_reg_name,"_lag"), 
+                        regressors, value = TRUE))
+      
+      df_res[aggr_names[1],"Estimate"] <- alpha_reg_res$coefficients[all_roi] %>% sum()
+      
+      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+      df_res[aggr_names[1],"Std. Error"] <- alpha_reg_res$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      
+      df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
+      
+      # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+      # does not make a significant difference given sample size
+      df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
+                                                 lower.tail = FALSE, 
+                                                 df = fixest_df)) 
+    }
     
     if(aggregate_K != ""){
       df_res <- rbind(df_res, rep(NA, ncol(df_res)))
@@ -2105,7 +2269,9 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   }
   
   # take data set as exactly used in estimation
-  d_clean <- d_clean[alpha_reg_res$obs_selection[[1]], ]
+  if(length(alpha_reg_res$obs_selection) > 0){
+    d_clean <- d_clean[alpha_reg_res$obs_selection[[1]], ]
+  }
   
   if(rfs_rando=="between"){
     # in this case, we resample EXPOSURES (without replacement), and keep rfs history intact. i.e. we randomize the between units variation
@@ -2204,16 +2370,14 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     # i.e. we randomize the within unit variation
     # it differs from the "between" procedure above because we have to resample the original RFS history, and then 
     # build the leads and lags
-    # 1997 is the ealiest year needed in case rfs_lag is 4
-    rfs_ts <- prices[prices$year >=1997, c("year", original_rfs_treatments)] 
+    # 2008 is the ealiest year needed in case rfs_lag is 3
+    rfs_ts <- prices[prices$year >=2008, c("year", original_rfs_treatments)] 
     
     # and it differs because we sample only within years of the program, i.e. just permute the agenda
-    rfs_agd <- rfs_ts[rfs_ts$year >=2006, ]
+    rfs_agd <- rfs_ts[rfs_ts$year >=2008, ]
     nrow_dfcs <- nrow(rfs_agd)
     avg_rfs <- mean(rfs_agd[,original_rfs_treatments])
     sd_rfs <- sd(rfs_agd[,original_rfs_treatments])
-    
-    
     
     # just to be sure that the datacombine operations work on an ordered dataset
     rfs_agd <- dplyr::arrange(rfs_agd, year)
@@ -2227,14 +2391,14 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     
     set.seed(145)
     #start_time <- Sys.time()
-    for(i in 1:10){
+    for(i in 1:500){
       # resample RFS history
-      #rfs_agd[,voi] <- sample(rfs_agd[,voi], size = nrow_dfcs, replace = FALSE)
+      # rfs_ts[,voi] <- sample(rfs_agd[,voi], size = nrow_dfcs, replace = FALSE)
       #rfs_agd[,voi] <- rpois(n = nrow_dfcs, lambda = avg_rfs) 
       # normal distribution preferred because yields real values, not integers
       # round to 2 decimals to match degree of precision (and variation) of RFS
       # merge it with the full time series       
-      rfs_ts[rfs_ts$year>=2006, voi] <- rnorm(n = nrow_dfcs, mean = avg_rfs, sd = sd_rfs) %>% round(2)
+      rfs_ts[,voi] <- rnorm(n = nrow_dfcs, mean = avg_rfs, sd = sd_rfs) %>% round(2)
       # %>% base::sort() don't sort, because the 
       
       # and rebuild leads and lags from it
@@ -2275,18 +2439,17 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                   fixef.rm = "perfect")
       
       # aggregate coefficients on leads and lags 
-      df_i_est <- data.frame(Estimate = c(sum(perm_i_res$coefficients[lead_roi]), 
-                                          sum(perm_i_res$coefficients[lag_roi]) ),
+      df_i_est <- data.frame(Estimate = c(sum(perm_i_res$coefficients[all_roi])),#sum(perm_i_res$coefficients[lag_roi])
                              row.names = aggr_names)
       
       # compute their t statistics
       # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
       # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
-      df_i_est[aggr_names[1],"Std. Error"] <- perm_i_res$cov.scaled[lead_roi, lead_roi] %>% as.matrix() %>% sum() %>% sqrt()
-      df_i_est[aggr_names[2],"Std. Error"] <- perm_i_res$cov.scaled[lag_roi, lag_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      df_i_est[aggr_names[1],"Std. Error"] <- perm_i_res$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      #df_i_est[aggr_names[2],"Std. Error"] <- perm_i_res$cov.scaled[lag_roi, lag_roi] %>% as.matrix() %>% sum() %>% sqrt()
       
       df_i_est[aggr_names[1],"t value"]  <- (df_i_est[aggr_names[1],"Estimate"] - 0)/(df_i_est[aggr_names[1],"Std. Error"])
-      df_i_est[aggr_names[2],"t value"]  <- (df_i_est[aggr_names[2],"Estimate"] - 0)/(df_i_est[aggr_names[2],"Std. Error"])
+      #df_i_est[aggr_names[2],"t value"]  <- (df_i_est[aggr_names[2],"Estimate"] - 0)/(df_i_est[aggr_names[2],"Std. Error"])
       
       perm_res_list[[i]] <- df_i_est
     }
@@ -2316,13 +2479,13 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     # randomization inference p values are equal to the share of a parameter estimated over the randomized distribution, that is higher than the original estimate 
     raninf_pval_coeffs <- c()
     raninf_pval_coeffs[1] <- sum( abs(as.numeric(all_coeffs[aggr_names[1], ])) > abs(df_res[aggr_names[1], "Estimate"]) ) / (i)
-    raninf_pval_coeffs[2] <- sum( abs(as.numeric(all_coeffs[aggr_names[2], ])) > abs(df_res[aggr_names[2], "Estimate"]) ) / (i)
+    #raninf_pval_coeffs[2] <- sum( abs(as.numeric(all_coeffs[aggr_names[2], ])) > abs(df_res[aggr_names[2], "Estimate"]) ) / (i)
     names(raninf_pval_coeffs) <- aggr_names
     
     # this returns the share of absolute t ratios that are larger than the one we obtain with the actual data
     raninf_pval_tstats <- c()
     raninf_pval_tstats[1] <- sum( abs(as.numeric(all_tstats[aggr_names[1], ])) > abs(df_res[aggr_names[1], "t value"]) ) / (i)
-    raninf_pval_tstats[2] <- sum( abs(as.numeric(all_tstats[aggr_names[2], ])) > abs(df_res[aggr_names[2], "t value"]) ) / (i)
+    #raninf_pval_tstats[2] <- sum( abs(as.numeric(all_tstats[aggr_names[2], ])) > abs(df_res[aggr_names[2], "t value"]) ) / (i)
     names(raninf_pval_tstats) <- aggr_names
     
   }
@@ -2386,158 +2549,44 @@ est_parameters <- list(outcome_variable  = "driven_loss_commodity",
 
 ## ABSOLUTE EAEAR EXPOSURES ##
 
-#### RFS CUMMULATIVE LEADS & LAGS 2010-2019 ####
+#### RFS CUMMULATIVE LEADS & LAGS 2011-2019 ####
 rfs_l <- 3
-rfs_eaear_3ll_2010 <- list(America = list(), 
-                           Africa = list(), 
-                           Asia = list())
+rfs_eaear_3llall_2011 <- list(all = list(), 
+                              America = list(), 
+                              Africa = list(), 
+                              Asia = list())
 
-for(CNT in c("America", "Africa", "Asia" )){#, , , "Africa", "Asia" 
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all", "America", "Africa", "Asia" 
   elm <- 1
   for(rfs_exp in eaear_mapmat[,"Crops"]){#eaear_mapmat[,"Crops"]
-    rfs_eaear_3ll_2010[[CNT]][[elm]] <- make_main_reg(continent = CNT,
-                                                      start_year = 2011,
-                                                      end_year = 2019,
-                                                      
-                                                      rfs_reg = TRUE,
-                                                      rfs_rando = "",
-                                                      original_rfs_treatments = c("statute_conv"),
-                                                      rfs_lead = rfs_l, 
-                                                      rfs_lag = rfs_l,
-                                                      rfs_fya = est_parameters[["fya"]],  #ya,
-                                                      rfs_pya = est_parameters[["pya"]], #ya,
-                                                      original_exposure_rfs = rfs_exp, # exp_rfs, # mapmat_si[,"Crops"],
-                                                      #control_absolute_rfs =  c(), # cnt_subset, # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
-                                                      control_all_absolute_rfs = TRUE,
-                                                      
-                                                      control_pasture = TRUE,
-                                                      fc_trend = TRUE, 
-                                                      s_trend = TRUE, 
-                                                      
-                                                      sjpos = est_parameters[["sjpos"]],
-                                                      standardization = est_parameters[["standardization"]],
-                                                      distribution = est_parameters[["distribution"]]
+    rfs_eaear_2llall_2011[[CNT]][[elm]] <- make_main_reg(continent = CNT,
+                                                         start_year = 2011,
+                                                         end_year = 2019,
+                                                         
+                                                         rfs_reg = TRUE,
+                                                         rfs_rando = "",
+                                                         original_rfs_treatments = c("statute_conv"),
+                                                         rfs_lead = rfs_l, 
+                                                         rfs_lag = rfs_l,
+                                                         rfs_fya = est_parameters[["fya"]],  #ya,
+                                                         rfs_pya = est_parameters[["pya"]], #ya,
+                                                         aggr_dyn = "all",
+                                                         original_exposure_rfs = rfs_exp, # exp_rfs, # mapmat_si[,"Crops"],
+                                                         #control_absolute_rfs =  c(), # cnt_subset, # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                         control_all_absolute_rfs = TRUE,
+                                                         
+                                                         control_pasture = TRUE,
+                                                         fc_trend = TRUE, 
+                                                         s_trend = TRUE, 
+                                                         # fe = "grid_id",
+                                                         #se = "exposure2ways",
+                                                         
+                                                         sjpos = est_parameters[["sjpos"]],
+                                                         standardization = est_parameters[["standardization"]],
+                                                         distribution = est_parameters[["distribution"]]
     )
     
-    names(rfs_eaear_3ll_2010[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_3ll_2010")
-    elm <- elm + 1
-    #}
-  }
-}
-
-### PLOT COEFFICIENTS ### 
-# prepare regression outputs in a tidy data frame readable by dwplot
-
-CNT <- "Asia"
-rm(df)
-dyn_df_list <- list()
-#dyn_des <- c(paste0("RFS mandate, ",rfs_lead," years ahead"), "Cummulative effects of anticipated RFS")
-# dyn_des <- c("Effect of RFS mandate 0 year ago",
-#              "Effect of RFS mandate 1 year ago", 
-#              "Effect of RFS mandate 2 years ago", 
-#              "Effect of RFS mandate 3 years ago", 
-#              "Cummulative effects of realized mandates")
-dyn_des <- c(paste0("Anticipated mandates, next ",rfs_l, " years"), paste0("Realized mandates, last ",rfs_l, " years"))
-
-for(dyn in 1:length(dyn_des)){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags 
-  dyn_df <- lapply(rfs_eaear_3ll_2010[[CNT]], FUN = function(x){as.data.frame(x)[dyn,] }) %>% bind_rows()
-  dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
-  dyn_df$model <- dyn_des[dyn]
-  dyn_df_list[[dyn_des[dyn]]] <- dyn_df
-}
-df <- bind_rows(dyn_df_list)
-df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
-df$significant01 <- if_else(df[,"Pr(>|t|)"] < 0.1, "Significant at 10%", "")
-#df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
-
-names(df)[names(df)=="Estimate"] <- "estimate"
-names(df)[names(df)=="Std. Error"] <- "std.error"
-row.names(df) <- NULL
-
-#title <- "Impacts of RFS ramping up on tropical deforestation, via exposures to different land uses, 2001-2019"
-title <- paste0(CNT, " 2010-2019")
-# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
-# A list of brackets; each element of the list should be a character vector consisting of 
-# (1) a label for the bracket, (2) the name of the topmost variable to be enclosed by the bracket, 
-# and (3) the name of the bottom most variable to be enclosed by the bracket.
-crop_groups <- list(c("Group 1", "Barley", "Wheat"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
-                    c("Group 2", "Pasture", "Tobacco"), # "Citrus", "Cotton", 
-                    c("Group 3", "Oil palm", "Oil palm"), 
-                    c("Group 4", "Banana", "Tea") # "Cocoa", "Coffee", "Rubber", 
-)
-
-{dwplot(df,
-        dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),
-        whisker_args = list(size = 1, aes(alpha = significant01)),
-        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
-    relabel_predictors(c(eaear_Barley = "Barley",
-                         eaear_Groundnut = "Groundnut", 
-                         eaear_Maizegrain = "Maize", 
-                         eaear_Rapeseed = "Rapeseed", 
-                         eaear_Rice = "Rice (wet or dry)",
-                         eaear_Sorghum = "Sorghum", 
-                         eaear_Soy_compo = "Soy", 
-                         eaear_Sugar = "Sugar (cane or beet)", 
-                         eaear_Sunflower = "Sunflower",
-                         eaear_Wheat = "Wheat",
-                         
-                         eaear_Fodder = "Pasture", 
-                         eaear_Citrus = "Citrus",
-                         eaear_Cotton = "Cotton",
-                         eaear_Tobacco = "Tobacco", 
-                         
-                         eaear_Coconut = "Coconut", 
-                         eaear_Oilpalm = "Oil palm",
-                         
-                         eaear_Banana = "Banana", 
-                         eaear_Cocoa  = "Cocoa", 
-                         eaear_Coffee = "Coffee", 
-                         eaear_Rubber = "Rubber", 
-                         eaear_Tea = "Tea"
-    )) +
-    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
-    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
-    ggtitle(title) +
-    theme(plot.title = element_text(face="bold", size=c(10)),
-          legend.position = c(0.8, 0.05),
-          legend.justification = c(0, 0), 
-          legend.background = element_rect(colour="grey80"),
-          legend.title = element_blank()) } %>%  add_brackets(crop_groups, face = "italic")
-
-#### RFS CUMMULATIVE LEADS & LAGS 2001-2009 ####
-rfs_l <- 3
-rfs_eaear_3ll_2001 <- list(America = list(), 
-                           Africa = list(), 
-                           Asia = list())
-
-for(CNT in c("America", "Africa", "Asia" )){#, , , "Africa", "Asia" 
-  elm <- 1
-  for(rfs_exp in eaear_mapmat[,"Crops"]){#eaear_mapmat[,"Crops"]
-    rfs_eaear_3ll_2001[[CNT]][[elm]] <- make_main_reg(continent = CNT,
-                                                      start_year = 2001,
-                                                      end_year = 2009,
-                                                      
-                                                      rfs_reg = TRUE,
-                                                      rfs_rando = "",
-                                                      original_rfs_treatments = c("statute_conv"),
-                                                      rfs_lead = rfs_l, 
-                                                      rfs_lag = rfs_l - 1,
-                                                      rfs_fya = est_parameters[["fya"]],  #ya,
-                                                      rfs_pya = est_parameters[["pya"]], #ya,
-                                                      original_exposure_rfs = rfs_exp, # exp_rfs, # mapmat_si[,"Crops"],
-                                                      #control_absolute_rfs =  c(), # cnt_subset, # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
-                                                      control_all_absolute_rfs = TRUE,
-                                                      
-                                                      control_pasture = TRUE,
-                                                      fc_trend = TRUE, 
-                                                      s_trend = TRUE, 
-                                                      
-                                                      sjpos = est_parameters[["sjpos"]],
-                                                      standardization = est_parameters[["standardization"]],
-                                                      distribution = est_parameters[["distribution"]]
-    )
-    
-    names(rfs_eaear_3ll_2001[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_3ll_2001")
+    names(rfs_eaear_2llall_2011[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_1llall_2011")
     elm <- elm + 1
     #}
   }
@@ -2555,17 +2604,24 @@ dyn_df_list <- list()
 #              "Effect of RFS mandate 2 years ago", 
 #              "Effect of RFS mandate 3 years ago", 
 #              "Cummulative effects of realized mandates")
-dyn_des <- c(paste0("Anticipated mandates, next ",rfs_l, " years"), paste0("Realized mandates, last ",rfs_l, " years"))
-
-for(dyn in 1:length(dyn_des)){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags 
-  dyn_df <- lapply(rfs_eaear_3ll_2001[[CNT]], FUN = function(x){as.data.frame(x)[dyn,] }) %>% bind_rows()
+#dyn_des <- c(paste0("Anticipated mandates, next ",rfs_l, " years"), paste0("Realized mandates, last ",rfs_l, " years"))
+# for(dyn in 1:length(dyn_des)){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags 
+#   dyn_df <- lapply(rfs_eaear_3llall_2011[[CNT]], FUN = function(x){as.data.frame(x)[dyn,] }) %>% bind_rows()
+#   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+#   dyn_df$model <- dyn_des[dyn]
+#   dyn_df_list[[dyn_des[dyn]]] <- dyn_df
+# }
+for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
+  dyn_df <- lapply(rfs_eaear_2llall_2011[[CNT]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
-  dyn_df$model <- dyn_des[dyn]
-  dyn_df_list[[dyn_des[dyn]]] <- dyn_df
+  dyn_df$model <- CNT # dyn_des[dyn]
+  dyn_df_list[[CNT]] <- dyn_df
 }
 df <- bind_rows(dyn_df_list)
-df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
+df[df$model == "all", "model"] <- "Global"
+#df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
 df$significant01 <- if_else(df[,"Pr(>|t|)"] < 0.1, "Significant at 10%", "")
+df <- df[df$significant01 != "", ]
 #df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
 
 names(df)[names(df)=="Estimate"] <- "estimate"
@@ -2573,46 +2629,211 @@ names(df)[names(df)=="Std. Error"] <- "std.error"
 row.names(df) <- NULL
 
 #title <- "Impacts of RFS ramping up on tropical deforestation, via exposures to different land uses, 2001-2019"
-title <- paste0(CNT, " 2001-2009")
+title <- paste0("Cummulative effects of realized and expected biofuel mandates on tropical deforestation for major commercial crops, 2011-2019")
 # If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
 # A list of brackets; each element of the list should be a character vector consisting of 
 # (1) a label for the bracket, (2) the name of the topmost variable to be enclosed by the bracket, 
 # and (3) the name of the bottom most variable to be enclosed by the bracket.
-crop_groups <- list(c("Group 1", "Barley", "Wheat"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
-                    c("Group 2", "Pasture", "Tobacco"), # "Citrus", "Cotton", 
-                    c("Group 3", "Oil palm", "Oil palm"), 
-                    c("Group 4", "Banana", "Tea") # "Cocoa", "Coffee", "Rubber", 
+# IF ALL CROPS ARE FEATURED: 
+# crop_groups <- list(c("Group 1", "Cereals", "Sugar crops"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
+#                     c("Group 2", "Pasture", "Tobacco"), # "Citrus", "Cotton", 
+#                     c("Group 3", "Coconut", "Oil palm"), 
+#                     c("Group 4", "Banana", "Tea") # "Cocoa", "Coffee", "Rubber", 
+# )
+# IF ONLY SIGNIFICANT ONES ARE FEATURED
+crop_groups <- list(c("Group 1", "Oil and feed crops", "Sugar crops"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
+                    c("Group 2", "Coconut", "Oil palm"),
+                    c("Group 3", "Citrus", "Tobacco"), # "Citrus", "Cotton",
+                    c("Group 4", "Cocoa or Coffee", "Tea") # "Cocoa", "Coffee", "Rubber",
 )
-
 {dwplot(df,
-        dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),
-        whisker_args = list(size = 1, aes(alpha = significant01)),
+        dot_args = list(size = 2.5,aes(shape = model)),#, alpha = significant01
+        whisker_args = list(size = 1, aes()),#alpha = significant01
         vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
-    relabel_predictors(c(eaear_Barley = "Barley",
-                         eaear_Groundnut = "Groundnut", 
-                         eaear_Maizegrain = "Maize", 
-                         eaear_Rapeseed = "Rapeseed", 
-                         eaear_Rice = "Rice (wet or dry)",
-                         eaear_Sorghum = "Sorghum", 
-                         eaear_Soy_compo = "Soy", 
-                         eaear_Sugar = "Sugar (cane or beet)", 
-                         eaear_Sunflower = "Sunflower",
-                         eaear_Wheat = "Wheat",
-                         
-                         eaear_Fodder = "Pasture", 
-                         eaear_Citrus = "Citrus",
-                         eaear_Cotton = "Cotton",
-                         eaear_Tobacco = "Tobacco", 
-                         
-                         eaear_Coconut = "Coconut", 
-                         eaear_Oilpalm = "Oil palm",
-                         
-                         eaear_Banana = "Banana", 
-                         eaear_Cocoa  = "Cocoa", 
-                         eaear_Coffee = "Coffee", 
-                         eaear_Rubber = "Rubber", 
-                         eaear_Tea = "Tea"
+    relabel_predictors(c(#eaear_Barley = "Barley",
+      #eaear_Groundnut = "Groundnut", 
+      eaear_Maizegrain = "Maize", 
+      eaear_Oilfeed_crops = "Oil and feed crops",
+      eaear_Cereals = "Cereals",
+      #eaear_Rapeseed = "Rapeseed", 
+      eaear_Rice = "Rice (wet or dry)",
+      eaear_Sorghum = "Sorghum", 
+      eaear_Soy_compo = "Soy", 
+      eaear_Sugar = "Sugar crops", 
+      #eaear_Sunflower = "Sunflower",
+      #eaear_Wheat = "Wheat",
+      
+      eaear_Coconut = "Coconut", 
+      eaear_Oilpalm = "Oil palm",
+      
+      eaear_Citrus = "Citrus",
+      eaear_Cotton = "Cotton",
+      eaear_Tobacco = "Tobacco", 
+      
+      eaear_Banana = "Banana", 
+      eaear_Cocoa_Coffee = "Cocoa or Coffee",
+      #eaear_Cocoa  = "Cocoa", 
+      #eaear_Coffee = "Coffee", 
+      eaear_Rubber = "Rubber", 
+      eaear_Tea = "Tea",
+      
+      eaear_Fodder = "Pasture"
     )) +
+    #scale_color_manual(values=wes_palette(n=4, name="Darjeeling1", type = "discrete")) +
+    scale_color_brewer(type = "qual", palette="Set1") +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    #ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.8, 0.05),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank()) } %>%  add_brackets(crop_groups, face = "italic")
+
+## get sample sizes
+
+store <- list()
+for(CNT in c("America", "Africa", "Asia")){
+  store[[CNT]] <- make_main_reg(continent = CNT,
+                                output = "data",
+                                start_year = 2011,
+                                end_year = 2019,
+                                
+                                rfs_reg = TRUE,
+                                rfs_rando = "",
+                                original_rfs_treatments = c("statute_conv"),
+                                rfs_lead = rfs_l, 
+                                rfs_lag = rfs_l,
+                                rfs_fya = est_parameters[["fya"]],  #ya,
+                                rfs_pya = est_parameters[["pya"]], #ya,
+                                original_exposure_rfs = "eaear_Soy_compo", # exp_rfs, # mapmat_si[,"Crops"],
+                                #control_absolute_rfs =  c(), # cnt_subset, # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                control_all_absolute_rfs = TRUE,
+                                
+                                control_pasture = TRUE,
+                                fc_trend = TRUE, 
+                                s_trend = TRUE, 
+                                
+                                sjpos = est_parameters[["sjpos"]],
+                                standardization = est_parameters[["standardization"]],
+                                distribution = est_parameters[["distribution"]]
+  )
+  store[[CNT]][[2]]%>%nrow()%>% print()
+}
+
+#### RFS CUMMULATIVE LEADS & LAGS 2001-2009 ####
+rfs_l <- 3
+rfs_eaear_3llall_0119 <- list(America = list(), 
+                              Africa = list(), 
+                              Asia = list())
+
+for(CNT in c("all", "America", "Africa", "Asia" )){#, , , "Africa", "Asia" 
+  elm <- 1
+  for(rfs_exp in eaear_mapmat[,"Crops"]){#eaear_mapmat[,"Crops"]
+    rfs_eaear_3llall_0119[[CNT]][[elm]] <- make_main_reg(continent = CNT,
+                                                         start_year = 2001,
+                                                         end_year = 2019,
+                                                         
+                                                         rfs_reg = TRUE,
+                                                         rfs_rando = "",
+                                                         original_rfs_treatments = c("statute_conv_earliest"),
+                                                         rfs_lead = rfs_l, 
+                                                         rfs_lag = rfs_l,
+                                                         rfs_fya = est_parameters[["fya"]],  #ya,
+                                                         rfs_pya = est_parameters[["pya"]], #ya,
+                                                         aggr_dyn = "all",
+                                                         original_exposure_rfs = rfs_exp, # exp_rfs, # mapmat_si[,"Crops"],
+                                                         #control_absolute_rfs =  c(), # cnt_subset, # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                         control_all_absolute_rfs = TRUE,
+                                                         
+                                                         control_pasture = TRUE,
+                                                         fc_trend = TRUE, 
+                                                         s_trend = TRUE, 
+                                                         
+                                                         sjpos = est_parameters[["sjpos"]],
+                                                         standardization = est_parameters[["standardization"]],
+                                                         distribution = est_parameters[["distribution"]]
+    )
+    
+    names(rfs_eaear_3llall_0119[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_3ll_2001")
+    elm <- elm + 1
+    #}
+  }
+}
+
+### PLOT COEFFICIENTS ### 
+# prepare regression outputs in a tidy data frame readable by dwplot
+rm(df)
+dyn_df_list <- list()
+for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
+  dyn_df <- lapply(rfs_eaear_3llall_0119[[CNT]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
+  dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  dyn_df$model <- CNT # dyn_des[dyn]
+  dyn_df_list[[CNT]] <- dyn_df
+}
+df <- bind_rows(dyn_df_list)
+df[df$model == "all", "model"] <- "Global"
+#df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
+df$significant01 <- if_else(df[,"Pr(>|t|)"] < 0.1, "Significant at 10%", "")
+df <- df[df$significant01 != "", ]
+#df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+row.names(df) <- NULL
+
+#title <- "Impacts of RFS ramping up on tropical deforestation, via exposures to different land uses, 2001-2019"
+title <- paste0("Cumulative effects of realized and expected biofuel mandates on tropical deforestation for major commercial crops, 2001-2019")
+# If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
+# A list of brackets; each element of the list should be a character vector consisting of 
+# (1) a label for the bracket, (2) the name of the topmost variable to be enclosed by the bracket, 
+# and (3) the name of the bottom most variable to be enclosed by the bracket.
+# IF ALL CROPS ARE FEATURED: 
+# crop_groups <- list(c("Group 1", "Cereals", "Sugar crops"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
+#                     c("Group 2", "Pasture", "Tobacco"), # "Citrus", "Cotton", 
+#                     c("Group 3", "Coconut", "Oil palm"), 
+#                     c("Group 4", "Banana", "Tea") # "Cocoa", "Coffee", "Rubber", 
+# )
+# IF ONLY SIGNIFICANT ONES ARE FEATURED
+crop_groups <- list(c("Group 1", "Maize", "Sugar crops"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
+                    c("Group 2", "Pasture", "Tobacco"), # "Citrus", "Cotton",
+                    c("Group 3", "Coconut", "Oil palm"),
+                    c("Group 4", "Cocoa or Coffee", "Tea") # "Cocoa", "Coffee", "Rubber",
+)
+{dwplot(df,
+        dot_args = list(size = 2.5,aes(shape = model)),#, alpha = significant01
+        whisker_args = list(size = 1, aes()),#alpha = significant01
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(#eaear_Barley = "Barley",
+      #eaear_Groundnut = "Groundnut", 
+      eaear_Cereals = "Cereals",
+      eaear_Maizegrain = "Maize", 
+      eaear_Oilfeed_crops = "Oil and feed crops",
+      #eaear_Rapeseed = "Rapeseed", 
+      eaear_Rice = "Rice (wet or dry)",
+      eaear_Sorghum = "Sorghum", 
+      eaear_Soy_compo = "Soy", 
+      eaear_Sugar = "Sugar crops", 
+      #eaear_Sunflower = "Sunflower",
+      #eaear_Wheat = "Wheat",
+      
+      eaear_Fodder = "Pasture", 
+      eaear_Citrus = "Citrus",
+      eaear_Cotton = "Cotton",
+      eaear_Tobacco = "Tobacco", 
+      
+      eaear_Coconut = "Coconut", 
+      eaear_Oilpalm = "Oil palm",
+      
+      eaear_Banana = "Banana", 
+      eaear_Cocoa_Coffee = "Cocoa or Coffee",
+      #eaear_Cocoa  = "Cocoa", 
+      #eaear_Coffee = "Coffee", 
+      eaear_Rubber = "Rubber", 
+      eaear_Tea = "Tea"
+    )) +
+    #scale_color_manual(values=wes_palette(n=4, name="Darjeeling1", type = "discrete")) +
+    scale_color_brewer(type = "qual", palette="Set1") +
     theme_bw() + xlab("Coefficient Estimate") + ylab("") +
     geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
     ggtitle(title) +
@@ -2621,6 +2842,8 @@ crop_groups <- list(c("Group 1", "Barley", "Wheat"), # "Groundnut","Maize","Rape
           legend.justification = c(0, 0), 
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank()) } %>%  add_brackets(crop_groups, face = "italic")
+
+
 
 #### ####
 
@@ -2754,12 +2977,16 @@ png(here("temp_data", "reg_results", "rfs", paste0("aeay_", CNT, "_", rfs_l, "ll
     width = 900, height = 630)
 
 #### PLACEBO - DIFFERENT OUTCOMES ####
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_long_final.Rdata"))
+#main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_long_final.Rdata"))
 
 rfs_l <- 3
-rfs_eaear_3ll_placebos <- list(America = list(driven_loss_shifting = list(), 
-                                              driven_loss_forestry = list(), 
-                                              driven_loss_fire = list()
+rfs_eaear_3ll_placebos <- list(all = list(driven_loss_shifting = list(), 
+                                          driven_loss_forestry = list(), 
+                                          driven_loss_fire = list()
+), 
+America = list(driven_loss_shifting = list(), 
+               driven_loss_forestry = list(), 
+               driven_loss_fire = list()
 ), 
 Africa = list(driven_loss_shifting = list(), 
               driven_loss_forestry = list(), 
@@ -2771,37 +2998,35 @@ Asia = list(driven_loss_shifting = list(),
 )
 )
 
-for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia" 
+for(CNT in c("all", "America", "Africa", "Asia")){#, , , "Africa", "Asia" 
   for(PCB_OV in c("driven_loss_shifting", "driven_loss_forestry", "driven_loss_fire")){
     elm <- 1
     for(rfs_exp in eaear_mapmat[,"Crops"]){
       #for(rfs_l in c(1:3)){
       rfs_eaear_3ll_placebos[[CNT]][[PCB_OV]][[elm]] <- make_main_reg(continent = CNT,
                                                                       outcome_variable = PCB_OV,
-                                                                      original_sj = "Fodder", 
-                                                                      original_Pk = "Beef", 
-                                                                      estimated_effect = "alpha", 
+                                                                      start_year = 2011,
+                                                                      end_year = 2019,
                                                                       
                                                                       rfs_reg = TRUE,
                                                                       rfs_rando = "",
                                                                       original_rfs_treatments = c("statute_conv"),
-                                                                      rfs_lead = rfs_l - 1, # lead one year less because contemporaneous is considered as a lead kind
+                                                                      rfs_lead = rfs_l, 
                                                                       rfs_lag = rfs_l,
                                                                       rfs_fya = est_parameters[["fya"]],  #ya,
                                                                       rfs_pya = est_parameters[["pya"]], #ya,
+                                                                      aggr_dyn = "all",
                                                                       original_exposure_rfs = rfs_exp, # exp_rfs, # mapmat_si[,"Crops"],
-                                                                      group_exposure_rfs = FALSE,
-                                                                      control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                                      #control_absolute_rfs =  c(), # cnt_subset, # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
                                                                       control_all_absolute_rfs = TRUE,
                                                                       
+                                                                      control_pasture = TRUE,
                                                                       fc_trend = TRUE, 
                                                                       s_trend = TRUE, 
-                                                                      fc_s_trend = FALSE,
                                                                       
                                                                       sjpos = est_parameters[["sjpos"]],
                                                                       standardization = est_parameters[["standardization"]],
-                                                                      distribution = est_parameters[["distribution"]], 
-                                                                      pasture_shares = est_parameters[["pasture_shares"]]
+                                                                      distribution = est_parameters[["distribution"]]
       )
       
       # names(rfs_eaear_2ll_placebos[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_", rfs_l, "leadlags")
@@ -2812,20 +3037,20 @@ for(CNT in c("America", "Africa", "Asia")){#, , , "Africa", "Asia"
 
 ### PLOT COEFFICIENTS ### 
 # prepare regression outputs in a tidy data frame readable by dwplot
-CNT <- "America"
 PCB_OV <- "driven_loss_fire"
 rm(df)
 dyn_df_list <- list()
-dyn_des <- c(paste0("Anticipated RFS, next ", rfs_l, " years"), paste0("Mediated RFS, last ", rfs_l, " years"))
-for(dyn in 1:2){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags 
-  dyn_df <- lapply(rfs_eaear_3ll_placebos[[CNT]][[PCB_OV]], FUN = function(x){as.data.frame(x)[dyn,] }) %>% bind_rows()
+for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
+  dyn_df <- lapply(rfs_eaear_3ll_placebos[[CNT]][[PCB_OV]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
-  dyn_df$model <- dyn_des[dyn]
-  dyn_df_list[[dyn_des[dyn]]] <- dyn_df
+  dyn_df$model <- CNT # dyn_des[dyn]
+  dyn_df_list[[CNT]] <- dyn_df
 }
 df <- bind_rows(dyn_df_list)
-df$term <- rep(eaear_mapmat[,"Crops"], 2)
+df[df$model == "all", "model"] <- "Global"
+#df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
 df$significant01 <- if_else(df[,"Pr(>|t|)"] < 0.1, "Significant at 10%", "")
+df <- df[df$significant01 != "", ]
 #df$term <- sub(pattern = ".+?(_)", x = row.names(df), replacement = "") # replace everyting before the first underscore with nothing
 
 names(df)[names(df)=="Estimate"] <- "estimate"
@@ -2833,46 +3058,51 @@ names(df)[names(df)=="Std. Error"] <- "std.error"
 row.names(df) <- NULL
 
 #title <- "Impacts of RFS ramping up on tropical deforestation, via exposures to different land uses, 2001-2019"
-title <- paste0(CNT, ", ", PCB_OV)
+title <- paste0("Fire, 2011-2019")
 # If we want to add brackets on y axis to group k commodities. But not necessarily relevant, as some crops as in several categories. 
 # A list of brackets; each element of the list should be a character vector consisting of 
 # (1) a label for the bracket, (2) the name of the topmost variable to be enclosed by the bracket, 
 # and (3) the name of the bottom most variable to be enclosed by the bracket.
-crop_groups <- list(c("Group 1", "Barley", "Wheat"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
-                    c("Group 2", "Pasture", "Tobacco"), # "Citrus", "Cotton", 
-                    c("Group 3", "Oil palm", "Oil palm"), 
-                    c("Group 4", "Banana", "Tea") # "Cocoa", "Coffee", "Rubber", 
+# IF ONLY SIGNIFICANT ONES ARE FEATURED
+crop_groups <- list(c("Group 1", "Maize", "Sugar crops"), # "Groundnut","Maize","Rapeseed","Rice (wet or dry)","Sorghum","Soy","Sugar (cane or beet)","Sunflower",
+                    c("Group 2", "Pasture", "Tobacco"), # "Citrus", "Cotton",
+                    c("Group 3", "Coconut", "Oil palm"),
+                    c("Group 4", "Cocoa or Coffee", "Tea") # "Cocoa", "Coffee", "Rubber",
 )
-
 {dwplot(df,
-        dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),
-        whisker_args = list(size = 1, aes(alpha = significant01)),
+        dot_args = list(size = 2.5,aes(shape = model)),#, alpha = significant01
+        whisker_args = list(size = 1, aes()),#alpha = significant01
         vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
-    relabel_predictors(c(eaear_Barley = "Barley",
-                         eaear_Groundnut = "Groundnut", 
-                         eaear_Maizegrain = "Maize", 
-                         eaear_Rapeseed = "Rapeseed", 
-                         eaear_Rice = "Rice (wet or dry)",
-                         eaear_Sorghum = "Sorghum", 
-                         eaear_Soy_compo = "Soy", 
-                         eaear_Sugar = "Sugar (cane or beet)", 
-                         eaear_Sunflower = "Sunflower",
-                         eaear_Wheat = "Wheat",
-                         
-                         eaear_Fodder = "Pasture", 
-                         eaear_Citrus = "Citrus",
-                         eaear_Cotton = "Cotton",
-                         eaear_Tobacco = "Tobacco", 
-                         
-                         eaear_Coconut = "Coconut", 
-                         eaear_Oilpalm = "Oil palm",
-                         
-                         eaear_Banana = "Banana", 
-                         eaear_Cocoa  = "Cocoa", 
-                         eaear_Coffee = "Coffee", 
-                         eaear_Rubber = "Rubber", 
-                         eaear_Tea = "Tea"
+    relabel_predictors(c(#eaear_Barley = "Barley",
+      #eaear_Groundnut = "Groundnut", 
+      eaear_Cereals = "Cereals",
+      eaear_Maizegrain = "Maize", 
+      eaear_Oilfeed_crops = "Oil and feed crops",
+      #eaear_Rapeseed = "Rapeseed", 
+      eaear_Rice = "Rice (wet or dry)",
+      eaear_Sorghum = "Sorghum", 
+      eaear_Soy_compo = "Soy", 
+      eaear_Sugar = "Sugar crops", 
+      #eaear_Sunflower = "Sunflower",
+      #eaear_Wheat = "Wheat",
+      
+      eaear_Fodder = "Pasture", 
+      eaear_Citrus = "Citrus",
+      eaear_Cotton = "Cotton",
+      eaear_Tobacco = "Tobacco", 
+      
+      eaear_Coconut = "Coconut", 
+      eaear_Oilpalm = "Oil palm",
+      
+      eaear_Banana = "Banana", 
+      eaear_Cocoa_Coffee = "Cocoa or Coffee",
+      #eaear_Cocoa  = "Cocoa", 
+      #eaear_Coffee = "Coffee", 
+      eaear_Rubber = "Rubber", 
+      eaear_Tea = "Tea"
     )) +
+    #scale_color_manual(values=wes_palette(n=4, name="Darjeeling1", type = "discrete")) +
+    scale_color_brewer(type = "qual", palette="Set1") +
     theme_bw() + xlab("Coefficient Estimate") + ylab("") +
     geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
     ggtitle(title) +
@@ -2881,6 +3111,7 @@ crop_groups <- list(c("Group 1", "Barley", "Wheat"), # "Groundnut","Maize","Rape
           legend.justification = c(0, 0), 
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank()) } %>%  add_brackets(crop_groups, face = "italic")
+
 
 
 
@@ -3097,68 +3328,65 @@ rfs_eaear_3ll_raninf[["Asia"]][[2]] %>% abs() %>% max()
 
 #### "WITHIN" RANDOMIZATION INFERENCE #### 
 
-rfs_l <- 2
-rfs_eaear_2ll_raninf_within <- list(America_soy = list(), 
-                                    America_cotton = list(), 
-                                    Asia_oilpalm = list())
+rfs_l <- 3
+rfs_eaear_3llall_raninf_within <- list(America_soy = list(), 
+                                       Asia_oilpalm = list())
 
 start_soy_time <- Sys.time()
-rfs_eaear_2ll_raninf_within[["America_soy"]] <- make_main_reg(continent = "America",
-                                                              original_sj = "Fodder", 
-                                                              original_Pk = "Beef", 
-                                                              estimated_effect = "alpha", 
-                                                              
-                                                              rfs_reg = TRUE,
-                                                              rfs_rando = "within",
-                                                              original_rfs_treatments = c("statute_conv"),
-                                                              rfs_lead = rfs_l - 1, # lead one year less because contemporaneous is considered as a lead kind
-                                                              rfs_lag = rfs_l,
-                                                              rfs_fya = est_parameters[["fya"]],  #ya,
-                                                              rfs_pya = est_parameters[["pya"]], #ya,
-                                                              original_exposure_rfs = "eaear_Soy_compo", # exp_rfs, # mapmat_si[,"Crops"],
-                                                              group_exposure_rfs = FALSE,
-                                                              control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
-                                                              control_all_absolute_rfs = TRUE,
-                                                              
-                                                              fc_trend = TRUE, 
-                                                              s_trend = TRUE, 
-                                                              fc_s_trend = FALSE,
-                                                              
-                                                              sjpos = est_parameters[["sjpos"]],
-                                                              standardization = est_parameters[["standardization"]],
-                                                              distribution = est_parameters[["distribution"]], 
-                                                              pasture_shares = est_parameters[["pasture_shares"]]
+rfs_eaear_3llall_raninf_within[["America_soy"]] <- make_main_reg(continent = "America",
+                                                                 start_year = 2011,
+                                                                 end_year = 2019,
+                                                                 
+                                                                 rfs_reg = TRUE,
+                                                                 rfs_rando = "within",
+                                                                 original_rfs_treatments = c("statute_conv"),
+                                                                 rfs_lead = rfs_l, 
+                                                                 rfs_lag = rfs_l,
+                                                                 rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                 rfs_pya = est_parameters[["pya"]], #ya,
+                                                                 aggr_dyn = "all",
+                                                                 original_exposure_rfs = "eaear_Soy_compo", # exp_rfs, # mapmat_si[,"Crops"],
+                                                                 #control_absolute_rfs =  c(), # cnt_subset, # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                                 control_all_absolute_rfs = TRUE,
+                                                                 
+                                                                 control_pasture = TRUE,
+                                                                 fc_trend = TRUE, 
+                                                                 s_trend = TRUE, 
+                                                                 
+                                                                 sjpos = est_parameters[["sjpos"]],
+                                                                 standardization = est_parameters[["standardization"]],
+                                                                 distribution = est_parameters[["distribution"]], 
+                                                                 pasture_shares = est_parameters[["pasture_shares"]]
 )
 end_soy_time <- Sys.time()
 end_soy_time - start_soy_time #
 
 start_op_time <- Sys.time()
 # Oil palm
-rfs_eaear_2ll_raninf_within[["Asia_oilpalm"]] <- make_main_reg(continent = "Asia",
-                                                               original_sj = "Fodder", 
-                                                               original_Pk = "Beef", 
-                                                               estimated_effect = "alpha", 
-                                                               
-                                                               rfs_reg = TRUE,
-                                                               rfs_rando = "within",
-                                                               original_rfs_treatments = c("statute_conv"),
-                                                               rfs_lead = rfs_l - 1, # lead one year less because contemporaneous is considered as a lead kind
-                                                               rfs_lag = rfs_l,
-                                                               rfs_fya = est_parameters[["fya"]],  #ya,
-                                                               rfs_pya = est_parameters[["pya"]], #ya,
-                                                               original_exposure_rfs = "eaear_Oilpalm", # exp_rfs, # mapmat_si[,"Crops"],
-                                                               group_exposure_rfs = FALSE,
-                                                               control_absolute_rfs = c(), # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
-                                                               control_all_absolute_rfs = TRUE,
-                                                               
-                                                               fc_trend = TRUE, 
-                                                               s_trend = TRUE, 
-                                                               fc_s_trend = FALSE,
-                                                               
-                                                               sjpos = est_parameters[["sjpos"]],
-                                                               standardization = est_parameters[["standardization"]],
-                                                               distribution = est_parameters[["distribution"]], 
-                                                               pasture_shares = est_parameters[["pasture_shares"]]
+rfs_eaear_3llall_raninf_within[["Asia_oilpalm"]] <- make_main_reg(continent = "Asia",
+                                                                  start_year = 2011,
+                                                                  end_year = 2019,
+                                                                  
+                                                                  rfs_reg = TRUE,
+                                                                  rfs_rando = "within",
+                                                                  original_rfs_treatments = c("statute_conv"),
+                                                                  rfs_lead = rfs_l, 
+                                                                  rfs_lag = rfs_l,
+                                                                  rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                  rfs_pya = est_parameters[["pya"]], #ya,
+                                                                  aggr_dyn = "all",
+                                                                  original_exposure_rfs = "eaear_Oilpalm", # exp_rfs, # mapmat_si[,"Crops"],
+                                                                  #control_absolute_rfs =  c(), # cnt_subset, # c("Banana", "Cocoa", "Coffee", "Oilpalm", "Olive", "Rubber", "Tea"),
+                                                                  control_all_absolute_rfs = TRUE,
+                                                                  
+                                                                  control_pasture = TRUE,
+                                                                  fc_trend = TRUE, 
+                                                                  s_trend = TRUE, 
+                                                                  
+                                                                  sjpos = est_parameters[["sjpos"]],
+                                                                  standardization = est_parameters[["standardization"]],
+                                                                  distribution = est_parameters[["distribution"]], 
+                                                                  pasture_shares = est_parameters[["pasture_shares"]]
 )
 end_oilpalm_time <- Sys.time()
 end_oilpalm_time - start_op_time

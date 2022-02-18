@@ -678,6 +678,9 @@ for(country in c("United States", "European Union", "China")){
 }
 
 # UNITS
+# from https://apps.fas.usda.gov/psdonline/app/index.html#/app/about#G5
+# Production, Trade, & Use: 1000 metric tons.
+
 # so from the prints: in AH, unit is 1000ha for all goods, 
 # for TS is 1000 head only for Cattle, and 1000 MT for all other goods, 
 # and for DC it's 1000 MT for all goods
