@@ -2,7 +2,7 @@ library(boot)
 library(sandwich)
 
 ## Make some necessary objects
-# unbalanced panel data
+# balanced panel data
 data("PetersenCL", package = "sandwich")
 data <- PetersenCL
 
