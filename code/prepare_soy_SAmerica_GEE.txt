@@ -1,0 +1,88 @@
+var soy = ee.ImageCollection("projects/glad/soy_annual_SA"),
+    glass = ee.Image("users/valentinguye/GLASS-GLC_7classes_1982");
+
+print(soy);
+
+ // Define SOUTH AMERICA AOI
+ // requires the following order: minLng, minLat, maxLng, maxLat
+ // this is based on the extent of soy data, as vizualized in R script.  
+var SA_aoi = ee.Geometry.Polygon([[[-82.0005, 0],
+          [-82.0005, -40.0005],
+          [-33.9995, -40.0005],
+          [-33.9995, 0], 
+          [-82.0005, 0]]], null, false); // the false passed to the geodesic argument is necessary. 
+// Map.addLayer(SA_aoi);
+
+var soy = soy.toBands();
+print("soy_as_bands", soy);
+
+ // Without masking
+var soy2 = soy.mask(ee.Image(1)); // With this, if you point inspector in the sea (e.g.) bandi is masked
+// but bandi2 is 0 (and same logic for phtfYearLoss and phtfYearLoss2). 
+  // Map.addLayer(bandi2, {min: 0, max: 50},  "bandi2");
+// soy is already binary
+// Map.addLayer(soy.select(16), {min: 0, max: 1}, "soy2");
+
+
+// This is commented out since the export is now complete (takes ~5h)
+
+var exportName = ee.String("users/valentinguye/intermediary_soySA").getInfo();
+print(exportName);
+
+var imageScale = soy2.projection().nominalScale();
+print("imageScale", imageScale);
+
+Export.image.toAsset({
+  image: soy2,
+  description: "intermediary_exporting_step",
+  assetId: exportName,
+  region: SA_aoi,
+  scale: imageScale,  
+  maxPixels: 1e13, 
+});
+
+ 
+// AGGREGATE 
+var glassScale = glass.projection().nominalScale();
+print("glassScale", glassScale);
+// Loop over the bands of the image (i.e. over years)
+// 16-35 indexes represent years 2001-2020
+for (var i=0; i<20; i++){
+  // var i = 0;
+  var soyAnnual = soy2.select(i);
+  // Map.addLayer(soyAnnual, {min:0, max:1});
+  // print(image);
+  // Following code is from https://developers.google.com/earth-engine/guides/resample
+  // Get the image data at GLASS scale and projection.
+  var soyAnnual_5km = soyAnnual
+      // Force the next reprojection to aggregate instead of resampling.
+      .reduceResolution({ // Reducer input weights will be the product of the input mask and the fraction of the output pixel covered by the input pixel.
+        reducer: ee.Reducer.mean(), // (see notes in TEST section about unweighted reducing, but not relevant anymore)
+        maxPixels: 65536
+        // bestEffort: true
+      })
+      .multiply(ee.Image.pixelArea()).multiply(0.0001)
+      .float();
+      // Request the data at the scale and projection of the GLASS image. 
+      // Necessary if need be to display in the Map, or proceed further computations, 
+      // but NOT if next step is Export
+      // .reproject({
+      //   crs: glassProjection
+      // }); 
+      
+  var yearStrFull = ee.String(ee.Number(i).int().add(2001));
+  var exportName = ee.String("soy_SAmerica_5km_").cat(yearStrFull).getInfo();
+  // print(exportName);
+  // print(soyAnnual_5km);
+  
+  Export.image.toDrive({
+    image: soyAnnual_5km,
+    description: exportName,
+    folder: "GEE_outputs",
+    scale: 5000, // no matter what, this will be the resolution of the ouput. 
+    crs: 'EPSG:4326',
+    region: SA_aoi,
+    maxPixels: 1e12
+  }); 
+  // And execute tasks from the Tasks Tab (worked 3 by 3, more at once may not work).   
+}

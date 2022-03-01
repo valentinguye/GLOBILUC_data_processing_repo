@@ -9,10 +9,16 @@
 ### PACKAGES ###
 # see this project's README for a better understanding of how packages are handled in this project. 
 
-# These are the packages needed in this particular script. 
-neededPackages = c("dplyr", "here", "readstata13", "DescTools",
-                   "raster", "rgdal", "sp", "sf",
-                   "doParallel", "foreach", "parallel")
+neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
+                    "here", "readstata13", "foreign", "readxl", "writexl",
+                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", # "osrm", "osrmr",
+                    "lubridate","exactextractr",
+                    "doParallel", "foreach", "snow", 
+                    "knitr", "kableExtra",
+                    "DataCombine", 
+                    "fixest", 
+                    "boot", "fwildclusterboot", "sandwich",
+                    "ggplot2", "leaflet", "tmap", "dotwhisker")
 
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)

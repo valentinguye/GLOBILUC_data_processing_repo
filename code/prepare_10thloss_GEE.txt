@@ -23,12 +23,42 @@ var tropical_aoi = ee.Geometry.Polygon([[[-180, 30],
           [179.9167, -30],
           [179.9167, 30], 
           [-180, 30]]], null, false); // the false passed to the geodesic argument is necessary. 
-// Map.addLayer(tropical_aoi);
+Map.addLayer(tropical_aoi);
+
+// Define BRAZIL AOI
+// trim it to tropical latitudes
+ // requires the following order: minLng, minLat, maxLng, maxLat
+var brazil_aoi = ee.Geometry.Polygon([[[-73.982817, 5.271786],
+          [-73.982817, -30],
+          [-28.842972, -30],
+          [-28.842972, 5.271786], 
+          [-73.982817, 5.271786]]], null, false); // the false passed to the geodesic argument is necessary. 
+Map.addLayer(brazil_aoi);
+
+ // Define SOUTH AMERICA AOI
+ // trim it to tropical latitudes
+ // requires the following order: minLng, minLat, maxLng, maxLat
+ // this is based on the extent of soy data, as vizualized in R script.  
+var SA_aoi = ee.Geometry.Polygon([[[-82.0005, 0],
+          [-82.0005, -30],
+          [-33.9995, -30],
+          [-33.9995, 0], 
+          [-82.0005, 0]]], null, false); // the false passed to the geodesic argument is necessary. 
+// Map.addLayer(SA_aoi);
+
+// Define SOUTH EAST ASIA AOI 
+// From R code, the bounding box is xmin: 94.95591 ymin: -5.941733 xmax: 120.4043 ymax: 7.363556
+var SEAsia_aoi = ee.Geometry.Polygon([[[94.95591, 7.363556],
+          [94.95591, -5.941733],
+          [120.4043, -5.941733],
+          [120.4043, 7.363556], 
+          [94.95591, 7.363556]]], null, false); // the false passed to the geodesic argument is necessary. 
+Map.addLayer(SEAsia_aoi);
+
 
 // Not necessary to clip (even not recommended) since we finally export to the tropical_aoi, and GEE works on "pull" basis
 // var gfc = gfc.clip(tropical_aoi);
 // var phtf = phtf.clip(tropical_aoi);
-
 
 // COUNT FOREST LOSS IN canopy cover and contiguous area
 var canopyCover = gfc.select(['treecover2000']);
@@ -125,7 +155,7 @@ var impImage = ee.Image("users/valentinguye/intermediary_multibands_30_th10annua
 // print("test", image);
 // print("phtfYearLoss",phtfYearLoss);
 // Map.addLayer(phtfYearLoss, {min: 0, max: 20}, "phtfYearLoss");
-// Map.addLayer(image, {}, "split");
+// Map.addLayer(image, {min: 0, max: 1}, "split");
 
  
 /* We export to Glass projection (5km) because reducing resolution from 30m pixels to 10km GAEZ pixels requires too many 
@@ -141,7 +171,7 @@ print("scaleGlass", scaleGlass);
 
 // Loop over the bands of the image (i.e. over years)
 for (var i=0; i<19; i++){
-  // var i = 0;
+  // var i = 10;
   var image = impImage.select(i);
   print(image);
   // Following code is from https://developers.google.com/earth-engine/guides/resample
@@ -164,21 +194,64 @@ for (var i=0; i<19; i++){
       
   var yearStrFull = ee.String(ee.Number(years.get(i)).int().add(2000));
   print(yearStrFull);
+  
   var exportName = ee.String("10thLossSumGlass_maxP_").cat(yearStrFull).getInfo();
   print(exportName);
-  
+    var exportName_SEAsia = ee.String("10thLossSumGlass_maxP_SEAsia_").cat(yearStrFull).getInfo();
+    var exportName_Brazil = ee.String("10thLossSumGlass_maxP_Brazil_").cat(yearStrFull).getInfo();
+    var exportName_SAmerica = ee.String("10thLossSumGlass_maxP_SAmerica").cat(yearStrFull).getInfo();
+
   Export.image.toDrive({
     image: lossSumGlass,
     description: exportName,
     folder: "GEE_output/GLOBILUC",
     scale: 5000, // no matter what, this will be the resolution of the ouput. 
     // crsTransform: [0.04491576420597607, 0, -180.0223829375521, 0, -0.04491576420597607, 85.02554164191271],
-    crs: glassProjection,
-    // crs: 'EPSG:4326',
+    // so the last run, leading to the data we use, passed glassProjection to the argument crs.
+    // but now it does not work anymore (Error: Projection: The CRS of a map projection could not be parsed. (Error code: 3))
+    // so we pass 'EPSG:4326'
+    // crs: glassProjection,
+    crs: 'EPSG:4326', 
     region: tropical_aoi,
     maxPixels: 1e12
   }); 
   // And execute tasks from the Tasks Tab (worked 3 by 3, more at once may not work).   
-};
+  
+  // AND REPEAT FOR EACH AREA OF INTEREST 
+  Export.image.toDrive({
+    image: lossSumGlass,
+    description: exportName_SAmerica,
+    folder: "GEE_output/GLOBILUC",
+    scale: 5000, 
+    crs: 'EPSG:4326', 
+    region: SA_aoi,
+    maxPixels: 1e12
+  }); 
+  // And execute tasks from the Tasks Tab (worked 3 by 3, more at once may not work).   
+  
+  Export.image.toDrive({
+    image: lossSumGlass,
+    description: exportName_Brazil,
+    folder: "GEE_output/GLOBILUC",
+    scale: 5000, 
+    crs: 'EPSG:4326', 
+    region: brazil_aoi,
+    maxPixels: 1e12
+  }); 
+  // // And execute tasks from the Tasks Tab (worked 3 by 3, more at once may not work).   
+  
+    Export.image.toDrive({
+    image: lossSumGlass,
+    description: exportName_SEAsia,
+    folder: "GEE_output/GLOBILUC",
+    scale: 5000, 
+    crs: 'EPSG:4326', 
+    region: SEAsia_aoi,
+    maxPixels: 1e12
+  }); 
+  // And execute tasks from the Tasks Tab (worked 3 by 3, more at once may not work).   
+}
+
+
 
 

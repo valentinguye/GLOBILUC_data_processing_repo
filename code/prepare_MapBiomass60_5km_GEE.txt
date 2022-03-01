@@ -1,0 +1,124 @@
+var mb = ee.Image("projects/mapbiomas-workspace/public/collection6/mapbiomas_collection60_integration_v1"),
+    glass = ee.Image("users/valentinguye/GLASS-GLC_7classes_1982");
+
+// print(mb);
+
+var mbProjection = mb.projection();
+print("mbProjection", mbProjection);  
+
+var mbScale = mbProjection.nominalScale();
+print("mbScale", mbScale);
+
+var glassProjection = glass.projection();
+// var transformGlass = glassProjection.transform(); 
+print("glassProjection", glassProjection);  
+var scaleGlass = glassProjection.nominalScale();
+print("scaleGlass", scaleGlass);
+
+// Map.addLayer(mb);
+ 
+ // Define BRAZIL AOI
+ // requires the following order: minLng, minLat, maxLng, maxLat
+var brazil_aoi = ee.Geometry.Polygon([[[-73.982817, 5.271786],
+          [-73.982817, -30],
+          [-28.842972, -30],
+          [-28.842972, 5.271786], 
+          [-73.982817, 5.271786]]], null, false); // the false passed to the geodesic argument is necessary. 
+Map.addLayer(brazil_aoi);
+
+ // pasture value in MAPBIOMASS https://mapbiomas-br-site.s3.amazonaws.com/downloads/Colecction%206/Cod_Class_legenda_Col6_MapBiomas_BR.pdf
+ var luValue = ee.Number(40);
+ var luName = ee.String("rice");
+
+ // The difference with aggregating GFC data is that here the input Image has bands for years, and values for land uses, 
+ // while GFC had bands for land uses and values for years of event. 
+ // Thus, here we first split years in a loop over years
+
+// Loop over the bands of the image (i.e. over years)
+// 16-35 indexes represent years 2001-2020
+// for (var i=16; i<36; i++){
+// var makeBinary = function(index){
+  // var index = 16;
+  // var bandi = mb.select(index);
+  // print(bandi);
+  // Map.addLayer(bandi, {min: 0, max: 50},  "bandi");
+
+ // Without masking
+var mb2 = mb.mask(ee.Image(1)); // With this, if you point inspector in the sea (e.g.) bandi is masked
+// but bandi2 is 0 (and same logic for phtfYearLoss and phtfYearLoss2). 
+  // Map.addLayer(bandi2, {min: 0, max: 50},  "bandi2");
+
+// CREATE ONE BINARY IMAGE FOR PASTURES
+var mbLUBinary = mb2.eq(ee.Image(luValue));
+
+// Convert to integer to spare some memory
+var mbLUBinary = mbLUBinary.toInt8();
+
+print(mbLUBinary, "mbLUBinary");
+// Map.addLayer(mbLUBinary.select(16), {min: 0, max: 1}, "mbLUBinary");
+
+var exportName = ee.String("users/valentinguye/intermediary_mapbiomass_").cat(luName).getInfo();
+print(exportName);
+
+var imageScale = mbLUBinary.projection().nominalScale();
+print("imageScale", imageScale);
+
+// This is commented out since the export is now complete (takes ~5h)
+Export.image.toAsset({
+  image: mbLUBinary,
+  description: "intermediary_exporting_step",
+  assetId: exportName,
+  region: brazil_aoi,
+  scale: 30.000000000000004,  // as copy pasted from the mbScale print
+  maxPixels: 1e13, 
+  // pyramidingPolicy: {'.default': 'mean'} not necessary, default method is already mean
+});
+
+ // AGGREGATE 
+
+var mbLUBinary = ee.Image(exportName);
+
+// Loop over the bands of the image (i.e. over years)
+// 16-35 indexes represent years 2001-2020
+for (var i=16; i<36; i++){
+  // var i = 16;
+  var mbLUBinaryAnnual = mbLUBinary.select(i);
+  // print(mbLUBinaryAnnual);
+  // Map.addLayer(mbLUBinaryAnnual, {min:0, max: 1}, "mbLUBinaryAnnual");
+  
+  // Following code is from https://developers.google.com/earth-engine/guides/resample
+  // Get the image data at GLASS scale and projection.
+  var mbLUBinaryAnnual_5km = mbLUBinaryAnnual
+      // Force the next reprojection to aggregate instead of resampling.
+      .reduceResolution({ // Reducer input weights will be the product of the input mask and the fraction of the output pixel covered by the input pixel.
+        reducer: ee.Reducer.mean(), // (see notes in TEST section about unweighted reducing, but not relevant anymore)
+        maxPixels: 65536
+        // bestEffort: true
+      })
+      .multiply(ee.Image.pixelArea()).multiply(0.0001)
+      .float();
+      // Request the data at the scale and projection of the GLASS image. 
+      // Necessary if need be to display in the Map, or proceed further computations, 
+      // but NOT if next step is Export
+      // .reproject({
+      //   crs: glassProjection
+      // }); 
+      
+  var yearStrFull = ee.String(ee.Number(i).int().add(1985));
+  var exportName = ee.String("MapBiomass60_5km_").cat(luName).cat(yearStrFull).getInfo();
+  print(exportName);
+  print(mbLUBinaryAnnual_5km);
+  
+  Export.image.toDrive({
+    image: mbLUBinaryAnnual_5km,
+    description: exportName,
+    folder: "GEE_outputs",
+    scale: 5000, // no matter what, this will be the resolution of the ouput. 
+    // crsTransform: [0.04491576420597607, 0, -180.0223829375521, 0, -0.04491576420597607, 85.02554164191271],
+    // crs: glassProjection,
+    crs: 'EPSG:4326',
+    region: brazil_aoi,
+    maxPixels: 1e12
+  }); 
+  // And execute tasks from the Tasks Tab (worked 3 by 3, more at once may not work).   
+}
