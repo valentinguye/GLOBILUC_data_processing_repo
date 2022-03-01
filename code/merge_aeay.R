@@ -68,7 +68,7 @@ targetdir <- here("temp_data", "merged_datasets", "tropical_aoi")
 
 ### READ IN AND RENAME GAEZ DATA ### 
 
-## SUITABILITY INDICES 
+## Agro-Ecological Attainable Yields
 gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
 gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
@@ -377,8 +377,6 @@ rm(long_df, varying_vars, phtfloss_gaez, gaez_m, mask, phtfloss)
 rm(long_df, varying_vars, driverloss_gaez, gaez_m, mask, driverloss)
 
 
-
-rm(gaez, gaez_crops, gaez_dir, targetdir)
 
 # Note: much more cells have no some deforestation in the phtfloss data than in the first_loss. This is due to the starting resolution of each original data set. 
 
