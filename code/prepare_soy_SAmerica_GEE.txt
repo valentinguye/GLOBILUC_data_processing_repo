@@ -1,14 +1,11 @@
-var soy = ee.ImageCollection("projects/glad/soy_annual_SA"),
-    glass = ee.Image("users/valentinguye/GLASS-GLC_7classes_1982");
-
 print(soy);
 
  // Define SOUTH AMERICA AOI
  // requires the following order: minLng, minLat, maxLng, maxLat
  // this is based on the extent of soy data, as vizualized in R script.  
 var SA_aoi = ee.Geometry.Polygon([[[-82.0005, 0],
-          [-82.0005, -40.0005],
-          [-33.9995, -40.0005],
+          [-82.0005, -30],
+          [-33.9995, -30],
           [-33.9995, 0], 
           [-82.0005, 0]]], null, false); // the false passed to the geodesic argument is necessary. 
 // Map.addLayer(SA_aoi);
@@ -32,14 +29,14 @@ print(exportName);
 var imageScale = soy2.projection().nominalScale();
 print("imageScale", imageScale);
 
-Export.image.toAsset({
-  image: soy2,
-  description: "intermediary_exporting_step",
-  assetId: exportName,
-  region: SA_aoi,
-  scale: imageScale,  
-  maxPixels: 1e13, 
-});
+// Export.image.toAsset({
+//   image: soy2,
+//   description: "intermediary_exporting_step",
+//   assetId: exportName,
+//   region: SA_aoi,
+//   scale: imageScale,  
+//   maxPixels: 1e13, 
+// });
 
  
 // AGGREGATE 

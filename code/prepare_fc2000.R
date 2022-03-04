@@ -61,10 +61,12 @@ fc2k <- crop(fc2k, ext)
 # Currently, the data are hectares of forest cover in 5x5km grid cells
 # We aggregate this to the GAEZ resolution by adding up the hectares
 
-gaez <- raster(here("temp_data", "GAEZ", "AES_index_value", "Rain-fed", "High-input", "Alfalfa.tif"))
+#### AGGREGATE AND ALIGN to GAEZ ####
+
+gaez <- raster(here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed", "High-input", "Alfalfa.tif"))
 
 # define output file name
-aggr_output_name <- here("temp_data", "processed_fc2000", "tropical_aoi", "aggr_fc_2000.tif")
+aggr_output_name <- here("temp_data", "processed_fc2000", "tropical_aoi", "aggr_gaez_fc_2000.tif")
 
 # aggregate it from the ~5km cells to ~10km
 raster::aggregate(fc2k, fact = c(res(gaez)[1]/res(fc2k)[1], res(gaez)[2]/res(fc2k)[2]),
@@ -75,10 +77,9 @@ raster::aggregate(fc2k, fact = c(res(gaez)[1]/res(fc2k)[1], res(gaez)[2]/res(fc2
                   # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares. 
                   overwrite = TRUE)
 
-#### ALIGN to GAEZ ####
 aggregated <- raster(aggr_output_name)
 
-resampled_output_name <- here("temp_data", "processed_fc2000", "tropical_aoi", "resampled_fc_2000.tif")
+resampled_output_name <- here("temp_data", "processed_fc2000", "tropical_aoi", "resampled_gaez_fc_2000.tif")
 
 resample(x = aggregated, 
          y = gaez, 
@@ -86,6 +87,8 @@ resample(x = aggregated,
          # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
          filename = resampled_output_name, 
          overwrite = TRUE)
+
+
 
 ### MASK WITH ALWAYS 0 PIXELS
 resampled <- raster(resampled_output_name)

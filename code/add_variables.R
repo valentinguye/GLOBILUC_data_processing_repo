@@ -1022,7 +1022,7 @@ for(name in dataset_names){
   final <- left_join(final, df_continent, by = "grid_id")
   rm(df_continent)
   
-  # Standardized EAEAR
+  # EAEAR
   stdeaear_path <- paste0(here(origindir, name), "_stdeaear.Rdata")
   df_stdeaear <- readRDS(stdeaear_path)  
   

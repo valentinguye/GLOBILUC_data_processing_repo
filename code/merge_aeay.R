@@ -374,7 +374,7 @@ rm(long_df, varying_vars, phtfloss_gaez, gaez_m, mask, phtfloss)
 
 
  
-rm(long_df, varying_vars, driverloss_gaez, gaez_m, mask, driverloss)
+rm(long_df, varying_vars, gaez_m, mask, driverloss)
 
 
 
@@ -481,61 +481,131 @@ rm(long_df, varying_vars, driverloss_gaez, gaez_m, mask, driverloss, fc2k)
 #### 5. MERGE ALL DRIVERS - AND GAEZ #### 
 
 ## Read in DRIVER LOSS 
-driverloss_commodity <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_commodity.tif")) 
-# Rename layers 
-names(driverloss_commodity) <- paste0("driven_loss_commodity.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
-
-driverloss_shifting <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_shifting.tif")) 
-# Rename layers 
-names(driverloss_shifting) <- paste0("driven_loss_shifting.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
-
-driverloss_forestry <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_forestry.tif")) 
-# Rename layers 
-names(driverloss_forestry) <- paste0("driven_loss_forestry.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
-
-driverloss_fire <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_lossdrivers_fire.tif")) 
-# Rename layers 
-names(driverloss_fire) <- paste0("driven_loss_fire.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
 
 
-### MASK GAEZ TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
+#### ALIGNE GAEZ TO THE DRIVERS #### 
+drivenloss_commodity <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_commodity.tif")) 
+
+gaez_resampled_output_name <- here(gaez_dir, "tropical_resampleddrivers_high_input.tif")
+
+# gaez is already at the pan-tropical aoi 
+resample(x = gaez, 
+         y = drivenloss_commodity, 
+         method = "ngb", # not a big difference between bilinear and ngb, but the latter is still a bit closer to initial gaez
+         filename = gaez_resampled_output_name, 
+         overwrite = TRUE)
+
+# resngb <- raster(gaez_resampled_output_name)
+# resngb %>% values%>% summary()
+# rm(resngb)
+# 
+# # aligne
+# resample(x = gaez,
+#          y = driveloss_commodity,
+#          method = "bilinear", # bilinear or ngb changes nothing
+#          filename = gaez_resampled_output_name,
+#          overwrite = TRUE)
+# 
+# resbil <- raster(gaez_resampled_output_name)
+# resbil %>% values%>% summary()
+# rm(resbil)
+# 
+# gaez$Alfalfa %>% values %>% summary()
+
+
+#### 2000 FOREST COVER ####
+fc2k <- raster(here("input_data", "fc_2000_3km_10th.tif"))
+
+fc2k <- crop(fc2k, ext)
+
+fc2k_aggr_output_name <- here("temp_data", "processed_fc2000", "tropical_aoi", "aggr_drivers_fc_2000.tif")
+
+# driven loss data, the target
+drivenloss_commodity <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_commodity.tif")) 
+
+# aggregate it from the ~5km cells to ~10km
+raster::aggregate(fc2k, fact = c(res(drivenloss_commodity)[1]/res(fc2k)[1], res(drivenloss_commodity)[2]/res(fc2k)[2]),
+                  expand = FALSE,
+                  fun = sum,
+                  na.rm = TRUE, # NA values are only in the sea. Where there is no forest loss, like in a city in Brazil, the value is 0 (see with plot())
+                  filename = fc2k_aggr_output_name,
+                  # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares. 
+                  overwrite = TRUE)
+
+aggregated <- raster(fc2k_aggr_output_name)
+
+fc2k_resampled_output_name <- here("temp_data", "processed_fc2000", "tropical_aoi", "resampled_drivers_fc_2000.tif")
+
+resample(x = aggregated, 
+         y = drivenloss_commodity, 
+         method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
+         # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
+         filename = fc2k_resampled_output_name, 
+         overwrite = TRUE)
+
+
+
+
+#### STACK AND MASK RASTERS TO MERGE ####
+# Read layers to be stacked
+drivenloss_commodity <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_commodity.tif")) 
+drivenloss_shifting <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_shifting.tif")) 
+drivenloss_forestry <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_forestry.tif")) 
+drivenloss_fire <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_fire.tif")) 
+drivenloss_urba <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_urba.tif")) 
+gaez <- brick(gaez_resampled_output_name)
+fc2k <- raster(fc2k_resampled_output_name)
+
+# It is important to explicitly rename layers that are going to be stacked and then called to reshape the data frame 
+# for time varying variables, the dot is important. 
+names(drivenloss_commodity) <- paste0("driven_loss_commodity.",seq(2001, 2019, 1)) 
+names(drivenloss_shifting) <- paste0("driven_loss_shifting.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
+names(drivenloss_forestry) <- paste0("driven_loss_forestry.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
+names(drivenloss_fire) <- paste0("driven_loss_fire.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
+names(drivenloss_urba) <- paste0("driven_loss_urba.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
+
+names(gaez) <- gaez_crops
+names(fc2k) <- "fc_2000"
+
+
+
+
+# Stack together the annual layers of drivenloss data and GAEZ crop cross sections 
+tropical_stack <- stack(drivenloss_commodity,
+                         drivenloss_shifting, 
+                         drivenloss_forestry, 
+                         drivenloss_fire,
+                         drivenloss_urba,
+                         gaez, fc2k)
+# stock those names 
+tropical_stack_names <- names(tropical_stack)
+
+
+### MASK THE STACK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ###
+# TAKES ~ 1000 s. 
 
 mask <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "always_zero_mask_lossdrivers_any.tif"))
 
-mask(x = gaez, 
-     mask = mask,
-     maskvalue = 0, # necessary here, because the there is no NA in the mask, only 0 and 1 (see the prepare_loss_drivers.R script)
-     updatevalue = NA, 
-     filename = here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "any_driverloss_masked_high_input_all.tif"), 
-     overwrite = TRUE)
-
-gaez_m <- brick(here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed", "any_driverloss_masked_high_input_all.tif"))
-# Rename layers (important, as writing the masked gaez lost the layer names)
-names(gaez_m) <- gaez_crops
+tropical_stack <- mask(x = tropical_stack, 
+                        mask = mask,
+                        maskvalue = 0, # necessary here, because the there is no NA in the mask, only 0 and 1 (see the prepare_loss_drivers.R script)
+                        updatevalue = NA,
+                        filename = here("temp_data", "merged_datasets", "tropical_aoi", "anydriver_masked_stack.tif"),
+                        overwrite = TRUE)
 
 # (note that masking changes the summary values of gaez)
-
-### ADD THE 2000 FOREST COVER ### 
-# (it is already masked with always zero driven loss, in prepare_fc2000)
-fc2k <- raster(here("temp_data", "processed_lossdrivers", "tropical_aoi", "masked_fc_2000_any.tif"))
-names(fc2k) <- "fc_2000"
-
-### STACK RASTERS TO MERGE ###
-
-# Stack together the annual layers of driverloss-GLC data and GAEZ crop cross sections 
-driverloss_gaez <- stack(driverloss_commodity,
-                         driverloss_shifting, 
-                         driverloss_forestry, 
-                         driverloss_fire, 
-                         gaez_m, fc2k)
-names(driverloss_gaez)
 
 
 ### RASTER TO DATAFRAME ### 
 
+tropical_stack <- stack(here("temp_data", "merged_datasets", "tropical_aoi", "anydriver_masked_stack.tif"))
+
+# all names are lost through the writing/reading operation, so rename layers 
+names(tropical_stack) <- tropical_stack_names
+
 # na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
 # We also set long to false because we reshape with a proper function for more control
-wide_df <- raster::as.data.frame(driverloss_gaez, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ~700s. 
+wide_df <- raster::as.data.frame(tropical_stack, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ~700s. 
 
 # Rename coordinate variables
 names(wide_df)
@@ -553,16 +623,17 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
-varying_vars <- list(names(driverloss_commodity),
-                     names(driverloss_shifting),
-                     names(driverloss_forestry),
-                     names(driverloss_fire))
-#varying_vars <- names(driverloss_gaez)[grep(".", names(driverloss_gaez), fixed = TRUE)]
+varying_vars <- list(names(drivenloss_commodity),
+                     names(drivenloss_shifting),
+                     names(drivenloss_forestry),
+                     names(drivenloss_fire), 
+                     names(drivenloss_urba))
+#varying_vars <- names(drivenloss_gaez)[grep(".", names(drivenloss_gaez), fixed = TRUE)]
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
-                          v.names = c("driven_loss_commodity", "driven_loss_shifting", "driven_loss_forestry", "driven_loss_fire"),
+                          v.names = c("driven_loss_commodity", "driven_loss_shifting", "driven_loss_forestry", "driven_loss_fire", "driven_loss_urba"),
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -586,7 +657,7 @@ long_df <- dplyr::arrange(long_df, grid_id, year)
 
 saveRDS(long_df, here(targetdir, "driverloss_all_aeay_long.Rdata"))
 
-rm(long_df, varying_vars, driverloss_gaez, gaez_m, mask, driverloss, fc2k)
+rm(long_df, varying_vars, mask, drivenloss_commodity, drivenloss_shifting, drivenloss_forestry, drivenloss_fire, drivenloss_urba, gaez, fc2k)
 
 
 
