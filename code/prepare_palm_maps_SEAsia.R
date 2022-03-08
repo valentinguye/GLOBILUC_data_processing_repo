@@ -137,6 +137,7 @@ aop <- stack(rasterlist)
 
 # compute this quantity in advance so it's not computed for every cell
 aop_length <- nlayers(aop)
+
 impose_unidir <- function(y){ index_1 <- which(y==1)
                               index_05 <- which(y==0.5)
                               lth_index_05 <- length(index_05)

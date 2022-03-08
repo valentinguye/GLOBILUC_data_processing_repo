@@ -1046,7 +1046,7 @@ df_base <- readRDS(here("temp_data", "merged_datasets", "brazil_aoi", "driverlos
 
 # just compute country and continent variables, even if invariant, so they can be called in generic function
 df_base$country_name <- "Brazil"
-df_base$continent <- "America"
+df_base$continent_name <- "America"
 # Create country year fixed effect
 df_base <- mutate(df_base, country_year = paste0(country_name, "_", year))
 

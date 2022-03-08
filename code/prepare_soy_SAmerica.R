@@ -23,6 +23,8 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
 
+### USER HAS TO CONFIRM BY TYPING < y > IN CONSOLE AT THIS POINT 
+
 # Load them 
 lapply(neededPackages, library, character.only = TRUE)
 
@@ -432,7 +434,7 @@ year_list[["2001"]] <- df[df$year == 2001, c("grid_id", "year")]
 year_list[["2001"]][,"accu_defo_since2k"] <- 0
 
 # then, each year's deforestation accumulated in the past is the sum of *past years'* deforestation
-years <- 2008:2011
+years <- 2008:2011 # we need it only 2007-2010, because we possibly use only those years as starting years not 2002:max(df$year)
 for(y in years){
   sub_ <- df[df$year < y,]
   year_list[[as.character(y)]] <- ddply(sub_, "grid_id", summarise,
@@ -442,7 +444,7 @@ for(y in years){
 
 accu_defo_df <- bind_rows(year_list)
 
-df <- inner_join(df, accu_defo_df, by = c("grid_id", "year"))
+df <- left_join(df, accu_defo_df, by = c("grid_id", "year"))
 
 
 # summary(df$accu_lucpfp_since2k)
@@ -844,7 +846,7 @@ df_base <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "driverlo
 
 # just compute country and continent variables, even if invariant, so they can be called in generic function
 df_base$country_name <- "Brazil"
-df_base$continent <- "America"
+df_base$continent_name <- "America"
 # Create country year fixed effect
 df_base <- mutate(df_base, country_year = paste0(country_name, "_", year))
 
