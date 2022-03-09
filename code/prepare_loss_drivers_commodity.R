@@ -12,7 +12,7 @@
 # These are the packages needed in this particular script. 
 neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
                     "here", "readstata13", "foreign", "readxl", "writexl",
-                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", # "osrm", "osrmr",
+                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
                     "lubridate","exactextractr",
                     "doParallel", "foreach", "snow", 
                     "knitr", "kableExtra",
@@ -501,12 +501,10 @@ df <- dplyr::select(df,-all_of(gaez_crops))
 
 # Use cross section only
 df_cs <- df[!duplicated(df$grid_id),]
-
-rm(df)
-
 # Spatial
 df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
 
+rm(df)
 
 # transform shapes such that st_nearest_feature works with projected data
 df_cs <- st_transform(df_cs, crs = mercator_world_crs)
@@ -665,6 +663,66 @@ saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_
 rm(df_cs)
         
 
+
+#### BIGGER CELL VARIABLES #### 
+## Prepare base data
+path <- here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_long.Rdata")
+df <- readRDS(path)
+
+# Remove gaez variables
+df <- dplyr::select(df,-all_of(gaez_crops))
+# Use cross section only
+df_cs <- df[!duplicated(df$grid_id),]
+# Spatial
+df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
+
+rm(df)
+
+## Prepare bigger square grids
+# for ~50km grid cells (5 times larger grid cells in both dimensions, hence 25 times larger)
+bigger_50km <- aggregate(drivers, fact = 5, expand = TRUE, fun = sum)
+bigger_50km_stars <- st_as_stars(bigger_50km)
+bigger_50km_sf <- st_as_sf(bigger_50km_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+
+bigger_50km_sf$grid_id_50km <- seq(from = 1, to = nrow(bigger_50km_sf))
+bigger_50km_sf <- bigger_50km_sf[,c("grid_id_50km", "geometry")]
+
+# repeat for ~100km grid cells (10 times larger grid cells in both dimensions, hence 100 times larger)
+bigger_100km <- aggregate(drivers, fact = 10, expand = TRUE, fun = sum)
+bigger_100km_stars <- st_as_stars(bigger_100km)
+bigger_100km_sf <- st_as_sf(bigger_100km_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+
+bigger_100km_sf$grid_id_100km <- seq(from = 1, to = nrow(bigger_100km_sf))
+bigger_100km_sf <- bigger_100km_sf[,c("grid_id_100km", "geometry")]
+
+# DO NOT TRANSFORM, because it makes the inner_join associate two bigger squares for each smaller one, 
+# I don't really know why, but it does not do so with geographic coordinates, and there is no mismatch, and no problem of imprecision due to 
+# geographic coordinates being used as planer because aoi is not near the pole. 
+# df_cs <- st_transform(df_cs, crs = mercator_world_crs)
+# bigger_50km_sf <- st_transform(bigger_50km_sf, crs = mercator_world_crs)
+# bigger_100km_sf <- st_transform(bigger_100km_sf, crs = mercator_world_crs)
+
+# join the variables
+df_cs <- st_join(x = bigger_50km_sf,
+                 y = df_cs,
+                 join = st_contains,
+                 prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
+                 left = FALSE)# performs inner join so returns only records that spatially match.
+
+df_cs <- st_join(x = bigger_100km_sf,
+                 y = df_cs,
+                 join = st_contains,
+                 prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
+                 left = FALSE)# performs inner join so returns only records that spatially match.
+
+df_cs <- st_drop_geometry(df_cs)
+
+length(unique(df_cs$grid_id)) == nrow(df_cs)
+
+# Keep only new variable and id
+df_cs <- df_cs[,c("grid_id", "grid_id_50km", "grid_id_100km")]
+
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_cs_biggercells.Rdata"))
 
 #### REMAINING FOREST ####
 
@@ -1116,8 +1174,19 @@ df_continent <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "dr
 final <- left_join(final, df_continent, by = "grid_id")
 rm(df_continent)
 
-# Create country year fixed effect
+# Create country-year identifier
 final <- mutate(final, country_year = paste0(country_name, "_", year))
+
+## BIGGER CELLS
+df_biggercells <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_cs_biggercells.Rdata"))
+
+final <- left_join(final, df_biggercells, by = "grid_id")
+rm(df_biggercells)
+
+# Create bigger cell-year identifier
+final <- mutate(final, grid_id_50km_year = paste0(grid_id_50km, "_", year))
+final <- mutate(final, grid_id_100km_year = paste0(grid_id_100km, "_", year))
+# length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
 
 ## EAEAR
 df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi",  "driverloss_all_aeay_cs_stdeaear.Rdata"))  

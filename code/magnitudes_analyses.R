@@ -282,11 +282,18 @@ fe = "grid_id + country_year" #
 distribution <- "quasipoisson"
 invhypsin = TRUE
 conley_cutoff <- 100
-se = "twoway"
+# se <- "twoway"
+cluster_var1 <- "grid_id"
+cluster_var2 <- "grid_id_50km_year"
 output = "est_object"
 glm_iter <- 25 
 
-
+# parameters for APE computation 
+CLUSTER  <- "reachable"#"subdistrict",
+stddev <- FALSE # if TRUE, the PEs are computed for a one standard deviation (after removing variation in the fixed-effect dimensions)
+rel_lu_change  <- 0.01
+abs_lu_change  <- 1
+rounding <- 2
 
 
 rm(outcome_variable, start_year, end_year, pasture_shares, 
@@ -330,11 +337,21 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           fe = "grid_id + country_year", 
                           distribution = "quasipoisson",#  "quasipoisson", 
                           invhypsin = TRUE, # if distribution is gaussian, should the dep. var. be transformed to inverse hyperbolic sine?
-                          se = "twoway",# # passed to vcov argument. Currently, one of "cluster", "twoway", or an object of the form: 
+                          cluster_var1 = "grid_id", 
+                          cluster_var2 = "grid_id_50km_year",
+                          # se = "twoway",# # passed to vcov argument. Currently, one of "cluster", "twoway", or an object of the form: 
                           # - "exposure2ways" for the two-way clustering to be customed as original_exposure_rfs + country_year, and not along FE.   
                           # - vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical")
                           # with cutoff the distance, in km, passed to fixest::vcov_conley, if se = "conley"  
                           glm_iter = 25,
+                          
+                          # parameters for APE computation 
+                          CLUSTER = "reachable",#"subdistrict",
+                          stddev = FALSE, # if TRUE, the PEs are computed for a one standard deviation (after removing variation in the fixed-effect dimensions)
+                          rel_lu_change = 0.01, 
+                          abs_lu_change = 1, 
+                          rounding = 2,
+                          
                           output = "coef_table" # one of "data", est_object, or "coef_table" 
 ){
   
@@ -412,7 +429,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   }
   
   # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", 
+  d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", cluster_var1, cluster_var2, 
                                  "fc_2000", "fc_2009", "remaining_fc", "pasture_share_2000", 
                                  outcome_variable, endo_vars, exp_matmap[, "Crops"]
                                  ))) 
@@ -586,7 +603,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # remove units with no country name (in the case of all_drivers data set currently, because nearest_feature function has not been used in this case, see add_variables.R)
   d <- dplyr::filter(d, !is.na(country_name))
 
-  used_vars <- unique(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", #"remaining_fc", "accu_defo_since2k", # "sj_year",
+  used_vars <- unique(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",  cluster_var1, cluster_var2, #"remaining_fc", "accu_defo_since2k", # "sj_year",
                        original_exposure_rfs, original_rfs_treatments, rfs_treatments, outcome_variable, endo_vars, instruments, controls))
   
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
@@ -660,19 +677,72 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                fe))
   
   ### REGRESSIONS
-  # myfun_data <- d_clean
-  # fsf <- fml_1st
-  # ssf <- fml_2nd
   
+  # Run first and second stages once. Will be necessary to get some fit stats from the first stage
+  if(clustering =="twoway"){
+    se <- as.formula(paste0("~ ", paste0(c(cluster_var1, cluster_var2), collapse = "+")))
+  }
+  if(clustering =="oneway"){
+    se <- as.formula(paste0("~ ", cluster_var1))
+  }
+  
+  est_1stqp <- fixest::feglm(fml_1st, 
+                           data = d_clean, 
+                           vcov = se,
+                           family = "quasipoisson",
+                           fixef.rm = "perfect",
+                           nthreads = 3, 
+                           notes = TRUE)
+  
+  df_res_1st <- summary(est_1st)$coeftable
+  
+  fixest_df_1st <- degrees_freedom(est_1st, type = "t")
+  
+  d_clean$est_res_1st <- est_1st$residuals
+  
+  # 2nd stage
+  est_2nd <- fixest::feglm(fml_2nd, 
+                           data = d_clean, 
+                           family = distribution, 
+                           fixef.rm = "perfect",
+                           nthreads = 3,
+                           glm.iter = glm_iter,
+                           notes = TRUE)
+  
+  # bootstrap on this final data set where always zero along fixed effect dimensions are removed
+  d_clean <- d_clean[est_2nd$obs_selection[[1]], ]
+    
+  ## Redefine changes in regressor to one standard deviation if asked 
+  if(stddev){
+    # remove fixed effect variations from the regressor
+    reg_sd <- fixest::feols(fml = as.formula(paste0(
+      endo_vars,
+      " ~ 1 | ", 
+      paste0(est_1st$fixef_vars, collapse = "+"))),
+      data = d_clean)
+    
+    # and take the remaining standard deviation
+    rel_lu_change <- sd(reg_sd$residuals)
+    abs_lu_change <- sd(reg_sd$residuals)
+  }
+  
+  
+  myfun_data <- d_clean
+  fsf <- fml_1st
+  ssf <- fml_2nd
+  
+  # function applied to each bootstrap replicate
   ctrl_fun_endo <- function(myfun_data, fsf, ssf){
     
     # 1st stage 
     est_1st <- fixest::feols(fsf, 
                              data = myfun_data, 
+                             # vcov = se,
                              fixef.rm = "perfect",
                              nthreads = 3, 
                              notes = TRUE)
-    # how the vcov is computed does not change the residuals
+    # how the vcov is computed does not change the residuals, so it does not affect the second stage. 
+    # However, it affects fit statistics of the first stage, but we look at this outside the bootstrap process
     
     # save estimated residuals
     myfun_data$est_res_1st <- est_1st$residuals
@@ -685,6 +755,26 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                              glm.iter = glm_iter,
                              notes = TRUE)
     
+    
+    # regarding vcov, we don't need to extract SEs from this function, so let the argument be its default here too
+
+    
+    ## MAKE APE 
+    # identify the nature of different variables
+    coeff_names <- names(coef(est_2nd))
+    
+    k <- which(coeff_names == endo_vars)
+    beta_k <- coef(est_2nd)[k]
+    
+    # the APE is different depending on the regressor of interest being in the log scale or not. 
+    if(grepl("ln_",coeff_names[k])){
+      ape <- ((1+rel_lu_change)^(beta_k) - 1)*100
+    } else{
+      ape <- (exp(beta_k*abs_lu_change) - 1)*100 
+    } 
+    
+    return(ape)
+    
     # statistics we want to evaluate the variance of:
     return(est_2nd$coefficients[endo_vars])
   }
@@ -692,16 +782,25 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   ## bootstrap with 2-way clustering
 
   # names and numbers of clusters for cluster var 1 
-  cluster_var1 <- "grid_id"
   par_list_dim1 <- list(cluster_variable = cluster_var1, 
                          cluster_names = unique(d_clean[,cluster_var1]),
                          number_clusters = length(unique(d_clean[,cluster_var1])))
   
-  # names and numbers of clusters for cluster var 2 
-  cluster_var2 <- "year"
-  par_list_dim2 <- list(cluster_variable = cluster_var2, 
-                        cluster_names = unique(d_clean[,cluster_var2]),
-                        number_clusters = length(unique(d_clean[,cluster_var2])))
+  if(clustering =="twoway"){
+    
+    # names and numbers of clusters for cluster var 2 
+    par_list_dim2 <- list(cluster_variable = cluster_var2, 
+                          cluster_names = unique(d_clean[,cluster_var2]),
+                          number_clusters = length(unique(d_clean[,cluster_var2])))
+    
+    # names and numbers of clusters for cluster var 12 
+    d_clean <- dplyr::mutate(d_clean, cluster_var12 := paste0(!!as.symbol(cluster_var1), "_", !!as.symbol(cluster_var2)))
+    # length(unique(d_clean$cluster_var12)) == nrow(d_clean)
+    cluster_var12 <- paste0(cluster_var1, "_", cluster_var2)
+    par_list_dim12 <- list(cluster_variable = cluster_var12, 
+                          cluster_names = unique(d_clean[,cluster_var12]),
+                          number_clusters = length(unique(d_clean[,cluster_var12])))
+  }
   
   # helper function
   ran.gen_cluster_blc <- function(original_data, arg_list){
@@ -745,14 +844,9 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     return(bind_rows(cl_boot_dat))
   }
   
-  # test_boot_d <- ran.gen_cluster_blc(original_data = d_clean,
-  #                                    arg_list = par_list_dim1)
-  # 
-  # dim(test_boot_d)
-  # dim(d_clean)
-  
-  # # test new clusters are not duplicated (correct if anyDuplicated returns 0)
-  # base::anyDuplicated(test_boot_d[,c(cluster_var1,cluster_var2)])
+  ## RUN THE BOOTSTRAPPING 
+  # store Standard Errors here
+  SEs <- c(cluster_var1 = NA, cluster_var2 = NA, cluster_var12 = NA)
   
   # Compute inference statistics by bootstrap
   bootstraped_1 <- boot(data = d_clean, 
@@ -765,84 +859,212 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                       sim = "parametric",
                       R = 2)
   
-  bootstraped_2 <- boot(data = d_clean, 
-                      statistic = ctrl_fun_endo, # 2 first arguments do not need to be called.
-                      # the first one, arbitrarily called "myfun_data" is passed the previous "data" argument 
-                      fsf = fml_1st,
-                      ssf = fml_2nd,
-                      ran.gen = ran.gen_cluster_blc,
-                      mle = par_list_dim2,
-                      sim = "parametric",
-                      R = 2)
+  SEs[cluster_var1] <- sd(bootstraped_1$t)
+  SEfinal <- SEs[cluster_var1]
   
-  bootstraped_12 <- boot(data = d_clean, 
-                      statistic = ctrl_fun_endo, # 2 first arguments do not need to be called.
-                      # the first one, arbitrarily called "myfun_data" is passed the previous "data" argument 
-                      fsf = fml_1st,
-                      ssf = fml_2nd,
-                      ran.gen = ran.gen_cluster_blc,
-                      mle = par_list_dim12,
-                      sim = "parametric",
-                      R = 2)
-  norm.ci(bootstraped, index = 1) # equivalent to : 
-  
-  # Store only information necessary, in a dataframe. otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
-  # either there are several elemnts in instruments, and then we want to aggregate them, or there is only one. 
-  # In both cases, we are interested in a one-line output
-  
-  # handle SE computation flexibly within feglm now, through argument vcov
-  
-  # in case of unit fe, adjust also the vcov argument, because two way wont work, but we might still want to cluster on country year
-  if(fe == "grid_id" & se == "twoway"){
-    se <- as.formula("~ grid_id + country_year")
-  }
-  if(fe == "country_year" & se == "twoway"){
-    se <- as.formula("~ grid_id + country_year")
-  }
-  if(se == "exposure2ways"){
-    se <- as.formula(paste0("~ ", original_exposure_rfs, " + country_year"))
-  }
-  
-  if(estimated_effect == "alpha"){
-    alpha_reg_res <- fixest::feglm(alpha_model,
-                                   data = d_clean, 
-                                   family = distribution,# "gaussian",#  # "poisson" ,
-                                   vcov = se,
-                                   # this is just to get the same p value by recomputing by hand below. 
-                                   # see https://cran.r-project.org/web/packages/fixest/vignettes/standard_errors.html
-                                   # ssc = ssc(cluster.df = "conventional", t.df = "conventional"),
-                                   # glm.iter = 25,
-                                   #fixef.iter = 100000,
-                                   nthreads = 3,
-                                   fixef.rm = "perfect",
-                                   glm.iter = glm_iter,
-                                   notes = TRUE, 
-                                   verbose = 4) 
-  }    
+  if(clustering=="twoway"){
+    bootstraped_2 <- boot(data = d_clean, 
+                        statistic = ctrl_fun_endo, # 2 first arguments do not need to be called.
+                        # the first one, arbitrarily called "myfun_data" is passed the previous "data" argument 
+                        fsf = fml_1st,
+                        ssf = fml_2nd,
+                        ran.gen = ran.gen_cluster_blc,
+                        mle = par_list_dim2,
+                        sim = "parametric",
+                        R = 2)
+    SEs[cluster_var2] <- sd(bootstraped_2$t)
     
-  df_res <- summary(alpha_reg_res)$coeftable
-  
-  fixest_df <- degrees_freedom(alpha_reg_res, type = "t")
+    bootstraped_12 <- boot(data = d_clean, 
+                        statistic = ctrl_fun_endo, # 2 first arguments do not need to be called.
+                        # the first one, arbitrarily called "myfun_data" is passed the previous "data" argument 
+                        fsf = fml_1st,
+                        ssf = fml_2nd,
+                        ran.gen = ran.gen_cluster_blc,
+                        mle = par_list_dim12,
+                        sim = "parametric",
+                        R = 2)
+    SEs[cluster_var12] <- sd(bootstraped_12$t)
     
-  # store info on SE method
-  if(se == "conley"){
-    se_info <- paste0("Conley (",conley_cutoff,"km)")
+    SEfinal <- sqrt( (SEs[cluster_var1])^2 + (SEs[cluster_var2])^2 - (SEs[cluster_var12])^2 )
+    # would need to weight each by G/G-1 maybe ? not sure, and if it was the case, would not change much
   }
-  if(se == "twoway"){
-    # " If the two variables were used as fixed-effects in the estimation, 
-    # you can leave it blank with vcov = "twoway""
-    se_info <- "Two-way clustered (grid cell - year)"
+
+
+  ## Extract first stage information
+  if(aggr_dyn & rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0){
+    # In this case, we are interested in LEAD AND LAG effects, aggregated separately, and all together.
+    df_res_1st <- rbind(rep(NA, ncol(df_res_1st)), rep(NA, ncol(df_res_1st)), df_res_1st)
+    
+    # ORDER MATTERS
+    aggr_names <- paste0(original_exposure_rfs, c("_X_aggrleads", "_X_aggrlags"))
+    row.names(df_res_1st)[1:2] <- aggr_names
+    # instruments of interest
+    base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
+    # Contemporaneous value is NOT in leads
+    lead_roi <- c(grep(pattern = paste0(base_reg_name,"_lead"), 
+                       instruments, value = TRUE))
+    # Contemporaneous value is in lags
+    lag_roi <- c(base_reg_name, 
+                 grep(pattern = paste0(base_reg_name,"_lag"), 
+                      instruments, value = TRUE))
+    
+    df_res_1st[aggr_names[1],"Estimate"] <- est_1st$coefficients[lead_roi] %>% sum()
+    df_res_1st[aggr_names[2],"Estimate"] <- est_1st$coefficients[lag_roi] %>% sum()
+    
+    # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+    # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+    df_res_1st[aggr_names[1],"Std. Error"] <- est_1st$cov.scaled[lead_roi, lead_roi] %>% as.matrix() %>% sum() %>% sqrt()
+    df_res_1st[aggr_names[2],"Std. Error"] <- est_1st$cov.scaled[lag_roi, lag_roi] %>% as.matrix() %>% sum() %>% sqrt()
+    
+    df_res_1st[aggr_names[1],"t value"]  <- (df_res_1st[aggr_names[1],"Estimate"] - 0)/(df_res_1st[aggr_names[1],"Std. Error"])
+    df_res_1st[aggr_names[2],"t value"]  <- (df_res_1st[aggr_names[2],"Estimate"] - 0)/(df_res_1st[aggr_names[2],"Std. Error"])
+    
+    # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+    # does not make a significant difference given sample size
+    df_res_1st[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res_1st[aggr_names[1],"t value"]), 
+                                               lower.tail = FALSE, 
+                                               df = fixest_df_1st)) 
+    df_res_1st[aggr_names[2],"Pr(>|t|)"]  <- (2*pt(abs(df_res_1st[aggr_names[2],"t value"]), 
+                                               lower.tail = FALSE, 
+                                               df = fixest_df_1st)) 
+    
+    
+    ## Then (on top of dataframe), aggregate all leads and lags together
+    # it's important that overall aggregate comes after, for at least two reasons in current code:
+    # 1. because selection of estimate to plot is based on order: it takes the first row of df_res_1st 
+    # 2. so that aggr_names corresponds to *_X_aggrall in randomization inference below
+    
+    df_res_1st <- rbind(rep(NA, ncol(df_res_1st)), df_res_1st)
+    
+    # ORDER MATTERS
+    aggr_names <- paste0(original_exposure_rfs, c("_X_aggrall"))
+    row.names(df_res_1st)[1] <- aggr_names
+    # instruments of interest
+    base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
+    
+    # Contemporaneous, lead, and lag values
+    all_roi <- c(base_reg_name, 
+                 grep(pattern = paste0(base_reg_name,"_lead"), 
+                      instruments, value = TRUE),
+                 grep(pattern = paste0(base_reg_name,"_lag"), 
+                      instruments, value = TRUE))
+    
+    df_res_1st[aggr_names[1],"Estimate"] <- est_1st$coefficients[all_roi] %>% sum()
+    
+    # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+    # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+    df_res_1st[aggr_names[1],"Std. Error"] <- est_1st$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
+    
+    df_res_1st[aggr_names[1],"t value"]  <- (df_res_1st[aggr_names[1],"Estimate"] - 0)/(df_res_1st[aggr_names[1],"Std. Error"])
+    
+    # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+    # does not make a significant difference given sample size
+    df_res_1st[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res_1st[aggr_names[1],"t value"]), 
+                                               lower.tail = FALSE, 
+                                               df = fixest_df_1st)) 
   }
-  if(se == "cluster"){
-    se_info <- paste0("Clustered (",boot_cluster,")")
+  if(aggr_dyn & rfs_lead == 0 & rfs_lag == 0 & rfs_fya > 0 & rfs_pya > 0){
+    # In this case, we are interested in AVERAGE LEAD AND LAG effects, separately and aggregated
+    df_res_1st <- rbind(rep(NA, ncol(df_res_1st)), df_res_1st)
+    
+    # ORDER MATTERS
+    aggr_names <- paste0(original_exposure_rfs, c("_X_aggrall"))
+    row.names(df_res_1st)[1] <- aggr_names
+    # instruments of interest
+    base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
+    
+    # Contemporaneous, lead, and lag values
+    all_roi <- c(grep(pattern = paste0(base_reg_name,"_",rfs_fya,"fya"), 
+                      instruments, value = TRUE),
+                 grep(pattern = paste0(base_reg_name,"_",rfs_pya,"pya"), 
+                      instruments, value = TRUE))
+    
+    df_res_1st[aggr_names[1],"Estimate"] <- est_1st$coefficients[all_roi] %>% sum()
+    
+    # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+    # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+    df_res_1st[aggr_names[1],"Std. Error"] <- est_1st$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
+    
+    df_res_1st[aggr_names[1],"t value"]  <- (df_res_1st[aggr_names[1],"Estimate"] - 0)/(df_res_1st[aggr_names[1],"Std. Error"])
+    
+    # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+    # does not make a significant difference given sample size
+    df_res_1st[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res_1st[aggr_names[1],"t value"]), 
+                                               lower.tail = FALSE, 
+                                               df = fixest_df_1st)) 
   }
-  if(estimated_effect != "alpha"){
-    se_info <- paste0("Clustered (",boot_cluster,")")
+  if(aggr_dyn & rfs_lead > 0 & rfs_lag == 0 & rfs_fya == 0 & rfs_pya > 0){
+    # In this case, we are interested in aggregated LEAD effects, and all together.
+    
+    # first aggregate leads
+    df_res_1st <- rbind(rep(NA, ncol(df_res_1st)), df_res_1st)
+    
+    # ORDER MATTERS
+    aggr_names <- paste0(original_exposure_rfs, c("_X_aggrleads"))
+    row.names(df_res_1st)[1] <- aggr_names
+    # instruments of interest
+    base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
+    # Contemporaneous value is NOT in leads
+    lead_roi <- c(grep(pattern = paste0(base_reg_name,"_lead"), 
+                       instruments, value = TRUE))
+    
+    df_res_1st[aggr_names[1],"Estimate"] <- est_1st$coefficients[lead_roi] %>% sum()
+    
+    # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+    # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+    df_res_1st[aggr_names[1],"Std. Error"] <- est_1st$cov.scaled[lead_roi, lead_roi] %>% as.matrix() %>% sum() %>% sqrt()
+    
+    df_res_1st[aggr_names[1],"t value"]  <- (df_res_1st[aggr_names[1],"Estimate"] - 0)/(df_res_1st[aggr_names[1],"Std. Error"])
+    
+    # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+    # does not make a significant difference given sample size
+    df_res_1st[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res_1st[aggr_names[1],"t value"]), 
+                                               lower.tail = FALSE, 
+                                               df = fixest_df_1st)) 
+    
+    ## Then (on top of dataframe), aggregate all leads and lags together
+    # it's important that overall aggregate comes after, for at least two reasons in current code:
+    # 1. because selection of estimate to plot is based on order: it takes the first row of df_res_1st 
+    # 2. so that aggr_names corresponds to *_X_aggrall in randomization inference below
+    
+    df_res_1st <- rbind(rep(NA, ncol(df_res_1st)), df_res_1st)
+    
+    # ORDER MATTERS
+    aggr_names <- paste0(original_exposure_rfs, c("_X_aggrall"))
+    row.names(df_res_1st)[1] <- aggr_names
+    # instruments of interest
+    base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
+    
+    # Contemporaneous, lead, and lag values
+    all_roi <- c(grep(pattern = paste0(base_reg_name,"_lead"), 
+                      instruments, value = TRUE),
+                 grep(pattern = paste0(base_reg_name,"_",rfs_pya,"pya"), 
+                      instruments, value = TRUE))
+    
+    df_res_1st[aggr_names[1],"Estimate"] <- est_1st$coefficients[all_roi] %>% sum()
+    
+    # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+    # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+    df_res_1st[aggr_names[1],"Std. Error"] <- est_1st$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
+    
+    df_res_1st[aggr_names[1],"t value"]  <- (df_res_1st[aggr_names[1],"Estimate"] - 0)/(df_res_1st[aggr_names[1],"Std. Error"])
+    
+    # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+    # does not make a significant difference given sample size
+    df_res_1st[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res_1st[aggr_names[1],"t value"]), 
+                                               lower.tail = FALSE, 
+                                               df = fixest_df_1st)) 
   }
   
+
   # output wanted
+  
+  toreturn <- list(cummulative_annual_effects_1st = df_res_1st[grepl(pattern = exposure_rfs, x = row.names(df_res_1st)),], 
+                   Fstat_1st = fitstat(est_1st, "f"))
+
+  
   if(output == "est_object"){
-    toreturn <- alpha_reg_res
+    toreturn <- est_1st
   }
   
   if(output == "data"){
