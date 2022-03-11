@@ -10,12 +10,22 @@
 # see this project's README for a better understanding of how packages are handled in this project. 
 
 # These are the packages needed in this particular script. 
-neededPackages = c("dplyr", "here", "readstata13", "DescTools",
-                   "raster", "rgdal", "sp", "sf",
-                   "doParallel", "foreach", "parallel")
+
+neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
+                    "here", "readstata13", "foreign", "readxl", "writexl",
+                    "raster", "rgdal", "sp", "spdep", "sf", "stars", "gfcanalysis",  "nngeo", # "osrm", "osrmr",
+                    "lubridate","exactextractr",
+                    "doParallel", "foreach", "snow", 
+                    "knitr", "kableExtra",
+                    "DataCombine", 
+                    "fixest", 
+                    "boot", "fwildclusterboot", "sandwich",
+                    "ggplot2", "leaflet", "tmap", "dotwhisker")
 
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
+
+### USER HAS TO CONFIRM BY TYPING < y > IN CONSOLE AT THIS POINT 
 
 # Load them 
 lapply(neededPackages, library, character.only = TRUE)
@@ -62,8 +72,54 @@ all_years <- c(2001:2016) %>% as.character()
 
 midpoint_years <- c("2001", "2002", "2003", "2004", "2005", "2006", "2011", "2012", "2013", "2014")
 
+#### TURN ALL RASTERS TO INT1U #### 
+# Do it now already such that no FLT4S is created/manipulated 
+
+# lower bound layers (not all years)
+rasterlist <- list.files(path = here("input_data", "aop_lower", "lower"), 
+                         pattern = "op_lower", 
+                         full.names = TRUE) %>% as.list()
+# DO NOT BRICK, IT DOES NOT WORK, rather stack (don't know why)
+aoplb <- stack(rasterlist)
+
+for(l in 1:nlayers(aoplb)){
+  calc(aoplb[[l]], 
+       fun = function(x){x*100}, 
+       filename = here("temp_data", "processed_aop", "SEAsia_aoi", paste0(names(aoplb[[l]]), ".tif")), 
+       datatype = "INT1U",
+       overwrite = TRUE)
+}
+
+# upper bound AND "no midpoint" layers 
+rasterlist <- list.files(path = here("input_data", "aop_upper", "upper"), 
+                         pattern = "op", # note the difference here with the call above 
+                         full.names = TRUE) %>% as.list()
+aopub <- stack(rasterlist)
+
+for(l in 1:nlayers(aopub)){
+  calc(aopub[[l]], 
+       fun = function(x){x*100}, 
+       filename = here("temp_data", "processed_aop", "SEAsia_aoi", paste0(names(aopub[[l]]), ".tif")), 
+       datatype = "INT1U",
+       overwrite = TRUE)
+}
+
+
+rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi", "lower"), 
+                         pattern = "op_lower", 
+                         full.names = TRUE) %>% as.list()
+# DO NOT BRICK, IT DOES NOT WORK, rather stack (don't know why)
+aoplb <- stack(rasterlist)
+
+rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi", "upper"), 
+                         pattern = "op_upper", 
+                         full.names = TRUE) %>% as.list()
+aopub <- stack(rasterlist)
+
+
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+#### MIDPOINTS #### 
 # make middle point for those years when a lower and an upper bounds are provided
 # make it as the mean, such that the "midpoint" will be 0.5 for those pixels where detecting oil palm is not 100% sure. 
 # Since we aggregate afterwards, there is not pb of interpretation. 
@@ -107,17 +163,32 @@ endCluster()
 # this is for automation, but one can also simply copy paste the files from input data to temp data folders
 other_years <- all_years[!(all_years %in% midpoint_years)]
 for(year in other_years){
-  r <- raster(here("input_data", "aop_upper", "upper", paste0(year, "_op.tif")))
-  dataType(r) <- "FLT4S"
-  writeRaster(r, 
-              here("temp_data", "processed_aop", "SEAsia_aoi", paste0(year,"_op.tif")), 
-              overwrite = TRUE) # important to match the format from midpoint years
+  file.copy(from = here("input_data", "aop_upper", "upper", paste0(year, "_op.tif")), 
+            to = here("temp_data", "processed_aop", "SEAsia_aoi", paste0(year,"_op.tif")), 
+            overwrite = TRUE)
 }
 # r <- raster(here("temp_data", "processed_aop", "SEAsia_aoi", paste0(year,"_op.tif")))
 
+### MAKE INT1U ### 
+# values are 0, 0.5 or 1. The presence of 0.5 forces rasters to be written in FLT4S which is very heavy. Convert these "shares" into percentage points, without change in interpretation
+rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi"), 
+                         pattern = "_op", 
+                         full.names = TRUE) %>% as.list()
+aop <- stack(rasterlist)
 
+calc(aop, fun = function(x){return(x*100)}, 
+     filename = here("temp_data", "processed_aop", "SEAsia_aoi", "INT1U_brick.tif"), 
+     datatype = "INT1U",
+     overwrite = TRUE)
 
+aop7 <- aop[[7]]*100
+dataType(aop7) <- "INT1U"
 
+int <- stack(here("temp_data", "processed_aop", "SEAsia_aoi", "INT1U_brick.tif"))
+int2 <- stack(int[[1:6]], aop7, int[[7:15]])
+names(int2) <- names(aop)
+rm(int)
+writeRaster(int2, here("temp_data", "processed_aop", "INT1U_brick.tif"), datatype = "INT1U", overwrite = TRUE)
 #### IMPOSE UNI-DIRECTIONAL CHANGE #### 
 # Such that variation from oil palm plantations that stop being observed is not included in regressions
 
@@ -126,55 +197,94 @@ rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi")
                          full.names = TRUE) %>% as.list()
 aop <- stack(rasterlist)
 
-# the rationale is: operate at pixel level, across years. Replace any value (equivalently any 0) by 1 after the first time pixel value is 1. 
-# how to deal with 0.5 midpoints? 
-# if there is a midpoint after a 1, it gets replaced by 1, that is no pb. 
-# if there are midpoints before 1, don't change them: it was not sure that it was oil palm, and new expansion made it surer. Doing so counts the new expansion as the remaining 50% of grid cell. 
+aop <- aop*100
 
-# note that "When using RasterLayer objects, the number of arguments of the function should match the number of Raster objects, 
-# or it should take any number of arguments."
-# so calc is more appropriate
 
-# compute this quantity in advance so it's not computed for every cell
-aop_length <- nlayers(aop)
-
-impose_unidir <- function(y){ index_1 <- which(y==1)
-                              index_05 <- which(y==0.5)
-                              lth_index_05 <- length(index_05)
-                              if(length(index_1)>0){
-                                
-                                y[min(index_1):16] <- 1
-                                
-                                # all these conditions are necessary to handle cases where index_* objects are empty.
-                                if(lth_index_05>0){
-                                  if(min(index_05) < min(index_1)){
-                                    # in this case, there is uncertain oil palm, then no oil palm, then oil palm. 
-                                    # we don't want to include variation from 0.5 to 0, so make 0.5 remain until it's 1
-                                    y[min(index_05):(min(index_1)-1)] <- 0.5
-                                    
-                                  }
-                                }
-                              } else if (lth_index_05>0){ # this is the case where there is only uncertain, midpoint values (0.5s)
-                                y[min(index_05):16] <- 0.5
-                              }
-                              
-                              return(y)
+### OR other method, closer to what is done in GEE for mapbiomass and soy unidirectional 
+for(i in 6:nlayers(aop)){
+  # dir.create(here("temp_data", "processed_aop", paste0("SEAsia_aoi", "_Tmp")), showWarnings = FALSE)
+  # rasterOptions(tmpdir=file.path(paste0(processname,"_Tmp")))
+  
+  previous <- aop[[1:(i-1)]]
+  previousMax <- max(previous) # so this is a single layer raster, with values either: 
+  # 1 if OP detected in previous years, 
+  # 0.5 if OP only detected in upper bound in previous midpoint years, 
+  # or 0 if OP never detected before
+  
+  # thus, wasNever can be 0.5, meaning that there is 50% chance that the pixel was actually never cover with OP
+  wasNever <- 1 - previousMax
+  # multiplying such 0.5 pixels with OP extent in year of interest: 
+  # if there is no OP, then there's just no OP expansion this year, no matter the past history in the pixel
+  # if there is OP (1) then, the output is 0.5, which can be interpreted as there is new expansion with 50% certainty, because we know with 50% chance only that there was no OP before.
+  # if there is OP with 50% certainty (0.5);, then the output is 0.25, which can be interpreted as there is expansion in the pixel only if it's actually OP this year (50% chance), and there was actually no oil palm before (50% chance). 
+  # but that yields a 0.25 pixel value for all subsequent years until there is certain OP, which is incorrect, as we don't want more than 100% of the pixel to be converted over the full period. 
+  # thus, reclassify 0.25 to 0, to count 50% expansion the first time 0.5 is observed, and the remaining 0.5 when full pixel (or 100% certainty) is observed. 
+  annualBinary <- overlay(aop[[i]], wasNever, fun = function(x, y){return(x*y)}, 
+                          filename = here("temp_data", "processed_aop", "SEAsia_aoi", paste0("unidir_", all_years[i], ".tif")), 
+                          datatype = "FLT4S", 
+                          overwrite = TRUE)
+  
+  reclassify(annualBinary, cbind(0.25, 0), 
+             filename = here("temp_data", "processed_aop", "SEAsia_aoi", paste0("unidir_recl_", all_years[i], ".tif")), 
+             datatype = "FLT4S", 
+             overwrite = TRUE)
+  
+  removeTmpFiles(h=0)
 }
 
-calc(aop, impose_unidir, 
-     filename =  here("temp_data", "processed_aop", "SEAsia_aoi", "unidir_brick.tif"), 
-     overwrite = TRUE)
 
-dataType(pb)
 
-uni <- brick(here("temp_data", "processed_aop", "SEAsia_aoi", "unidir_op_brick.tif"))
 
-uni@data@max
-uni@data@min
-pb <- uni$unidir_op_brick.12
-pb@data
 
-plot(uni$unidir_op_brick.6)
+# # the rationale is: operate at pixel level, across years. Replace any value (equivalently any 0) by 1 after the first time pixel value is 1. 
+# # how to deal with 0.5 midpoints? 
+# # if there is a midpoint after a 1, it gets replaced by 1, that is no pb. 
+# # if there are midpoints before 1, don't change them: it was not sure that it was oil palm, and new expansion made it surer. Doing so counts the new expansion as the remaining 50% of grid cell. 
+# 
+# # note that "When using RasterLayer objects, the number of arguments of the function should match the number of Raster objects, 
+# # or it should take any number of arguments."
+# # so calc is more appropriate
+# 
+# # compute this quantity in advance so it's not computed for every cell
+# aop_length <- nlayers(aop)
+# 
+# impose_unidir <- function(y){ index_1 <- which(y==1)
+#                               index_05 <- which(y==0.5)
+#                               lth_index_05 <- length(index_05)
+#                               if(length(index_1)>0){
+#                                 
+#                                 y[min(index_1):16] <- 1
+#                                 
+#                                 # all these conditions are necessary to handle cases where index_* objects are empty.
+#                                 if(lth_index_05>0){
+#                                   if(min(index_05) < min(index_1)){
+#                                     # in this case, there is uncertain oil palm, then no oil palm, then oil palm. 
+#                                     # we don't want to include variation from 0.5 to 0, so make 0.5 remain until it's 1
+#                                     y[min(index_05):(min(index_1)-1)] <- 0.5
+#                                     
+#                                   }
+#                                 }
+#                               } else if (lth_index_05>0){ # this is the case where there is only uncertain, midpoint values (0.5s)
+#                                 y[min(index_05):16] <- 0.5
+#                               }
+#                               
+#                               return(y)
+# }
+# 
+# calc(aop[[1:6]], impose_unidir, 
+#      filename =  here("temp_data", "processed_aop", "SEAsia_aoi", "unidir_brick.tif"), 
+#      overwrite = TRUE)
+# 
+# dataType(pb)
+# 
+# uni <- brick(here("temp_data", "processed_aop", "SEAsia_aoi", "unidir_op_brick.tif"))
+# 
+# uni@data@max
+# uni@data@min
+# pb <- uni$unidir_op_brick.12
+# pb@data
+# 
+# plot(uni$unidir_op_brick.6)
 
 
 
@@ -193,6 +303,37 @@ r7 <- init(r, fun=sample(x=c(0,1, 0.5), replace = TRUE, size = 25))
 r8 <- init(r, fun=sample(x=c(0,1, 0.5), replace = TRUE, size = 25))
 
 s <- stack(r1, r2, r3, r4, r5, r6, r7, r8)
+
+
+aopunidir <- list()
+
+### OR other method, closer to what is done in GEE for mapbiomass and soy unidirectional 
+for(i in 2:nlayers(s)){
+  previous <- s[[1:(i-1)]]
+  previousMax <- max(previous) # so this is a single layer raster, with values either: 
+  # 1 if OP detected in previous years, 
+  # 0.5 if OP only detected in upper bound in previous midpoint years, 
+  # or 0 if OP never detected before
+  
+  # thus, wasNever can be 0.5, meaning that there is 50% chance that the pixel was actually never cover with OP (50% of the pixel area)
+  wasNever <- 1 - previousMax
+  # multiplying such 0.5 pixels with OP extent in year of interest: 
+  # if there is no OP, then there's just no OP expansion this year, no matter the past history in the pixel
+  # if there is OP (1) then, the output is 0.5, which can be interpreted as there is new expansion with 50% certainty, because we know with 50% chance only that there was no OP before.
+  # if there is OP with 50% certainty (0.5);, then the output is 0.25, which can be interpreted as there is expansion in the pixel only if it's actually OP this year (50% chance), and there was actually no oil palm before (50% chance). 
+  # but that yields a 0.25 pixel value for all subsequent years until there is certain OP, which is incorrect, as we don't want more than 100% of the pixel to be converted over the full period. 
+  # thus, reclassify 0.25 to 0, to count 50% expansion the first time 0.5 is observed, and the remaining 0.5 when full pixel (or 100% certainty) is observed. 
+  annualBinary <- overlay(s[[i]], wasNever, fun = function(x, y){return(x*y)})
+  annualBinary <- reclassify(annualBinary, cbind(0.25, 0))
+  aopunidir[[paste0("unidir_", all_years[i])]] <- annualBinary
+}
+
+
+unidir <- stack(aopunidir)
+recl <- values(stack(s, unidir))
+
+
+
 impose_unidir <- function(y){ index_1 <- which(y==1)
                               index_05 <- which(y==0.5)
                               lth_index_05 <- length(index_05)
@@ -219,6 +360,8 @@ impose_unidir <- function(y){ index_1 <- which(y==1)
 test <- calc(s, fun = impose_unidir)
 values(stack(s, test))
 
+
+
 beginCluster()
 test <- clusterR(s,
                  fun = calc,
@@ -239,8 +382,6 @@ impose_unidir(b0)
 
 
 # use overlay with unstack = TRUE
-
-
 
 
 
