@@ -52,6 +52,8 @@ lapply(neededPackages, library, character.only = TRUE)
 
 ### NEW FOLDERS USED IN THIS SCRIPT 
 dir.create(here("temp_data", "processed_aop", "SEAsia_aoi"), recursive = TRUE)
+dir.create(here("temp_data", "processed_aop", "SEAsia_aoi", "convenience_folder"), recursive = TRUE)
+dir.create(here("temp_data", "processed_aop", "SEAsia_aoi", "unidir_making"), recursive = TRUE)
 
 ### Raster global options
 rasterOptions(timer = TRUE, 
@@ -105,18 +107,6 @@ for(l in 1:nlayers(aopub)){
 }
 
 
-rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi", "lower"), 
-                         pattern = "op_lower", 
-                         full.names = TRUE) %>% as.list()
-# DO NOT BRICK, IT DOES NOT WORK, rather stack (don't know why)
-aoplb <- stack(rasterlist)
-
-rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi", "upper"), 
-                         pattern = "op_upper", 
-                         full.names = TRUE) %>% as.list()
-aopub <- stack(rasterlist)
-
-
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 #### MIDPOINTS #### 
@@ -125,18 +115,21 @@ aopub <- stack(rasterlist)
 # Since we aggregate afterwards, there is not pb of interpretation. 
 
 # IT IS NOT ALL YEARS
-rasterlist <- list.files(path = here("input_data", "aop_lower", "lower"), 
+rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi"), 
                          pattern = "op_lower", 
                          full.names = TRUE) %>% as.list()
 # DO NOT BRICK, IT DOES NOT WORK, rather stack (don't know why)
 aoplb <- stack(rasterlist)
 
-rasterlist <- list.files(path = here("input_data", "aop_upper", "upper"), 
+rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi"), 
                          pattern = "op_upper", 
                          full.names = TRUE) %>% as.list()
 aopub <- stack(rasterlist)
-
+dataType(aopub)
 names(aopub)
+#saop <- sampleRandom(aoplb[[1]], 10000)
+#unique(saop[,1])
+
 # both aoplb and aopub are sorted in alphabetical order, as per list.files
 
 beginCluster() # uses by default detectedCores() - 1
@@ -149,59 +142,98 @@ for(year in midpoint_years){
   clusterR(rs,
            fun = calc, 
            args = list(mean),
-           filename =  here("temp_data", "processed_aop", "SEAsia_aoi", paste0(year,"_op.tif")), 
+           filename =  here("temp_data", "processed_aop", "SEAsia_aoi", paste0("X", year,"_op_midpoint.tif")), 
+           datatype = "INT1U",
            overwrite = TRUE )
 
 }
 endCluster()
-# this writes rasters in FLT4S (default) which is needed given that we require values to be 0.5. This makes files much larger. 
-# Depending on type of aggregation we can choose another value for midpoints. 
 
-#saop <- sampleRandom(aoplb[[1]], 10000)
-#unique(saop[,1])
-
-# this is for automation, but one can also simply copy paste the files from input data to temp data folders
-other_years <- all_years[!(all_years %in% midpoint_years)]
-for(year in other_years){
-  file.copy(from = here("input_data", "aop_upper", "upper", paste0(year, "_op.tif")), 
-            to = here("temp_data", "processed_aop", "SEAsia_aoi", paste0(year,"_op.tif")), 
+# MOVE pre-processed annual maps to separate folder
+for(year in midpoint_years){
+  file.copy(from = here("temp_data", "processed_aop", "SEAsia_aoi", paste0("X", year, "_op_midpoint.tif")), 
+            to = here("temp_data", "processed_aop", "SEAsia_aoi", "convenience_folder", paste0("op_", year, ".tif")), 
             overwrite = TRUE)
 }
-# r <- raster(here("temp_data", "processed_aop", "SEAsia_aoi", paste0(year,"_op.tif")))
 
-### MAKE INT1U ### 
-# values are 0, 0.5 or 1. The presence of 0.5 forces rasters to be written in FLT4S which is very heavy. Convert these "shares" into percentage points, without change in interpretation
-rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi"), 
-                         pattern = "_op", 
-                         full.names = TRUE) %>% as.list()
-aop <- stack(rasterlist)
+other_years <- all_years[!(all_years %in% midpoint_years)]
+for(year in other_years){
+  file.copy(from = here("temp_data", "processed_aop", "SEAsia_aoi", paste0("X", year, "_op.tif")), 
+            to = here("temp_data", "processed_aop", "SEAsia_aoi", "convenience_folder", paste0("op_", year, ".tif")), 
+            overwrite = TRUE)
+}
 
-calc(aop, fun = function(x){return(x*100)}, 
-     filename = here("temp_data", "processed_aop", "SEAsia_aoi", "INT1U_brick.tif"), 
-     datatype = "INT1U",
-     overwrite = TRUE)
 
-aop7 <- aop[[7]]*100
-dataType(aop7) <- "INT1U"
-
-int <- stack(here("temp_data", "processed_aop", "SEAsia_aoi", "INT1U_brick.tif"))
-int2 <- stack(int[[1:6]], aop7, int[[7:15]])
-names(int2) <- names(aop)
-rm(int)
-writeRaster(int2, here("temp_data", "processed_aop", "INT1U_brick.tif"), datatype = "INT1U", overwrite = TRUE)
 #### IMPOSE UNI-DIRECTIONAL CHANGE #### 
 # Such that variation from oil palm plantations that stop being observed is not included in regressions
 
-rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi"), 
-                         pattern = "_op", 
+rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi", "convenience_folder"), 
+                         pattern = "op", 
                          full.names = TRUE) %>% as.list()
 aop <- stack(rasterlist)
 
-aop <- aop*100
+make_wasNever <- function(x){return(100 - max(x))}
+
+beginCluster() # uses by default detectedCores() - 1
+
+for(i in 2:nlayers(aop)){
+  previous <- aop[[1:(i-1)]]
+  
+  clusterR(previous,
+           fun = calc, 
+           args = list(make_wasNever),
+           filename =  here("temp_data", "processed_aop", "SEAsia_aoi", "unidir_making", paste0("wasNever_", all_years[i],".tif")), 
+           datatype = "INT1U",
+           overwrite = TRUE)
+  
+  removeTmpFiles(h = 0)
+}
+endCluster()
+ 
+ 
+### Function description
+# The function has for inputs annual layers of lucfp events at the pixel level.
+# It aggregates these pixels to a parcel size defined by parcel_size (in meters).
+# The aggregation operation is the sum of the pixel lucfp events.
+# Each annual aggregation is tasked in parallel.
+
+
+## sequence over which to execute the task.
+# We attribute the tasks to CPU "workers" at the annual level and not at the pf_type level.
+# Hence, if a worker is done with its annual task before the others it can move on to the next one and workers' labor is maximized wrt.
+# attributing tasks at the pf_type level.
+years <- seq(from = 2001, to = 2016, by = 1)
+
+## read the input to the task
+# is done within each task because it is each time different here.
+
+## define the task
+make_annual_unidir <- function(time){
+  # Define which process we are in:
+  processname <-  here("temp_data", "processed_aop", "SEAsia_aoi", "convenience_folder", paste0("op_", years[time], ".tif"))
+  
+  #set temp directory
+  dir.create(paste0(processname,"_Tmp"), showWarnings = FALSE)
+  rasterOptions(tmpdir=here(paste0(processname,"_Tmp")))
+  
+  # read in the input.
+  aop_annual <- raster(processname)
+  
+  # define output file name
+  output_filename <- here("temp_data", "processed_aop", "SEAsia_aoi", "unidir_making", paste0("op_unidir", years[time], ".tif"))
+  
+  calc()
+  #removes entire temp directory without affecting other running processes (but there should be no temp file now)
+  unlink(file.path(paste0(processname,"_Tmp")), recursive = TRUE)
+  #unlink(file.path(tmpDir()), recursive = TRUE)
+  # return the path to this parcels file
+  #return(output_filename)
+}
+
 
 
 ### OR other method, closer to what is done in GEE for mapbiomass and soy unidirectional 
-for(i in 6:nlayers(aop)){
+for(i in 2:nlayers(aop)){
   # dir.create(here("temp_data", "processed_aop", paste0("SEAsia_aoi", "_Tmp")), showWarnings = FALSE)
   # rasterOptions(tmpdir=file.path(paste0(processname,"_Tmp")))
   
