@@ -695,6 +695,14 @@ bigger_100km_sf <- st_as_sf(bigger_100km_stars, as_points = FALSE, merge = FALSE
 bigger_100km_sf$grid_id_100km <- seq(from = 1, to = nrow(bigger_100km_sf))
 bigger_100km_sf <- bigger_100km_sf[,c("grid_id_100km", "geometry")]
 
+# repeat for ~500km grid cells (50 times larger grid cells in both dimensions, hence 2500 times larger)
+bigger_500km <- aggregate(drivers, fact = 50, expand = TRUE, fun = sum)
+bigger_500km_stars <- st_as_stars(bigger_500km)
+bigger_500km_sf <- st_as_sf(bigger_500km_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+
+bigger_500km_sf$grid_id_500km <- seq(from = 1, to = nrow(bigger_500km_sf))
+bigger_500km_sf <- bigger_500km_sf[,c("grid_id_500km", "geometry")]
+
 # DO NOT TRANSFORM, because it makes the inner_join associate two bigger squares for each smaller one, 
 # I don't really know why, but it does not do so with geographic coordinates, and there is no mismatch, and no problem of imprecision due to 
 # geographic coordinates being used as planer because aoi is not near the pole. 
@@ -715,14 +723,22 @@ df_cs <- st_join(x = bigger_100km_sf,
                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
                  left = FALSE)# performs inner join so returns only records that spatially match.
 
+df_cs <- st_join(x = bigger_500km_sf,
+                 y = df_cs,
+                 join = st_contains,
+                 prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
+                 left = FALSE)# performs inner join so returns only records that spatially match.
+
 df_cs <- st_drop_geometry(df_cs)
 
 length(unique(df_cs$grid_id)) == nrow(df_cs)
 
 # Keep only new variable and id
-df_cs <- df_cs[,c("grid_id", "grid_id_50km", "grid_id_100km")]
+df_cs <- df_cs[,c("grid_id", "grid_id_50km", "grid_id_100km", "grid_id_500km")]
 
 saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_cs_biggercells.Rdata"))
+
+rm(df_cs)
 
 #### REMAINING FOREST ####
 
@@ -820,8 +836,8 @@ mapmat_data <- c(
         "Soybean_meal", "Soybean_meal", # these crop categories are gonna be created in the present script
         "Soybean_oil", "Soybean_oil", # these crop categories are gonna be created in the present script
         "Sugar", "Sugar", # these crop categories are gonna be created in the present script
-        # "Sugarbeet", "Sugarbeet",
-        # "Sugarcane", "Sugarcane",
+        "Sugar", "Sugarbeet",
+        "Sugar", "Sugarcane",
         "Sunflower_oil", "Sunflower",
         "Tea", "Tea",
         "Tobacco", "Tobacco", 
@@ -1154,7 +1170,7 @@ var_names <- grep(pattern = "eaear_", names(df_cs), value = TRUE)
 df_cs <- df_cs[,c("grid_id", var_names)]
         
 saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_cs_stdeaear.Rdata"))  
-rm(df_cs, path)
+rm(df_cs)
 
 #### MERGE ADDITIONAL VARIABLES ####  
 # Base dataset (including outcome variable(s))
@@ -1186,6 +1202,7 @@ rm(df_biggercells)
 # Create bigger cell-year identifier
 final <- mutate(final, grid_id_50km_year = paste0(grid_id_50km, "_", year))
 final <- mutate(final, grid_id_100km_year = paste0(grid_id_100km, "_", year))
+final <- mutate(final, grid_id_500km_year = paste0(grid_id_500km, "_", year))
 # length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
 
 ## EAEAR
