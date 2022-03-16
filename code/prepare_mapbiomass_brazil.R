@@ -80,7 +80,7 @@ rm(countries, brazil)
 # However, I manually changed the -33.75099 latitude to -30 to match the tropical aoi. 
 # Moreover, with the aggregation, the precise extent of the 5km output from GEE is now slightly different. 
 #  For these reasons, it is more appropriate to use the extent of the output from GEE in this script.  
-mapbio <- raster( here("input_data", "MAPBIOMASS", "MapBiomass60_5km_pasture2001.tif"))
+mapbio <- raster( here("input_data", "MAPBIOMASS", "MapBiomass60_3km_unidir_pasture.tif"))
 brazil_aoi <- extent(mapbio)
 rm(mapbio)
 
@@ -91,32 +91,56 @@ drivers <- raster(here("input_data", "curtis", "Goode_FinalClassification_19_05p
 drivers <- crop(drivers, brazil_aoi)
 # plot(drivers)
 
+### SOME PATHS THAT ARE CALLED THROUGHOUT THE SCRIPT 
+pasture_extent_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_pasture_extent_0120.tif")
+pasture_unidir_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_pasture_unidir_0120.tif")
 
-#### AGGREGATE AND ALIGNE PASTURES ####
+sugarcane_extent_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_sugarcane_extent_0120.tif")
+sugarcane_unidir_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_sugarcane_unidir_0120.tif")
+
+rice_extent_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_rice_extent_0120.tif")
+rice_unidir_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_rice_unidir_0120.tif")
+
+soy_extent_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_soy_extent_0120.tif")
+soy_unidir_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_soy_unidir_0120.tif")
+
+gaez_resampled_output_name <- here(gaez_dir, "brazil_resampleddrivers_high_input.tif")
+fc2k_resampled_output_name <- here("temp_data", "processed_fc2000", "brazil_aoi", "resampled_fc_2000.tif")
+pst2k_resampled_output_name <- here("temp_data", "processed_pasture2000", "brazil_aoi", "resampled_drivers_pasture_2000.tif")
+
+any_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_any.tif")
+commodity_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_commodity.tif")
+shifting_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_shifting.tif")
+forestry_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_forestry.tif")
+fire_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_fire.tif")
+urba_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_urba.tif")
+
+mask_path <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "always_zero_mask_lossdrivers_any.tif")
+
+#### AGGREGATE AND ALIGNE PASTURE EXTENT ####
 ## Brick layers 
 
 # import annual layers of forest loss (in hectares) as computed in GEE (and downloaded from Google Drive to input_data/)
-rasterlist <- list.files(path = here("input_data", "MAPBIOMASS"), 
-                         pattern = "^MapBiomass60_5km_pasture", 
-                         full.names = TRUE) %>% as.list()
-pastures <- brick(rasterlist)
+# rasterlist <- list.files(path = here("input_data", "MAPBIOMASS"), 
+#                          pattern = "^MapBiomass60_5km_pasture", 
+#                          full.names = TRUE) %>% as.list()
+# writeRaster(pasture[[1:19]], here("temp_data", "processed_mapbiomass", "brazil_aoi", "pasture0119.tif"), 
+#             overwrite = TRUE)
+# pasture <- brick(here("temp_data", "processed_mapbiomass", "brazil_aoi", "pasture0119.tif"))
 
-# values are in hectares of pastures in 5km x 5km grid cells - and THERE ARE NAs 
-# pastures2001 <- pastures$MapBiomass60_5km_pasture2001
-# plot(pastures2001)
-# valpast01 <- values(pastures2001)
+pasture <- brick(here("input_data", "MAPBIOMASS", "MapBiomass60_3km_extent_pasture.tif"))
+
+# values are in hectares of pasture in 5km x 5km grid cells - and THERE ARE NAs 
+# pasture2001 <- pasture$MapBiomass60_5km_pasture2001
+# plot(pasture2001)
+# valpast01 <- values(pasture2001)
 # anyNA(valpast01)
 
-writeRaster(pastures[[1:19]], here("temp_data", "processed_mapbiomass", "brazil_aoi", "pastures0119.tif"), 
-            overwrite = TRUE)
-
-pastures <- brick(here("temp_data", "processed_mapbiomass", "brazil_aoi", "pastures0119.tif"))
-
 # define output file name
-aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_pastures0119.tif")
+aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_pasture_extent_0120.tif")
 
 # aggregate it from the ~5km cells to ~10km
-raster::aggregate(pastures, fact = c(res(drivers)[1]/res(pastures)[1], res(drivers)[2]/res(pastures)[2]),
+raster::aggregate(pasture, fact = c(res(drivers)[1]/res(pasture)[1], res(drivers)[2]/res(pasture)[2]),
                   expand = FALSE,
                   fun = sum,
                   na.rm = FALSE, # NA values are on the eastern band only. Thus they can contaminate aggregation safely. 
@@ -126,37 +150,41 @@ raster::aggregate(pastures, fact = c(res(drivers)[1]/res(pastures)[1], res(drive
 # align to DRIVERS exactly 
 aggregated <- brick(aggr_output_name)
 
-pastures_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_pastures0119.tif")
+resample(x = aggregated, 
+         y = drivers, 
+         method = "bilinear", # bilinear or ngb changes nothing 
+         filename = pasture_extent_resampled_output_name, 
+         overwrite = TRUE)
+
+#### AGGREGATE AND ALIGNE PASTURE EXPANSION ####
+pasture <- brick(here("input_data", "MAPBIOMASS", "MapBiomass60_3km_unidir_pasture.tif"))
+
+# define output file name
+aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_pasture_unidir_0120.tif")
+
+# aggregate it from the ~5km cells to ~10km
+raster::aggregate(pasture, fact = c(res(drivers)[1]/res(pasture)[1], res(drivers)[2]/res(pasture)[2]),
+                  expand = FALSE,
+                  fun = sum,
+                  na.rm = FALSE, # NA values are on the eastern band only. Thus they can contaminate aggregation safely. 
+                  filename = aggr_output_name,
+                  overwrite = TRUE)
+
+# align to DRIVERS exactly 
+aggregated <- brick(aggr_output_name)
 
 resample(x = aggregated, 
          y = drivers, 
          method = "bilinear", # bilinear or ngb changes nothing 
-         filename = pastures_resampled_output_name, 
+         filename = pasture_unidir_resampled_output_name, 
          overwrite = TRUE)
 
-
-#### AGGREGATE AND ALIGNE SUGARCANE ####
-## Brick layers 
-
-# import annual layers of forest loss (in hectares) as computed in GEE (and downloaded from Google Drive to input_data/)
-rasterlist <- list.files(path = here("input_data", "MAPBIOMASS"), 
-                         pattern = "^MapBiomass60_5km_sugarcane", 
-                         full.names = TRUE) %>% as.list()
-sugarcane <- brick(rasterlist)
-
-# values are in hectares of sugarcane in 5km x 5km grid cells - and THERE ARE NAs 
-# sugarcane2001 <- sugarcane$MapBiomass60_5km_sugarcane2001
-# plot(sugarcane2001)
-# valpast01 <- values(sugarcane2001)
-# anyNA(valpast01)
-
-writeRaster(sugarcane[[1:19]], here("temp_data", "processed_mapbiomass", "brazil_aoi", "sugarcane0119.tif"), 
-            overwrite = TRUE)
-
-sugarcane <- brick(here("temp_data", "processed_mapbiomass", "brazil_aoi", "sugarcane0119.tif"))
+#### AGGREGATE AND ALIGNE SUGARCANE EXTENT ####
+## Bricked layers 
+sugarcane <- brick(here("input_data", "MAPBIOMASS", "MapBiomass60_3km_extent_sugarcane.tif"))
 
 # define output file name
-aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_sugarcane0119.tif")
+aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_sugarcane_extent_0120.tif")
 
 # aggregate it from the ~5km cells to ~10km
 raster::aggregate(sugarcane, fact = c(res(drivers)[1]/res(sugarcane)[1], res(drivers)[2]/res(sugarcane)[2]),
@@ -169,38 +197,42 @@ raster::aggregate(sugarcane, fact = c(res(drivers)[1]/res(sugarcane)[1], res(dri
 # align to DRIVERS exactly 
 aggregated <- brick(aggr_output_name)
 
-sugarcane_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_sugarcane0119.tif")
+resample(x = aggregated, 
+         y = drivers, 
+         method = "bilinear", # bilinear or ngb changes nothing 
+         filename = sugarcane_extent_resampled_output_name, 
+         overwrite = TRUE)
+
+#### AGGREGATE AND ALIGNE SUGARCANE EXPANSION ####
+sugarcane <- brick(here("input_data", "MAPBIOMASS", "MapBiomass60_3km_unidir_sugarcane.tif"))
+
+# define output file name
+aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_sugarcane_unidir_0120.tif")
+
+# aggregate it from the ~5km cells to ~10km
+raster::aggregate(sugarcane, fact = c(res(drivers)[1]/res(sugarcane)[1], res(drivers)[2]/res(sugarcane)[2]),
+                  expand = FALSE,
+                  fun = sum,
+                  na.rm = FALSE, # NA values are on the eastern band only. Thus they can contaminate aggregation safely. 
+                  filename = aggr_output_name,
+                  overwrite = TRUE)
+
+# align to DRIVERS exactly 
+aggregated <- brick(aggr_output_name)
 
 resample(x = aggregated, 
          y = drivers, 
          method = "bilinear", # bilinear or ngb changes nothing 
-         filename = sugarcane_resampled_output_name, 
+         filename = sugarcane_unidir_resampled_output_name, 
          overwrite = TRUE)
 
 
-
-#### AGGREGATE AND ALIGNE RICE ####
-## Brick layers 
-
-# import annual layers of forest loss (in hectares) as computed in GEE (and downloaded from Google Drive to input_data/)
-rasterlist <- list.files(path = here("input_data", "MAPBIOMASS"), 
-                         pattern = "^MapBiomass60_5km_rice", 
-                         full.names = TRUE) %>% as.list()
-rice <- brick(rasterlist)
-
-# values are in hectares of rice in 5km x 5km grid cells - and THERE ARE NAs 
-# rice2001 <- rice$MapBiomass60_5km_rice2001
-# plot(rice2001)
-# valpast01 <- values(rice2001)
-# anyNA(valpast01)
-
-writeRaster(rice[[1:19]], here("temp_data", "processed_mapbiomass", "brazil_aoi", "rice0119.tif"), 
-            overwrite = TRUE)
-
-rice <- brick(here("temp_data", "processed_mapbiomass", "brazil_aoi", "rice0119.tif"))
+#### AGGREGATE AND ALIGNE RICE EXTENT ####
+## Bricked layers 
+rice <- brick(here("input_data", "MAPBIOMASS", "MapBiomass60_3km_extent_rice.tif"))
 
 # define output file name
-aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_rice0119.tif")
+aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_rice_extent_0120.tif")
 
 # aggregate it from the ~5km cells to ~10km
 raster::aggregate(rice, fact = c(res(drivers)[1]/res(rice)[1], res(drivers)[2]/res(rice)[2]),
@@ -213,41 +245,20 @@ raster::aggregate(rice, fact = c(res(drivers)[1]/res(rice)[1], res(drivers)[2]/r
 # align to DRIVERS exactly 
 aggregated <- brick(aggr_output_name)
 
-rice_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_rice0119.tif")
-
 resample(x = aggregated, 
          y = drivers, 
          method = "bilinear", # bilinear or ngb changes nothing 
-         filename = rice_resampled_output_name, 
+         filename = rice_extent_resampled_output_name, 
          overwrite = TRUE)
 
-
-
-#### AGGREGATE AND ALIGNE COFFEE ####
-## Brick layers 
-
-# import annual layers of forest loss (in hectares) as computed in GEE (and downloaded from Google Drive to input_data/)
-rasterlist <- list.files(path = here("input_data", "MAPBIOMASS"), 
-                         pattern = "^MapBiomass60_5km_coffee", 
-                         full.names = TRUE) %>% as.list()
-coffee <- brick(rasterlist)
-
-# values are in hectares of coffee in 5km x 5km grid cells - and THERE ARE NAs 
-# coffee2001 <- coffee$MapBiomass60_5km_coffee2001
-# plot(coffee2001)
-# valpast01 <- values(coffee2001)
-# anyNA(valpast01)
-
-writeRaster(coffee[[1:19]], here("temp_data", "processed_mapbiomass", "brazil_aoi", "coffee0119.tif"), 
-            overwrite = TRUE)
-
-coffee <- brick(here("temp_data", "processed_mapbiomass", "brazil_aoi", "coffee0119.tif"))
+#### AGGREGATE AND ALIGNE RICE EXPANSION ####
+rice <- brick(here("input_data", "MAPBIOMASS", "MapBiomass60_3km_unidir_rice.tif"))
 
 # define output file name
-aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_coffee0119.tif")
+aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_rice_unidir_0120.tif")
 
 # aggregate it from the ~5km cells to ~10km
-raster::aggregate(coffee, fact = c(res(drivers)[1]/res(coffee)[1], res(drivers)[2]/res(coffee)[2]),
+raster::aggregate(rice, fact = c(res(drivers)[1]/res(rice)[1], res(drivers)[2]/res(rice)[2]),
                   expand = FALSE,
                   fun = sum,
                   na.rm = FALSE, # NA values are on the eastern band only. Thus they can contaminate aggregation safely. 
@@ -257,41 +268,22 @@ raster::aggregate(coffee, fact = c(res(drivers)[1]/res(coffee)[1], res(drivers)[
 # align to DRIVERS exactly 
 aggregated <- brick(aggr_output_name)
 
-coffee_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_coffee0119.tif")
-
 resample(x = aggregated, 
          y = drivers, 
          method = "bilinear", # bilinear or ngb changes nothing 
-         filename = coffee_resampled_output_name, 
+         filename = rice_unidir_resampled_output_name, 
          overwrite = TRUE)
 
 
-
-#### AGGREGATE AND ALIGNE CITRUS ####
-## Brick layers 
-
-# import annual layers of forest loss (in hectares) as computed in GEE (and downloaded from Google Drive to input_data/)
-rasterlist <- list.files(path = here("input_data", "MAPBIOMASS"), 
-                         pattern = "^MapBiomass60_5km_citrus", 
-                         full.names = TRUE) %>% as.list()
-citrus <- brick(rasterlist)
-
-# values are in hectares of citrus in 5km x 5km grid cells - and THERE ARE NAs 
-# citrus2001 <- citrus$MapBiomass60_5km_citrus2001
-# plot(citrus2001)
-# valpast01 <- values(citrus2001)
-# anyNA(valpast01)
-
-writeRaster(citrus[[1:19]], here("temp_data", "processed_mapbiomass", "brazil_aoi", "citrus0119.tif"), 
-            overwrite = TRUE)
-
-citrus <- brick(here("temp_data", "processed_mapbiomass", "brazil_aoi", "citrus0119.tif"))
+#### AGGREGATE AND ALIGNE SOY EXTENT ####
+## Bricked layers 
+soy <- brick(here("input_data", "MAPBIOMASS", "MapBiomass60_3km_extent_soy.tif"))
 
 # define output file name
-aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_citrus0119.tif")
+aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_soy_extent_0120.tif")
 
 # aggregate it from the ~5km cells to ~10km
-raster::aggregate(citrus, fact = c(res(drivers)[1]/res(citrus)[1], res(drivers)[2]/res(citrus)[2]),
+raster::aggregate(soy, fact = c(res(drivers)[1]/res(soy)[1], res(drivers)[2]/res(soy)[2]),
                   expand = FALSE,
                   fun = sum,
                   na.rm = FALSE, # NA values are on the eastern band only. Thus they can contaminate aggregation safely. 
@@ -301,14 +293,34 @@ raster::aggregate(citrus, fact = c(res(drivers)[1]/res(citrus)[1], res(drivers)[
 # align to DRIVERS exactly 
 aggregated <- brick(aggr_output_name)
 
-citrus_resampled_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "resampled_citrus0119.tif")
+resample(x = aggregated, 
+         y = drivers, 
+         method = "bilinear", # bilinear or ngb changes nothing 
+         filename = soy_extent_resampled_output_name, 
+         overwrite = TRUE)
+
+#### AGGREGATE AND ALIGNE SOY EXPANSION ####
+soy <- brick(here("input_data", "MAPBIOMASS", "MapBiomass60_3km_unidir_soy.tif"))
+
+# define output file name
+aggr_output_name <- here("temp_data", "processed_mapbiomass", "brazil_aoi", "aggr_soy_unidir_0120.tif")
+
+# aggregate it from the ~5km cells to ~10km
+raster::aggregate(soy, fact = c(res(drivers)[1]/res(soy)[1], res(drivers)[2]/res(soy)[2]),
+                  expand = FALSE,
+                  fun = sum,
+                  na.rm = FALSE, # NA values are on the eastern band only. Thus they can contaminate aggregation safely. 
+                  filename = aggr_output_name,
+                  overwrite = TRUE)
+
+# align to DRIVERS exactly 
+aggregated <- brick(aggr_output_name)
 
 resample(x = aggregated, 
          y = drivers, 
          method = "bilinear", # bilinear or ngb changes nothing 
-         filename = citrus_resampled_output_name, 
+         filename = soy_unidir_resampled_output_name, 
          overwrite = TRUE)
-
 
 
 #### ALIGNE GAEZ ####
@@ -318,9 +330,6 @@ gaez <- crop(gaez, brazil_aoi)
 # gaez$high_input_all.1 %>% values() %>% summary()
 
 # resample directly (without aggregating first) from the ~9km cells to ~10km (aggregate does not work bc resolutions are to close)
-
-# define output file name
-gaez_resampled_output_name <- here(gaez_dir, "brazil_resampleddrivers_high_input.tif")
 
 # aligne
 resample(x = gaez, 
@@ -363,8 +372,6 @@ aggregate(fc2k, fact = c(res(drivers)[1]/res(fc2k)[1], res(drivers)[2]/res(fc2k)
 # align to DRIVERS exactly 
 aggregated_fc2000 <- raster(fc2k_aggr_output_name)
 
-fc2k_resampled_output_name <- here("temp_data", "processed_fc2000", "brazil_aoi", "resampled_fc_2000.tif")
-
 resample(x = aggregated_fc2000, 
          y = drivers, 
          method = "ngb", # ngb because bilinear yields negatie values
@@ -378,8 +385,6 @@ pst2k <- crop(pst2k, brazil_aoi)
 
 # transform NAs to 0, such that the more numerous NAs in pasture data do not force losing information when the stack is turned to a data frame. 
 pst2k <- reclassify(pst2k, cbind(NA, 0))
-
-pst2k_resampled_output_name <- here("temp_data", "processed_pasture2000", "brazil_aoi", "resampled_drivers_pasture_2000.tif")
 
 resample(x = pst2k, 
          y = drivers, 
@@ -396,7 +401,6 @@ any_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_ao
 
 any_lossdrivers <- crop(any_lossdrivers, brazil_aoi)
 
-any_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_any.tif")
 resample(x = any_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -409,7 +413,6 @@ commodity_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropi
 
 commodity_lossdrivers <- crop(commodity_lossdrivers, brazil_aoi)
 
-commodity_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_commodity.tif")
 resample(x = commodity_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -422,7 +425,6 @@ shifting_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropic
 
 shifting_lossdrivers <- crop(shifting_lossdrivers, brazil_aoi)
 
-shifting_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_shifting.tif")
 resample(x = shifting_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -435,7 +437,6 @@ forestry_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropic
 
 forestry_lossdrivers <- crop(forestry_lossdrivers, brazil_aoi)
 
-forestry_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_forestry.tif")
 resample(x = forestry_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -448,7 +449,6 @@ fire_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_a
 
 fire_lossdrivers <- crop(fire_lossdrivers, brazil_aoi)
 
-fire_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_fire.tif")
 resample(x = fire_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -461,7 +461,6 @@ urba_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_a
 
 urba_lossdrivers <- crop(urba_lossdrivers, brazil_aoi)
 
-urba_resampled_output_name <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "loss_drivers_urba.tif")
 resample(x = urba_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -473,7 +472,6 @@ resample(x = urba_lossdrivers,
 any_lossdrivers <- brick(any_resampled_output_name)
 
 always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
-mask_path <- here("temp_data", "processed_lossdrivers", "brazil_aoi", "always_zero_mask_lossdrivers_any.tif")
 
 overlay(x = any_lossdrivers,
         fun = always_zero,
@@ -491,11 +489,15 @@ drivenloss_forestry <- brick(forestry_resampled_output_name)
 drivenloss_fire <- brick(fire_resampled_output_name)
 drivenloss_urba <- brick(urba_resampled_output_name)
 
-pastures <- brick(pastures_resampled_output_name)
-sugarcane <- brick(sugarcane_resampled_output_name)
-rice <- brick(rice_resampled_output_name)
-coffee <- brick(coffee_resampled_output_name)
-citrus <- brick(citrus_resampled_output_name)
+pasture_extent <- brick(pasture_extent_resampled_output_name)
+sugarcane_extent <- brick(sugarcane_extent_resampled_output_name)
+rice_extent <- brick(rice_extent_resampled_output_name)
+soy_extent <- brick(soy_extent_resampled_output_name)
+
+pasture_unidir <- brick(pasture_unidir_resampled_output_name)
+sugarcane_unidir <- brick(sugarcane_unidir_resampled_output_name)
+rice_unidir <- brick(rice_unidir_resampled_output_name)
+soy_unidir <- brick(soy_unidir_resampled_output_name)
 
 gaez <- brick(gaez_resampled_output_name)
 fc2k <- raster(fc2k_resampled_output_name)
@@ -509,11 +511,15 @@ names(drivenloss_forestry) <- paste0("driven_loss_forestry.",seq(2001, 2019, 1))
 names(drivenloss_fire) <- paste0("driven_loss_fire.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
 names(drivenloss_urba) <- paste0("driven_loss_urba.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
 
-names(pastures) <- paste0("pastures.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(sugarcane) <- paste0("sugarcane.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(rice) <- paste0("rice.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(coffee) <- paste0("coffee.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(citrus) <- paste0("citrus.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(pasture_extent) <- paste0("extent_pasture.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(sugarcane_extent) <- paste0("extent_sugarcane.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(rice_extent) <- paste0("extent_rice.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(soy_extent) <- paste0("extent_soy.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+
+names(pasture_unidir) <- paste0("unidir_pasture.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(sugarcane_unidir) <- paste0("unidir_sugarcane.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(rice_unidir) <- paste0("unidir_rice.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(soy_unidir) <- paste0("unidir_soy.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
 
 names(gaez) <- gaez_crops
 
@@ -526,11 +532,8 @@ brazil_stack <- stack(drivenloss_commodity,
                       drivenloss_forestry, 
                       drivenloss_fire,
                       drivenloss_urba,
-                      pastures, 
-                      sugarcane,
-                      rice, 
-                      coffee, 
-                      citrus,
+                      pasture_extent, sugarcane_extent, rice_extent, soy_extent, 
+                      pasture_unidir, sugarcane_unidir, rice_unidir, soy_unidir, 
                       gaez, fc2k, pst2k)
 names(brazil_stack)
 
@@ -558,6 +561,20 @@ head(wide_df[,c("x", "y")])
 wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
 
 
+# SPECIAL TO SOY SCRIPT HERE: ADD 2001 COLUMN FOR THE SOY EXPANSION  
+# because we want 2001 extent to be in the final data set, but expansion (unidir) is only avaiable from 2002 and number of years must be 
+# equal for all varying vars
+wide_df$unidir_pasture.2001 <- NA
+wide_df$unidir_sugarcane.2001 <- NA
+wide_df$unidir_rice.2001 <- NA
+wide_df$unidir_soy.2001 <- NA
+
+wide_df$driven_loss_commodity.2020 <- NA
+wide_df$driven_loss_shifting.2020 <- NA
+wide_df$driven_loss_forestry.2020 <- NA
+wide_df$driven_loss_fire.2020 <- NA
+wide_df$driven_loss_urba.2020 <- NA
+
 ### WIDE TO LONG ### 
 
 # Since we merged datasets in the raster format, we wont need a lonlat format id for each grid cell. 
@@ -568,23 +585,27 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
-varying_vars <- list(names(drivenloss_commodity),
-                     names(drivenloss_shifting),
-                     names(drivenloss_forestry),
-                     names(drivenloss_fire), 
-                     names(drivenloss_urba),
-                     names(pastures),
-                     names(sugarcane),
-                     names(rice),
-                     names(coffee),
-                     names(citrus))
+varying_vars <- list(paste0("driven_loss_commodity.", seq(2001, 2020, 1)),
+                     paste0("driven_loss_shifting.", seq(2001, 2020, 1)),
+                     paste0("driven_loss_forestry.", seq(2001, 2020, 1)),
+                     paste0("driven_loss_fire.", seq(2001, 2020, 1)), 
+                     paste0("driven_loss_urba.", seq(2001, 2020, 1)),
+                     paste0("extent_pasture.",seq(2001, 2020, 1)), 
+                     paste0("unidir_pasture.",seq(2001, 2020, 1)), 
+                     paste0("extent_sugarcane.",seq(2001, 2020, 1)), 
+                     paste0("unidir_sugarcane.",seq(2001, 2020, 1)), 
+                     paste0("extent_rice.",seq(2001, 2020, 1)), 
+                     paste0("unidir_rice.",seq(2001, 2020, 1)), 
+                     paste0("extent_soy.",seq(2001, 2020, 1)), 
+                     paste0("unidir_soy.",seq(2001, 2020, 1)))
 #varying_vars <- names(driverloss_gaez)[grep(".", names(driverloss_gaez), fixed = TRUE)]
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
                           v.names = c("driven_loss_commodity", "driven_loss_shifting", "driven_loss_forestry", "driven_loss_fire", "driven_loss_urba", 
-                                      "pastures", "sugarcane", "rice", "coffee", "citrus"),
+                                      "extent_pasture", "extent_sugarcane", "extent_rice", "extent_soy", 
+                                      "unidir_pasture", "unidir_sugarcane", "unidir_rice", "unidir_soy"),
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -635,6 +656,13 @@ bigger_100km_sf <- st_as_sf(bigger_100km_stars, as_points = FALSE, merge = FALSE
 
 bigger_100km_sf$grid_id_100km <- seq(from = 1, to = nrow(bigger_100km_sf))
 bigger_100km_sf <- bigger_100km_sf[,c("grid_id_100km", "geometry")]
+# repeat for ~500km grid cells (50 times larger grid cells in both dimensions, hence 2500 times larger)
+bigger_500km <- aggregate(drivers, fact = 50, expand = TRUE, fun = sum)
+bigger_500km_stars <- st_as_stars(bigger_500km)
+bigger_500km_sf <- st_as_sf(bigger_500km_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+
+bigger_500km_sf$grid_id_500km <- seq(from = 1, to = nrow(bigger_500km_sf))
+bigger_500km_sf <- bigger_500km_sf[,c("grid_id_500km", "geometry")]
 
 # DO NOT TRANSFORM, because it makes the inner_join associate two bigger squares for each smaller one, 
 # I don't really know why, but it does not do so with geographic coordinates, and there is no mismatch, and no problem of imprecision due to 
@@ -656,12 +684,19 @@ df_cs <- st_join(x = bigger_100km_sf,
                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
                  left = FALSE)# performs inner join so returns only records that spatially match.
 
+df_cs <- st_join(x = bigger_500km_sf,
+                 y = df_cs,
+                 join = st_contains,
+                 prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
+                 left = FALSE)# performs inner join so returns only records that spatially match.
+
+
 df_cs <- st_drop_geometry(df_cs)
 
 length(unique(df_cs$grid_id)) == nrow(df_cs)
 
 # Keep only new variable and id
-df_cs <- df_cs[,c("grid_id", "grid_id_50km", "grid_id_100km")]
+df_cs <- df_cs[,c("grid_id", "grid_id_50km", "grid_id_100km", "grid_id_500km")]
 
 saveRDS(df_cs, here("temp_data", "merged_datasets", "brazil_aoi", "driverloss_all_aeay_cs_biggercells.Rdata"))
 
@@ -764,8 +799,8 @@ mapmat_data <- c(
   "Soybean_meal", "Soybean_meal", # these crop categories are gonna be created in the present script
   "Soybean_oil", "Soybean_oil", # these crop categories are gonna be created in the present script
   "Sugar", "Sugar", # these crop categories are gonna be created in the present script
-  # "Sugarbeet", "Sugarbeet",
-  # "Sugarcane", "Sugarcane",
+  "Sugar", "Sugarbeet",
+  "Sugar", "Sugarcane",
   "Sunflower_oil", "Sunflower",
   "Tea", "Tea",
   "Tobacco", "Tobacco", 
@@ -1127,6 +1162,7 @@ rm(df_biggercells)
 # Create bigger cell-year identifier
 final <- mutate(final, grid_id_50km_year = paste0(grid_id_50km, "_", year))
 final <- mutate(final, grid_id_100km_year = paste0(grid_id_100km, "_", year))
+final <- mutate(final, grid_id_500km_year = paste0(grid_id_500km, "_", year))
 # length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
 
 

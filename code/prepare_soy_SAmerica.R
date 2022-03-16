@@ -49,7 +49,7 @@ lapply(neededPackages, library, character.only = TRUE)
 
 
 ### NEW FOLDERS USED IN THIS SCRIPT 
-dir.create(here("temp_data", "processed_mapbiomass", "southam_aoi"), recursive = TRUE)
+dir.create(here("temp_data", "processed_soy_SAmerica", "southam_aoi"), recursive = TRUE)
 dir.create(here("temp_data", "processed_lossdrivers", "southam_aoi"), recursive = TRUE)
 dir.create(here("temp_data", "processed_fc2000", "southam_aoi"), recursive = TRUE)
 dir.create(here("temp_data", "processed_pasture2000", "southam_aoi"), recursive = TRUE)
@@ -70,7 +70,7 @@ gaez_crops <- list.files(path = here(gaez_dir, "High-input"),
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
 ### SOUTH AMERICA AOI 
-sam <- raster(here("input_data", "SouthAmerica_Soybean", "soy_SAmerica_5km_2001.tif"))
+sam <- raster(here("input_data", "SouthAmerica_Soybean", "soy_SAmerica_3km_unidir.tif"))
 southam_aoi <- extent(sam)
 rm(sam)
 
@@ -81,29 +81,44 @@ drivers <- raster(here("input_data", "curtis", "Goode_FinalClassification_19_05p
 drivers <- crop(drivers, southam_aoi)
 # plot(drivers)
 
+### SOME PATHS THAT ARE CALLED THROUGHOUT THE SCRIPT 
+extentsoy_resampled_output_name <- here("temp_data", "processed_soy_SAmerica", "southam_aoi", "resampled_soy_extent_0120.tif")
+unidirsoy_resampled_output_name <- here("temp_data", "processed_soy_SAmerica", "southam_aoi", "resampled_soy_unidir_0220.tif")
+gaez_resampled_output_name <- here(gaez_dir, "southam_resampleddrivers_high_input.tif")
+fc2k_resampled_output_name <- here("temp_data", "processed_fc2000", "southam_aoi", "resampled_fc_2000.tif")
+pst2k_resampled_output_name <- here("temp_data", "processed_pasture2000", "southam_aoi", "resampled_drivers_pasture_2000.tif")
+
+any_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_any.tif")
+commodity_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_commodity.tif")
+shifting_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_shifting.tif")
+forestry_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_forestry.tif")
+fire_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_fire.tif")
+urba_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_urba.tif")
+
+mask_path <- here("temp_data", "processed_lossdrivers", "southam_aoi", "always_zero_mask_lossdrivers_any.tif")
+
 
 #### AGGREGATE AND ALIGNE SOY EXTENTS ####
 ## Brick layers 
 
 # import annual layers of forest loss (in hectares) as computed in GEE (and downloaded from Google Drive to input_data/)
-rasterlist <- list.files(path = here("input_data", "SouthAmerica_Soybean"), 
-                         pattern = "^soy_SAmerica_5km_", 
-                         full.names = TRUE) %>% as.list()
-soy <- brick(rasterlist)
+soy <- brick(here("input_data", "SouthAmerica_Soybean", "soy_SAmerica_3km_extent.tif"))
+names(soy)
+# rename layers here (was not done in GEE because no loop there to make it conveniently)
+names(soy) <- paste0("extent_soy_", seq(2001, 2020, 1))
 
-# values are in hectares of soy in 5km x 5km grid cells - and THERE ARE NAs 
-ssa2001 <- soy$soy_SAmerica_5km_2001
-plot(ssa2001)
-valpast01 <- values(ssa2001)
-anyNA(valpast01)
+# rasterlist <- list.files(path = here("input_data", "SouthAmerica_Soybean"), 
+#                          pattern = "^soy_SAmerica_5km_", 
+#                          full.names = TRUE) %>% as.list()
+# soy <- brick(rasterlist)
+# 
+# writeRaster(soy[[1:20]], here("temp_data", "processed_soy_SAmerica", "southam_aoi", "soy0119.tif"), 
+#             overwrite = TRUE)
+# soy <- brick(here("temp_data", "processed_soy_SAmerica", "southam_aoi", "soy0119.tif"))
 
-writeRaster(soy[[1:19]], here("temp_data", "processed_mapbiomass", "southam_aoi", "pastures0119.tif"), 
-            overwrite = TRUE)
-
-soy <- brick(here("temp_data", "processed_mapbiomass", "southam_aoi", "pastures0119.tif"))
 
 # define output file name
-aggr_output_name <- here("temp_data", "processed_mapbiomass", "southam_aoi", "aggr_pastures0119.tif")
+aggr_output_name <- here("temp_data", "processed_soy_SAmerica", "southam_aoi", "aggr_soy_extent_0120.tif")
 
 # aggregate it from the ~5km cells to ~10km
 raster::aggregate(soy, fact = c(res(drivers)[1]/res(soy)[1], res(drivers)[2]/res(soy)[2]),
@@ -116,13 +131,49 @@ raster::aggregate(soy, fact = c(res(drivers)[1]/res(soy)[1], res(drivers)[2]/res
 # align to DRIVERS exactly 
 aggregated_ssa <- brick(aggr_output_name)
 
-ssa_resampled_output_name <- here("temp_data", "processed_mapbiomass", "southam_aoi", "resampled_pastures0119.tif")
+resample(x = aggregated_ssa, 
+         y = drivers, 
+         method = "bilinear", # bilinear or ngb changes nothing 
+         filename = extentsoy_resampled_output_name, 
+         overwrite = TRUE)
+
+
+
+
+#### AGGREGATE AND ALIGNE SOY EXPANSION (UNIDIR) #### 
+soy <- brick(here("input_data", "SouthAmerica_Soybean", "soy_SAmerica_3km_unidir.tif"))
+names(soy)
+# keeps years from 2002 to 2020 (i.e. all those in the brick)
+# 2002 because expansion data is available only as of this year, and 2020 because although 2020 is not available in deforestation data, we want max information in final dataset 
+
+
+# values are in hectares of soy in 5km x 5km grid cells - and THERE ARE NAs 
+ssa2002 <- soy$unidir_soy_2002
+plot(ssa2002)
+valpast01 <- values(ssa2002)
+summary(valpast01)
+anyNA(valpast01)
+
+# define output file name
+aggr_output_name <- here("temp_data", "processed_soy_SAmerica", "southam_aoi", "aggr_soy_unidir_0220.tif")
+
+# aggregate it from the ~5km cells to ~10km
+raster::aggregate(soy, fact = c(res(drivers)[1]/res(soy)[1], res(drivers)[2]/res(soy)[2]),
+                  expand = FALSE,
+                  fun = sum,
+                  na.rm = FALSE, # NA values are on the eastern band only. Thus they can contaminate aggregation safely. 
+                  filename = aggr_output_name,
+                  overwrite = TRUE)
+
+# align to DRIVERS exactly 
+aggregated_ssa <- brick(aggr_output_name)
 
 resample(x = aggregated_ssa, 
          y = drivers, 
          method = "bilinear", # bilinear or ngb changes nothing 
-         filename = ssa_resampled_output_name, 
+         filename = unidirsoy_resampled_output_name, 
          overwrite = TRUE)
+
 
 
 
@@ -133,9 +184,6 @@ gaez <- crop(gaez, southam_aoi)
 # gaez$high_input_all.1 %>% values() %>% summary()
 
 # resample directly (without aggregating first) from the ~9km cells to ~10km (aggregate does not work bc resolutions are to close)
-
-# define output file name
-gaez_resampled_output_name <- here(gaez_dir, "southam_resampleddrivers_high_input.tif")
 
 # aligne
 resample(x = gaez, 
@@ -178,8 +226,6 @@ aggregate(fc2k, fact = c(res(drivers)[1]/res(fc2k)[1], res(drivers)[2]/res(fc2k)
 # align to DRIVERS exactly 
 aggregated_fc2000 <- raster(fc2k_aggr_output_name)
 
-fc2k_resampled_output_name <- here("temp_data", "processed_fc2000", "southam_aoi", "resampled_fc_2000.tif")
-
 resample(x = aggregated_fc2000, 
          y = drivers, 
          method = "ngb", # ngb because bilinear yields negatie values
@@ -193,8 +239,6 @@ pst2k <- crop(pst2k, southam_aoi)
 
 # transform NAs to 0, such that the more numerous NAs in pasture data do not force losing information when the stack is turned to a data frame. 
 pst2k <- reclassify(pst2k, cbind(NA, 0))
-
-pst2k_resampled_output_name <- here("temp_data", "processed_pasture2000", "southam_aoi", "resampled_drivers_pasture_2000.tif")
 
 resample(x = pst2k, 
          y = drivers, 
@@ -211,7 +255,6 @@ any_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_ao
 
 any_lossdrivers <- crop(any_lossdrivers, southam_aoi)
 
-any_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_any.tif")
 resample(x = any_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -224,7 +267,6 @@ commodity_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropi
 
 commodity_lossdrivers <- crop(commodity_lossdrivers, southam_aoi)
 
-commodity_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_commodity.tif")
 resample(x = commodity_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -237,7 +279,6 @@ shifting_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropic
 
 shifting_lossdrivers <- crop(shifting_lossdrivers, southam_aoi)
 
-shifting_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_shifting.tif")
 resample(x = shifting_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -250,7 +291,6 @@ forestry_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropic
 
 forestry_lossdrivers <- crop(forestry_lossdrivers, southam_aoi)
 
-forestry_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_forestry.tif")
 resample(x = forestry_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -263,7 +303,6 @@ fire_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_a
 
 fire_lossdrivers <- crop(fire_lossdrivers, southam_aoi)
 
-fire_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_fire.tif")
 resample(x = fire_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -276,7 +315,6 @@ urba_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_a
 
 urba_lossdrivers <- crop(urba_lossdrivers, southam_aoi)
 
-urba_resampled_output_name <- here("temp_data", "processed_lossdrivers", "southam_aoi", "loss_drivers_urba.tif")
 resample(x = urba_lossdrivers, 
          y = drivers, 
          method = "ngb", # no difference between bilinear and ngb
@@ -288,7 +326,6 @@ resample(x = urba_lossdrivers,
 any_lossdrivers <- brick(any_resampled_output_name)
 
 always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
-mask_path <- here("temp_data", "processed_lossdrivers", "southam_aoi", "always_zero_mask_lossdrivers_any.tif")
 
 overlay(x = any_lossdrivers,
         fun = always_zero,
@@ -298,7 +335,7 @@ overlay(x = any_lossdrivers,
 
 
 
-#### STACK AND MASK MAPBIOMASS, GAEZ, AND COMMODITY DEFORESTATION #### 
+#### STACK AND MASK SOY MAPS, GAEZ, AND COMMODITY DEFORESTATION #### 
 # Read layers to be stacked
 drivenloss_commodity <- brick(commodity_resampled_output_name)
 drivenloss_shifting <- brick(shifting_resampled_output_name)
@@ -306,8 +343,8 @@ drivenloss_forestry <- brick(forestry_resampled_output_name)
 drivenloss_fire <- brick(fire_resampled_output_name)
 drivenloss_urba <- brick(urba_resampled_output_name)
 
-soy <- brick(ssa_resampled_output_name)
-
+extent_soy <- brick(extentsoy_resampled_output_name)
+unidir_soy <- brick(unidirsoy_resampled_output_name)
 
 gaez <- brick(gaez_resampled_output_name)
 fc2k <- raster(fc2k_resampled_output_name)
@@ -321,7 +358,8 @@ names(drivenloss_forestry) <- paste0("driven_loss_forestry.",seq(2001, 2019, 1))
 names(drivenloss_fire) <- paste0("driven_loss_fire.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
 names(drivenloss_urba) <- paste0("driven_loss_urba.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
 
-names(soy) <- paste0("soy.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
+names(extent_soy) <- paste0("extent_soy.",seq(2001, 2020, 1)) # note the difference with the names of phtfloss (not the same years)
+names(unidir_soy) <- paste0("unidir_soy.",seq(2002, 2020, 1)) # note the start in 2002
 
 names(gaez) <- gaez_crops
 
@@ -330,13 +368,21 @@ names(pst2k) <- "pasture_share_2000"
 
 ## STACK 
 southam_stack <- stack(drivenloss_commodity,
-                      drivenloss_shifting, 
-                      drivenloss_forestry, 
-                      drivenloss_fire,
-                      drivenloss_urba,
-                      soy, 
-                      gaez, fc2k, pst2k)
+                              drivenloss_shifting, 
+                              drivenloss_forestry, 
+                              drivenloss_fire,
+                              drivenloss_urba,
+                              extent_soy, 
+                              unidir_soy,
+                              gaez, fc2k, pst2k)
 names(southam_stack)
+
+# save the stack at this point, as a clean export 
+writeRaster(southam_stack,
+            filename = here("temp_data", "merged_datasets", "southam_aoi", "drivenloss_soy_gaez"),
+            overwrite = TRUE, 
+            format = "raster")
+
 
 ### MASK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
 mask <- raster(mask_path)
@@ -355,12 +401,23 @@ southam_stack <- mask(x = southam_stack,
 # na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
 # We also set long to false because we reshape with a proper function for more control
 wide_df <- raster::as.data.frame(southam_stack, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ~700s. 
+# set na.rm = FALSE and run below until saveRDS to extract driverloss_all_aeay_long_allcells.Rdata
 
 # Rename coordinate variables
 names(wide_df)
 head(wide_df[,c("x", "y")])
 wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
 
+
+# SPECIAL TO SOY SCRIPT HERE: ADD 2001 COLUMN FOR THE SOY EXPANSION  
+# because we want 2001 extent to be in the final data set, but expansion (unidir) is only avaiable from 2002 and number of years must be 
+# equal for all varying vars
+wide_df$unidir_soy.2001 <- NA
+wide_df$driven_loss_commodity.2020 <- NA
+wide_df$driven_loss_shifting.2020 <- NA
+wide_df$driven_loss_forestry.2020 <- NA
+wide_df$driven_loss_fire.2020 <- NA
+wide_df$driven_loss_urba.2020 <- NA
 
 ### WIDE TO LONG ### 
 
@@ -372,19 +429,20 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
-varying_vars <- list(names(drivenloss_commodity),
-                     names(drivenloss_shifting),
-                     names(drivenloss_forestry),
-                     names(drivenloss_fire), 
-                     names(drivenloss_urba),
-                     names(soy))
+varying_vars <- list(paste0("driven_loss_commodity.", seq(2001, 2020, 1)),
+                     paste0("driven_loss_shifting.", seq(2001, 2020, 1)),
+                     paste0("driven_loss_forestry.", seq(2001, 2020, 1)),
+                     paste0("driven_loss_fire.", seq(2001, 2020, 1)), 
+                     paste0("driven_loss_urba.", seq(2001, 2020, 1)),
+                     paste0("extent_soy.",seq(2001, 2020, 1)), 
+                     paste0("unidir_soy.",seq(2001, 2020, 1)))
 #varying_vars <- names(driverloss_gaez)[grep(".", names(driverloss_gaez), fixed = TRUE)]
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
                           v.names = c("driven_loss_commodity", "driven_loss_shifting", "driven_loss_forestry", "driven_loss_fire", "driven_loss_urba", 
-                                      "soy"),
+                                      "extent_soy", "unidir_soy"),
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -395,7 +453,7 @@ rm(wide_df)
 names(long_df)
 # replace the indices from the raster::as.data.frame with actual years.
 
-years <- seq(2001, 2019, 1) # notice here again that it is not the same years as for phtfloss
+years <- seq(2001, 2020, 1) # notice here again that it is not the same years as for phtfloss
 long_df <- mutate(long_df, year = years[year])
 
 long_df <- dplyr::arrange(long_df, grid_id, year)
@@ -488,6 +546,14 @@ bigger_100km_sf <- st_as_sf(bigger_100km_stars, as_points = FALSE, merge = FALSE
 bigger_100km_sf$grid_id_100km <- seq(from = 1, to = nrow(bigger_100km_sf))
 bigger_100km_sf <- bigger_100km_sf[,c("grid_id_100km", "geometry")]
 
+# repeat for ~500km grid cells (50 times larger grid cells in both dimensions, hence 2500 times larger)
+bigger_500km <- aggregate(drivers, fact = 50, expand = TRUE, fun = sum)
+bigger_500km_stars <- st_as_stars(bigger_500km)
+bigger_500km_sf <- st_as_sf(bigger_500km_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+
+bigger_500km_sf$grid_id_500km <- seq(from = 1, to = nrow(bigger_500km_sf))
+bigger_500km_sf <- bigger_500km_sf[,c("grid_id_500km", "geometry")]
+
 # DO NOT TRANSFORM, because it makes the inner_join associate two bigger squares for each smaller one, 
 # I don't really know why, but it does not do so with geographic coordinates, and there is no mismatch, and no problem of imprecision due to 
 # geographic coordinates being used as planer because aoi is not near the pole. 
@@ -508,15 +574,23 @@ df_cs <- st_join(x = bigger_100km_sf,
                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
                  left = FALSE)# performs inner join so returns only records that spatially match.
 
+df_cs <- st_join(x = bigger_500km_sf,
+                 y = df_cs,
+                 join = st_contains,
+                 prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
+                 left = FALSE)# performs inner join so returns only records that spatially match.
+
+
 df_cs <- st_drop_geometry(df_cs)
 
 length(unique(df_cs$grid_id)) == nrow(df_cs)
 
 # Keep only new variable and id
-df_cs <- df_cs[,c("grid_id", "grid_id_50km", "grid_id_100km")]
+df_cs <- df_cs[,c("grid_id", "grid_id_50km", "grid_id_100km", "grid_id_500km")]
 
 saveRDS(df_cs, here("temp_data", "merged_datasets", "southam_aoi", "driverloss_all_aeay_cs_biggercells.Rdata"))
 
+rm(df_cs, bigger_50km_sf, bigger_100km_sf, bigger_500km_sf)
 
 #### ADD REMAINING FOREST VARIABLE #### 
 # neither country nor continent information is relevant here. 
@@ -616,8 +690,8 @@ mapmat_data <- c(
   "Soybean_meal", "Soybean_meal", # these crop categories are gonna be created in the present script
   "Soybean_oil", "Soybean_oil", # these crop categories are gonna be created in the present script
   "Sugar", "Sugar", # these crop categories are gonna be created in the present script
-  # "Sugarbeet", "Sugarbeet",
-  # "Sugarcane", "Sugarcane",
+  "Sugar", "Sugarbeet",
+  "Sugar", "Sugarcane",
   "Sunflower_oil", "Sunflower",
   "Tea", "Tea",
   "Tobacco", "Tobacco", 
@@ -970,6 +1044,19 @@ final <- mutate(final, country_year = paste0(country_name, "_", year))
 # just compute country and continent variables, even if invariant, so they can be called in generic function
 final$continent_name <- "America"
 # Create country year fixed effect
+
+## BIGGER CELLS
+df_biggercells <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "driverloss_all_aeay_cs_biggercells.Rdata"))
+
+final <- left_join(final, df_biggercells, by = "grid_id")
+rm(df_biggercells)
+
+# Create bigger cell-year identifier
+final <- mutate(final, grid_id_50km_year = paste0(grid_id_50km, "_", year))
+final <- mutate(final, grid_id_100km_year = paste0(grid_id_100km, "_", year))
+final <- mutate(final, grid_id_500km_year = paste0(grid_id_500km, "_", year))
+# length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
+
 
 ## EAEAR
 df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "southam_aoi",  "driverloss_all_aeay_cs_stdeaear.Rdata"))  
