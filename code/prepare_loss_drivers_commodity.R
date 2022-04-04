@@ -63,13 +63,22 @@ mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datu
 ### TROPICAL AOI 
 tropical_aoi <- extent(c(-180, 179.9167, -30, 30))
 
-### GAEZ CROPS 
+### GAEZ OBJECTS
+# in this script, GAEZ is the target raster of all aggregations / resamplings
 gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
-
 gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+
+## THIS IS GAEZ IN FULL TROPICAL AOI 
+# a priori no issue if it's gaez in global aoi, i.e. not croped in prepare_gaez.R, it only needs to be a larger aoi than continental ones given above. 
+# besides, note that we brick the file that was already saved as a single brick of raster layers. 
+# Otherwise, calling brick on multiple layers takes some time, and calling stack on multiple layers implies that the object is kept in R memory, and it's ~.06Gb
+gaez <- brick(here(gaez_dir, "high_input_all.tif"))
+
+# restore gaez crop names 
+names(gaez) <- gaez_crops
 
 
 ### DRIVERS CROPED AT TROPICAL AOI

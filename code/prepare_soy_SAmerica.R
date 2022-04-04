@@ -377,11 +377,11 @@ southam_stack <- stack(drivenloss_commodity,
                               gaez, fc2k, pst2k)
 names(southam_stack)
 
-# save the stack at this point, as a clean export 
-writeRaster(southam_stack,
-            filename = here("temp_data", "merged_datasets", "southam_aoi", "drivenloss_soy_gaez"),
-            overwrite = TRUE, 
-            format = "raster")
+# # save the stack at this point, as a clean export 
+# writeRaster(southam_stack,
+#             filename = here("temp_data", "merged_datasets", "southam_aoi", "drivenloss_soy_gaez"),
+#             overwrite = TRUE, 
+#             format = "raster")
 
 
 ### MASK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 

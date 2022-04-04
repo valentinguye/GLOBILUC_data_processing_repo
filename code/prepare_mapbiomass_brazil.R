@@ -511,15 +511,15 @@ names(drivenloss_forestry) <- paste0("driven_loss_forestry.",seq(2001, 2019, 1))
 names(drivenloss_fire) <- paste0("driven_loss_fire.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
 names(drivenloss_urba) <- paste0("driven_loss_urba.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
 
-names(pasture_extent) <- paste0("extent_pasture.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(sugarcane_extent) <- paste0("extent_sugarcane.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(rice_extent) <- paste0("extent_rice.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(soy_extent) <- paste0("extent_soy.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(pasture_extent) <- paste0("extent_pasture.",seq(2001, 2020, 1)) # this is indeed what has been selected in this land use preparation above
+names(sugarcane_extent) <- paste0("extent_sugarcane.",seq(2001, 2020, 1)) # this is indeed what has been selected in this land use preparation above
+names(rice_extent) <- paste0("extent_rice.",seq(2001, 2020, 1)) # this is indeed what has been selected in this land use preparation above
+names(soy_extent) <- paste0("extent_soy.",seq(2001, 2020, 1)) # this is indeed what has been selected in this land use preparation above
 
-names(pasture_unidir) <- paste0("unidir_pasture.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(sugarcane_unidir) <- paste0("unidir_sugarcane.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(rice_unidir) <- paste0("unidir_rice.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
-names(soy_unidir) <- paste0("unidir_soy.",seq(2001, 2019, 1)) # this is indeed what has been selected in this land use preparation above
+names(pasture_unidir) <- paste0("unidir_pasture.",seq(2001, 2020, 1)) # this is indeed what has been selected in this land use preparation above
+names(sugarcane_unidir) <- paste0("unidir_sugarcane.",seq(2001, 2020, 1)) # this is indeed what has been selected in this land use preparation above
+names(rice_unidir) <- paste0("unidir_rice.",seq(2001, 2020, 1)) # this is indeed what has been selected in this land use preparation above
+names(soy_unidir) <- paste0("unidir_soy.",seq(2001, 2020, 1)) # this is indeed what has been selected in this land use preparation above
 
 names(gaez) <- gaez_crops
 
@@ -536,6 +536,12 @@ brazil_stack <- stack(drivenloss_commodity,
                       pasture_unidir, sugarcane_unidir, rice_unidir, soy_unidir, 
                       gaez, fc2k, pst2k)
 names(brazil_stack)
+
+# save the stack at this point, as a clean export 
+# writeRaster(brazil_stack,
+#             filename = here("temp_data", "merged_datasets", "brazil_aoi", "drivenloss_mapbiomass_gaez"),
+#             overwrite = TRUE, 
+#             format = "raster")
 
 ### MASK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
 mask <- raster(mask_path)
@@ -564,10 +570,8 @@ wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
 # SPECIAL TO SOY SCRIPT HERE: ADD 2001 COLUMN FOR THE SOY EXPANSION  
 # because we want 2001 extent to be in the final data set, but expansion (unidir) is only avaiable from 2002 and number of years must be 
 # equal for all varying vars
-wide_df$unidir_pasture.2001 <- NA
-wide_df$unidir_sugarcane.2001 <- NA
-wide_df$unidir_rice.2001 <- NA
-wide_df$unidir_soy.2001 <- NA
+
+# unidir 2001 layers are available, since Mapbiomass data was available from 1985
 
 wide_df$driven_loss_commodity.2020 <- NA
 wide_df$driven_loss_shifting.2020 <- NA
@@ -616,14 +620,14 @@ rm(wide_df)
 names(long_df)
 # replace the indices from the raster::as.data.frame with actual years.
 
-years <- seq(2001, 2019, 1) # notice here again that it is not the same years as for phtfloss
+years <- seq(2001, 2020, 1) # notice here again that it is not the same years as for phtfloss
 long_df <- mutate(long_df, year = years[year])
 
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
 saveRDS(long_df, here("temp_data", "merged_datasets", "brazil_aoi", "driverloss_all_aeay_long.Rdata"))
 
-rm(long_df, varying_vars, brazil_stack, gaez, mask, commodity_lossdrivers, fc2k, pst2k)
+rm(long_df, varying_vars, brazil_stack, gaez, mask, fc2k, pst2k)
 
 
 #### BIGGER CELL VARIABLES #### 
@@ -720,7 +724,8 @@ df <- mutate(df,
 # df[df$grid_id == 110,]
 
 # just ensure that driven_loss_any is not counting 4 times too much deforestation in those places. 
-df[df$driven_loss_commodity>0 & df$driven_loss_any > df$driven_loss_commodity, ] <- dplyr::filter(df, 
+# ensuring driven_loss_commodity is not missing, as is the case for the whole year 2020
+df[!(is.na(df$driven_loss_commodity)) & df$driven_loss_commodity>0 & df$driven_loss_any > df$driven_loss_commodity, ] <- dplyr::filter(df, 
                                                                                                   driven_loss_commodity>0 & driven_loss_any > driven_loss_commodity) %>% 
   mutate(driven_loss_any = driven_loss_commodity)
 

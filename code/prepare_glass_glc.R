@@ -44,6 +44,7 @@ lapply(neededPackages, library, character.only = TRUE)
 ### NEW FOLDERS USED IN THIS SCRIPT 
 dir.create(here("temp_data", "processed_glass-glc", "tropical_aoi"), recursive = TRUE)
 dir.create(here("temp_data", "processed_glass-glc", "southam_aoi"), recursive = TRUE)
+dir.create(here("temp_data", "processed_glass-glc", "no_aoi"), recursive = TRUE)
 
 
 ### Raster global options
@@ -528,10 +529,6 @@ overlay(nd_first_loss, cell_area,
         fun = make_area, 
         filename = here("temp_data", "processed_glass-glc", "tropical_aoi", "ha_nd_first_loss.tif"), 
         overwrite = TRUE)
-
-
-
-
 
 
 

@@ -114,6 +114,8 @@ eaear_mapmat_data <- c(
   #"Sorghum", "eaear_Sorghum2", 
   "Soy_index", "eaear_Soy_compo",
   "Sugar", "eaear_Sugar", 
+  "Sugar", "eaear_Sugarbeet", 
+  "Sugar", "eaear_Sugarcane", 
   #"Sunflower_oil", "eaear_Sunflower",
   "Tea", "eaear_Tea",
   "Tobacco", "eaear_Tobacco" 
@@ -704,6 +706,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                            fixef.rm = "perfect",
                            nthreads = 3, 
                            notes = TRUE)
+  # this is the data actually used in the estimation of the first stage, not necessarily the same as input data d_clean because of units having always zero endogenous var. 
   d_clean_1st <- d_clean[est_1st$obs_selection[[1]], ]
   
   # est_1stgauss <- fixest::feglm(fml_1st, 
