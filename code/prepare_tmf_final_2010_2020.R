@@ -222,7 +222,8 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   
   rm(any_type)
   
-  #### TMF ANNUAL EXTENTS #### --> NEED TO MAKE IT IN GEE - COMPUTE TMF EXTENT FOR ALL YEARS SO DON'T HAVE TO MAKE REMAINING HERE 
+  #### TMF ANNUAL EXTENTS #### 
+  # --> NEED TO MAKE IT IN GEE - COMPUTE TMF EXTENT FOR ALL YEARS SO DON'T HAVE TO MAKE REMAINING HERE 
   tmfext <- brick(here("input_data", "TMF", paste0("TMF_extent_3km_",CNT,".tif")))
   
   # Select only years used in this project
@@ -303,7 +304,7 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   
   mask <- raster(mask_output_name)
   
-  masked_stack_output_name <- here("temp_data", "merged_datasets", "tmf_aoi", paste0("anytype_masked_stack,",CNT,"_",t0,"_",tT,".tif"))
+  masked_stack_output_name <- here("temp_data", "merged_datasets", "tmf_aoi", paste0("anytype_masked_stack_",CNT,"_",t0,"_",tT,".tif"))
   
   mask(x = continental_stack, 
        mask = mask,

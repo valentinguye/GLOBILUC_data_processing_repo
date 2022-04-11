@@ -1,5 +1,6 @@
 library(boot)
 library(sandwich)
+library(clusterSEs)
 
 ## Make some necessary objects
 # balanced panel data
@@ -84,11 +85,26 @@ boot(data = data,
      R = 400)
 
 set.seed(1234)
-sdw_bs <- vcovBS(lm(as.formula("y ~ x"), PetersenCL), cluster = ~firm, R=400)#
+sdw_bs <- vcovBS(lm(as.formula("y ~ x"), PetersenCL), cluster = ~firm, R=400, type = "xy")#
 sqrt(sdw_bs["x","x"])
 
 sdw_cl <- vcovCL(lm(as.formula("y ~ x"), data), cluster = ~firm)
 sqrt(sdw_cl["x","x"])
+
+# cluster.bs.glm is different because it implements a bootstrap-t procedure, and not a boostrap-se procedure (see Cameron et al. 2008)
+glm_est <- glm(as.formula("y ~ x"), data, family = "gaussian")
+
+clbsglm <- cluster.bs.glm(mod = glm_est, dat = data, 
+                          cluster = as.formula("~firm"), boot.reps = 400, seed = 1234, output.replicates = TRUE)
+
+beta_hat <- glm_est$coefficients["x"]
+boot_beta_mean <- clbsglm$replicates[,2] %>% mean()
+SE <- clbsglm$replicates[,2] %>% sd()
+G <- length(unique(data$firm))
+ub95 <- beta_hat + qt(0.975, lower.tail=T, df=(G-1)) * SE
+ub95
+boot_beta_mean + qt(0.975, lower.tail=T, df=(G-1)) * SE
+clbsglm$ci[2,2]
 
 ran.gen_blc <- function(original_data, arg_list){
   rowids <- row.names(original_data)

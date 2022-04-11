@@ -67,14 +67,7 @@ gaez_crops <- list.files(path = here(gaez_dir, "High-input"),
                          full.names = FALSE)
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
-## THIS IS GAEZ IN FULL TROPICAL AOI 
-# a priori no issue if it's gaez in global aoi, i.e. not croped in prepare_gaez.R, it only needs to be a larger aoi than continental ones given above. 
-# besides, note that we brick the file that was already saved as a single brick of raster layers. 
-# Otherwise, calling brick on multiple layers takes some time, and calling stack on multiple layers implies that the object is kept in R memory, and it's ~.06Gb
-gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
-# restore gaez crop names 
-names(gaez) <- gaez_crops
 
 ### TMF DATA ###
 # So out of GEE, TMF data is in 9 stacks, 3 continents * 3 drivers (plantation, flood, agri), and each stack has 1990-2020 layers. 
@@ -117,16 +110,12 @@ wanted_TMF_layers <- paste0("Dec",c(t0:tT))
 # Store continental dataframes in long format in list 
 long_df_list <- list()
 
-type <- "agri"
-CNT <- "America"
+# type <- "agri"
+# CNT <- "America"
 transition_types <- c("agri", "plantation", "flood")
-continents <- c("America", "Africa", "Asia")
+continents <- c("America", "Africa", "Asia")#  
 
 for(CNT in continents){ # the order of the loops matter for the mask making operation, see below. 
-  
-  # CROP GAEZ TO CONTINENT AOI 
-  # The actual target raster is gaez in extent of continent as worked out from GEE
-  croped_gaez <- crop(gaez, ext_list[[CNT]])
   
   ### AGGREGATE AND alignE TO GAEZ RESOLUTION ####
   # Currently, the data are hectares of deforestation in 3x3km grid cells annually. 
@@ -142,108 +131,111 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
     tmf <- tmf[[wanted_TMF_layers]]
     
     # define output file name
-    aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_",type,"_",CNT,"_",t0,"_",tT,".tif"))
+    aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_",type,"_9km_",CNT,"_",t0,"_",tT,".tif"))
     
-    # aggregate it from the 3km cells to ~9km
-    raster::aggregate(tmf, fact = c(res(croped_gaez)[1]/res(tmf)[1], res(croped_gaez)[2]/res(tmf)[2]),
-                      expand = FALSE,
+    # aggregate it from the 3km cells to 9km
+    raster::aggregate(tmf, fact = 3, # c(res(croped_gaez)[1]/res(tmf)[1], res(croped_gaez)[2]/res(tmf)[2]),
+                      expand = TRUE,
                       fun = sum,
                       na.rm = TRUE, # NA values are only in the sea. Where there is no forest loss, like in a city in Brazil, the value is 0 (see with plot())
                       filename = aggr_output_name,
                       # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares. 
                       overwrite = TRUE)
     
-    # align to croped_gaez exactly 
-    aggregated <- brick(aggr_output_name)
+    rm(aggr_output_name)
     
-    resampled_output_name <- here("temp_data", "processed_tmf", "tmf_aoi",  paste0("resampledgaez_tmf_",type,"_",CNT,"_",t0,"_",tT,".tif"))
-    
-    resample(x = aggregated, 
-             y = croped_gaez, 
-             method = "ngb", # we use ngb and not bilinear because bilinear interpolation produces negative values. 
-             # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
-             filename = resampled_output_name, 
-             overwrite = TRUE)
-    
-    # resngb <- raster(resampled_output_name)
-    # v_resngb <- values(resngb) 
-    # 
-    # # aligne
-    # resample(x = aggregated,
-    #          y = croped_gaez,
-    #          method = "bilinear", # bilinear or ngb changes nothing
-    #          filename = resampled_output_name,
-    #          overwrite = TRUE)
-    # 
-    # resbil <- raster(resampled_output_name)
-    # v_resbil <- values(resbil)
-    # 
-    # summary(v_resbil)
-    # summary(v_resngb)
-    # aggregated[[1]] %>% values() %>% summary()
-    # 
-    # rm(resngb, v_resngb, resbil, v_resbil)
-    
-    rm(aggr_output_name, resampled_output_name, aggregated)
-  }
+  } # closes the loop over deforestation types
   
   # output nameS of the above loop (this is a length-3 vector)
-  resampled_ouput_nameS <- here("temp_data", "processed_tmf", "tmf_aoi",  paste0("resampledgaez_tmf_",transition_types,"_",CNT,"_",t0,"_",tT,".tif"))
-  names(resampled_ouput_nameS) <- transition_types
+  aggregated_ouput_nameS <- here("temp_data", "processed_tmf", "tmf_aoi",  paste0("tmf_",transition_types,"_9km_",CNT,"_",t0,"_",tT,".tif"))
+  names(aggregated_ouput_nameS) <- transition_types
   
   #### PREPARE MASK BASED ON ALWAYS ZERO FOR EVERY TYPE ####
-  # this is done outside the loop over transition types, as it needs to work on all of them at once 
-  # by checking whether there is a deforestation event related to ANY of the three types. 
-  
+  # this is done outside the loop over transition types, as it needs to work on all of them at once
+  # by checking whether there is a deforestation event related to ANY of the three types.
+
   # the order of the stacked layers does not matter here
-  # and it is necessary to use stack here, since there are several sources. 
-  any_type <- stack(resampled_ouput_nameS)
+  # and it is necessary to use stack here, since there are several sources.
+  any_type <- stack(aggregated_ouput_nameS)
   # names(any_type)
-  
+
   always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
-  
+
   mask_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("always_zero_mask_any_tmf_type_",CNT,"_",t0,"_",tT,".tif"))
-  
+
   overlay(x = any_type,
           fun = always_zero,
           filename = mask_output_name,
           na.rm = TRUE, # but there is no NA anyway
           overwrite = TRUE)
-  
+
   rm(any_type)
+
   
-  #### TMF ANNUAL EXTENTS #### --> NEED TO MAKE IT IN GEE - COMPUTE TMF EXTENT FOR ALL YEARS SO DON'T HAVE TO MAKE REMAINING HERE 
+  #### TMF ANNUAL EXTENTS #### 
+  # --> NEED TO MAKE IT IN GEE - COMPUTE TMF EXTENT FOR ALL YEARS SO DON'T HAVE TO MAKE REMAINING HERE 
   tmfext <- brick(here("input_data", "TMF", paste0("TMF_extent_3km_",CNT,".tif")))
   
   # Select only years used in this project
   tmfext <- tmfext[[wanted_TMF_layers]]
   
-  
-  tmfext_aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmfext_",CNT,"_",t0,"_",tT,".tif"))
+  tmfext_aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_extent_9km_",CNT,"_",t0,"_",tT,".tif"))
   # aggregate it from the 3km cells to ~9km
-  raster::aggregate(tmfext, fact = c(res(croped_gaez)[1]/res(tmfext)[1], res(croped_gaez)[2]/res(tmfext)[2]),
-                    expand = FALSE,
+  raster::aggregate(tmfext, fact = 3, # c(res(croped_gaez)[1]/res(tmfext)[1], res(croped_gaez)[2]/res(tmfext)[2]),
+                    expand = TRUE,
                     fun = sum,
                     na.rm = TRUE, # NA values are only in the sea. Where there is no forest loss, like in a city in Brazil, the value is 0 (see with plot())
                     filename = tmfext_aggr_output_name,
                     # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares. 
                     overwrite = TRUE)
   
-  aggregated <- brick(tmfext_aggr_output_name)
+  # Keep one layer as a destination raster to resample other data to. 
+  tmf_meta <- raster(tmfext_aggr_output_name)
   
-  tmfext_resampled_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_",CNT,"_",t0,"_",tT,".tif"))
+  #### GAEZ #### 
+  # Athough GAEZ data is kind of in its native resolution and extent, it's data are from a model and we prefer to resample THEM, 
+  # rather than resampling TMF to GAEZ. This is motivated by resampled tmf rasters yielding systematically lower aggregated statistics than 
+  # just-aggregate ones. The latter fit correctly Vancutsem et al. statistics. 
   
-  resample(x = aggregated, 
-           y = croped_gaez, 
-           method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
-           # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
-           filename = tmfext_resampled_output_name, 
+  ## THIS IS GAEZ IN FULL TROPICAL AOI 
+  # a priori no issue if it's gaez in global aoi, i.e. not croped in prepare_gaez.R, it only needs to be a larger aoi than continental ones given above. 
+  # besides, note that we brick the file that was already saved as a single brick of raster layers. 
+  # Otherwise, calling brick on multiple layers takes some time, and calling stack on multiple layers implies that the object is kept in R memory, and it's ~.06Gb
+  gaez <- brick(here(gaez_dir, "high_input_all.tif"))
+  
+  # restore gaez crop names 
+  names(gaez) <- gaez_crops
+  
+  # CROP GAEZ TO TMF-continent first
+  croped_gaez <- crop(gaez, extent(tmf_meta))
+  
+  gaez_resampled_output_name <- here(gaez_dir,  paste0("resampledtmf_",CNT,".tif"))
+  
+  resample(x = croped_gaez, 
+           y = tmf_meta, 
+           method = "ngb", # we use ngb and not bilinear because bilinear interpolation produces negative values, and a worse fit in this case.
+           filename = gaez_resampled_output_name, 
            overwrite = TRUE)
+  
+  rm(croped_gaez)
+  # # test ngb versus bilinear
+  # resngb <- raster(gaez_resampled_output_name)
+  # v_resngb <- values(resngb)
+  # 
+  # # aligne
+  # resbil <- resample(x = croped_gaez[[1]], y = tmf_meta, method = "bilinear")
+  # v_resbil <- values(resbil)
+  # 
+  # summary(v_resbil)
+  # summary(v_resngb)
+  # croped_gaez[[1]] %>% values() %>% summary()
+  # 
+  # rm(resngb, v_resngb, resbil, v_resbil)
   
   
   #### 2000 PASTURE SHARE ####
   pst2k <- raster(here("input_data", "CroplandPastureArea2000_Geotiff", "Pasture2000_5m.tif"))
-  croped_pst2k <- crop(pst2k, ext_list[[CNT]])
+  croped_pst2k <- crop(pst2k, extent(tmf_meta))
   
   # resample directly (without aggregating first), because pasture data already at the same resolution as croped_gaez. 
   # (aggregate does not work bc resolutions are to close)
@@ -254,20 +246,21 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   pst2k_resampled_output_name <- here("temp_data", "processed_pasture2000", "tmf_aoi", paste0("resampledgaez_pasture_2000_",CNT,".tif"))
   
   resample(x = croped_pst2k, 
-           y = croped_gaez, 
+           y = tmf_meta, 
            method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
            # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
            filename = pst2k_resampled_output_name, 
            overwrite = TRUE)
   
-  rm(croped_pst2k)
+  rm(croped_pst2k, pst2k)
   
-  #### STACK AND MASK RASTERS TO MERGE ####
+  #### STACK RASTERS TO MERGE ####
   # Read layers to be stacked
-  agri <- brick(resampled_ouput_nameS["agri"])
-  plantation <- brick(resampled_ouput_nameS["plantation"])
-  flood <- brick(resampled_ouput_nameS["flood"])
-  tmfext <- brick(tmfext_resampled_output_name)
+  agri <- brick(aggregated_ouput_nameS["agri"])
+  plantation <- brick(aggregated_ouput_nameS["plantation"])
+  flood <- brick(aggregated_ouput_nameS["flood"])
+  tmfext <- brick(tmfext_aggr_output_name)
+  gaez <- brick(gaez_resampled_output_name)
   pst2k <- raster(pst2k_resampled_output_name)
   
   # It is important to explicitly rename layers that are going to be stacked and then called to reshape the data frame 
@@ -277,33 +270,32 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   names(flood) <- paste0("tmf_flood.",seq(t0, tT, 1)) 
   names(tmfext) <- paste0("tmf_ext.",seq(t0, tT, 1)) 
   
-  names(croped_gaez) <- gaez_crops
+  names(gaez) <- gaez_crops
   names(pst2k) <- "pasture_share_2000"
   
   # Stack together the annual layers TMF data and GAEZ crop and pasture2000 cross sections 
   continental_stack <- stack(agri,
                              plantation, 
                              flood, 
-                             tmfext, croped_gaez, pst2k)
+                             tmfext, gaez, pst2k)
   # save those names 
   continental_stack_names <- names(continental_stack)
   
-  
   ### MASK THE STACK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ###
-  
+  # Nope, we don't do that in 1990-2020, in order to have the most general data frame as possible. 
   mask <- raster(mask_output_name)
-  
-  masked_stack_output_name <- here("temp_data", "merged_datasets", "tmf_aoi", paste0("anytype_masked_stack,",CNT,"_",t0,"_",tT,".tif"))
-  
-  mask(x = continental_stack, 
+
+  masked_stack_output_name <- here("temp_data", "merged_datasets", "tmf_aoi", paste0("anytype_masked_stack_",CNT,"_",t0,"_",tT,".tif"))
+
+  mask(x = continental_stack,
        mask = mask,
-       maskvalue = 0, # necessary here, because the there is no NA in the mask, only 0 and 1 
+       maskvalue = 0, # necessary here, because the there is no NA in the mask, only 0 and 1
        updatevalue = NA,
        filename = masked_stack_output_name,
        overwrite = TRUE)
-  
+
   rm(mask)
-  # (note that masking changes the summary values of croped_gaez)
+  # (note that masking changes the summary/aggregated values)
   
   
   ### RASTER TO DATAFRAME ### 
@@ -369,8 +361,10 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   
   long_df_list[[CNT]] <- long_df
   
-  rm(resampled_ouput_nameS, tmfext_aggr_output_name, tmfext_resampled_output_name, pst2k_resampled_output_name, 
-     mask_output_name, masked_stack_output_name, aggregated, wide_df, long_df) 
+  rm(agri, plantation, flood, tmfext, gaez, pst2k)
+  
+  rm(aggregated_ouput_nameS, tmfext_aggr_output_name, pst2k_resampled_output_name, 
+     mask_output_name, masked_stack_output_name, wide_df, long_df) 
 } # closes the loop over continents
 
 
@@ -981,6 +975,8 @@ saveRDS(final, here("temp_data", "merged_datasets", "tmf_aoi", paste0("tmf_aeay_
 
 
 #### COUNTRY ANNUAL AVERAGES #### 
+final <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", paste0("tmf_aeay_pantrop_long_final_",t0,"_",tT,".Rdata")))
+
 country_final <- dplyr::select(final, year, continent_name, country_name, country_year, tmf_agri, tmf_plantation, tmf_flood, tmf_ext)
 rm(final)
 country_avges <- ddply(country_final, "country_year", summarise, 
@@ -996,15 +992,102 @@ country_avges <- inner_join(country_avges, country_year_final[,c("year", "contin
 
 country_avges <- dplyr::mutate(country_avges, deforestation = agriurba_defo + plantation_defo + flood_defo)
 country_avges <- dplyr::mutate(country_avges, deforestation = deforestation/1e6)
-country_avges <- dplyr::mutate(country_avges, tmf_ext = tmf_ext/1e6)
+country_avges <- dplyr::mutate(country_avges, tmf_extent = tmf_extent/1e6)
 
 
 
 # some checks against statistics in Vancutsem Science article
+# In Tab. 10, they report 39.6, 88.7, and 60.9 Mha deforestation over 1990-2020, in Africa, America and Asia resp.
+# (excluding regrowth, but including prior degradation)
+country_avges %>% filter(continent_name=="Africa") %>% dplyr::select(deforestation) %>% sum()
+country_avges %>% filter(continent_name=="America") %>% dplyr::select(deforestation) %>% sum()
+country_avges %>% filter(continent_name=="Asia") %>% dplyr::select(deforestation) %>% sum()
+# here, we obtain 33.8, 83.4, and 56 Mha respectively
+
+# Using aggregated and resampled rasters instead 
+# Resampled raster: 83.4 Mha too 
+agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_agri_America_1990_2020.tif")))
+plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_plantation_America_1990_2020.tif")))
+flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_flood_America_1990_2020.tif")))
+any <- overlay(stack(agri, plantation, flood), 
+               fun = sum)
+vany <- values(any)
+sum(vany)/1e6
+
+# Aggregated raster: 88.47 Mha, so very very similar to Vancutsem et al. 
+agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_agri_America_1990_2020.tif")))
+plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_plantation_America_1990_2020.tif")))
+flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_flood_America_1990_2020.tif")))
+any <- overlay(stack(agri, plantation, flood), 
+               fun = sum)
+vany <- values(any)
+sum(vany)/1e6
+
+# So the difference comes from the resampling. 
+
+# resampling with bilinear: 83.3
+croped_gaez <- crop(gaez, ext_list[["America"]])
+bilany <- resample(any, croped_gaez, method = "bilinear")
+sum(values(bilany))/1e6
+
+# and ngb (what we used, but layer by layer) : 83.4
+ngbany <- resample(any, croped_gaez, method = "ngb")
+sum(values(ngbany))/1e6
+
+# so it's really just a matter of resampling, not the method used, or what is done before; 
+# try project raster instead of resample: same results. 
+ngbany <- projectRaster(any, croped_gaez, method = "bilinear")
+sum(values(ngbany))/1e6
+
+# trying different resampling from terra: does not help. 
+any <- terra::rast(any)
+croped_gaez <- terra::rast(croped_gaez)
+terra::resample(any, croped_gaez, method = "near") %>% values() %>% sum()/1e6 # same as raster::resample
+terra::resample(any, croped_gaez, method = "bilinear") %>% values() %>% sum()/1e6 # same as raster::resample
+terra::resample(any, croped_gaez, method = "cubic") %>% values() %>% sum()/1e6 # 83.279
+terra::resample(any, croped_gaez, method = "cubicspline") %>% values() %>% sum()/1e6 # 83.278
+terra::resample(any, croped_gaez, method = "lanczos") %>% values() %>% sum()/1e6 # 83.281
+
+
+
+
+# TMF EXTENT 
+# In Tab. 2, they report 273.4, 705.1, 311,1 Mha TMF (undisturbed and degraded) in 1990 in Africa, America and ASia resp. 
+# They do not count regrowth, while I incude it. However, in 1990 this is not observed in their data anyways. 
+# Since we masked places where no deforestation ever occured, we should not use the final data frame to make such comparisons. 
+# Resampled raster: 677.07 Mha
+am_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_America_1990_2020.tif")))
+am_tmf90 <- values(am_tmfext[[1]])
+sum(am_tmf90)/1e6
+# Aggregated raster: 719.6 Mha
+am_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmfext_America_1990_2020.tif")))
+am_tmf90 <- values(am_tmfext[[1]])
+sum(am_tmf90)/1e6
+
+# with bilinear resampling, very similar sum: 677.29
+croped_gaez <- crop(gaez, ext_list[["America"]])
+aggr <- am_tmfext[[1]]
+resamp_bil <- resample(aggr, croped_gaez, method = "bilinear") 
+sum(values(resamp_bil))/1e6
+
+# Resampled Africa: 263.3 Mha
+af_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_Africa_1990_2020.tif")))
+af_tmf90 <- values(af_tmfext[[1]])
+sum(af_tmf90)/1e6
+
+# Resampled Asia: 303.4 Mha
+as_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_Asia_1990_2020.tif")))
+as_tmf90 <- values(as_tmfext[[1]])
+sum(as_tmf90)/1e6
+
+
+
+# Old tests --------------
+
 # they report 238.7, 616.4 and 244.1 Mha of TMF (undisturbed and degraded) in 2015 in Africa, Latin America, and Asia-Oceania resp. 
-country_avges %>% filter(continent_name=="Africa" & year == 2000) %>% dplyr::select(tmf_ext) %>% sum()
-country_avges %>% filter(continent_name=="America" & year == 2000) %>% dplyr::select(tmf_ext) %>% sum()
-country_avges %>% filter(continent_name=="Asia" & year == 2000) %>% dplyr::select(tmf_ext) %>% sum()
+country_avges %>% filter(continent_name=="Africa" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
+country_avges %>% filter(continent_name=="America" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
+country_avges %>% filter(continent_name=="Asia" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
     
 head(country_avges)
 brazil <- dplyr::filter(country_avges, country_name == "Brazil" & year > 2000)
@@ -1013,8 +1096,8 @@ indonesia <- dplyr::filter(country_avges, country_name == "Indonesia" & year > 2
 
 plot(x = brazil$year, y = brazil$deforestation)
 plot(x = indonesia$year, y = indonesia$deforestation)
-plot(x = brazil$year, y = brazil$tmf_ext)
-plot(x = indonesia$year, y = indonesia$tmf_ext)
+plot(x = brazil$year, y = brazil$tmf_extent)
+plot(x = indonesia$year, y = indonesia$tmf_extent)
 
 # Compare with FIg. 3 in Vancutsem et al. 2021 Science. Indonesian panel
 # The present measure of deforestation is to be compare with the sum of 
