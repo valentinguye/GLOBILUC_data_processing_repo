@@ -1005,6 +1005,25 @@ country_avges %>% filter(continent_name=="Asia") %>% dplyr::select(deforestation
 # here, we obtain 33.8, 83.4, and 56 Mha respectively
 
 # Using aggregated and resampled rasters instead 
+# Aggregated by fact = 3: 
+# America: 88.4 Mha 
+agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_agri_9km_America_1990_2020.tif")))
+plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_plantation_9km_America_1990_2020.tif")))
+flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_flood_9km_America_1990_2020.tif")))
+any <- overlay(stack(agri, plantation, flood), 
+               fun = sum)
+vany <- values(any)
+sum(vany)/1e6
+
+# Asia : 59.8
+agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_agri_9km_Asia_1990_2020.tif")))
+plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_plantation_9km_Asia_1990_2020.tif")))
+flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_flood_9km_Asia_1990_2020.tif")))
+any <- overlay(stack(agri, plantation, flood), 
+               fun = sum)
+vany <- values(any)
+sum(vany)/1e6
+
 # Resampled raster: 83.4 Mha too 
 agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_agri_America_1990_2020.tif")))
 plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_plantation_America_1990_2020.tif")))

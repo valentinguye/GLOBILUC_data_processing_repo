@@ -45,12 +45,6 @@ lapply(neededPackages, library, character.only = TRUE)
 #   see in particular https://rstudio.github.io/renv/articles/renv.html 
 
 
-
-### NEW FOLDERS USED IN THIS SCRIPT 
-dir.create(here("temp_data", "processed_tmf", "tmf_aoi"), recursive = TRUE)
-dir.create(here("temp_data", "processed_pasture2000", "tmf_aoi"), recursive = TRUE)
-dir.create(here("temp_data", "merged_datasets", "tmf_aoi"), recursive = TRUE)
-
 ### Raster global options
 rasterOptions(timer = TRUE, 
               progress = "text")
@@ -67,6 +61,9 @@ gaez_crops <- list.files(path = here(gaez_dir, "High-input"),
                          full.names = FALSE)
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
+### COUNTRIES ### 
+countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
+length(unique(countries$COUNTRY_NA)) == nrow(countries)
 
 
 ### TMF DATA ###
@@ -75,31 +72,9 @@ gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 # Unit is hectares of Tropical Moist Forest (TMF) extent, or deforested and replaced with either agriculture/urbanism (agri), tree plantation (plantation), or water (flood)
 # there are no NAs. 
 
-# vt <- values(tmf_agri_am[[4]])
-# summary(vt)
-
-### TMF AOI ### 
-# The procedure adopted in this script currently is to make all preparation by continental area of interest 
-
-ext_am <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_America.tif"))%>% extent()
-ext_af <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_Africa.tif"))%>% extent()
-ext_as <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_Asia.tif"))%>% extent()
-
-ext_list <- list(America = ext_am, 
-                 Africa = ext_af, 
-                 Asia = ext_as)
-ext_list
-
-# the smallest xmin (most western point) is that of America
-# the highest xmax (most eastern point) is that of Asia
-# the smallest ymin (most southern point) is the same for all (~ -30°)
-# the highest ymax (most northern point) is the same for all (~ 30°)
-# tmf_aoi <- extent(ext_am[1], ext_as[2], ext_af[3], ext_af[4])
-# this is not the same AOI as tropical_aoi used in other scripts. 
 
 ### YEARS ### 
 # ---------------------------------- For this project, we need ALL years (1990-2020) --------------------------------------------------------------------
-#----------------------------------- THIS IS THE MAIN DIFFERENCE WITH prepare_tmf_final_2010_2020.R script ---------------------------------------------- 
 t0 <- 1990
 tT <- 2020
 wanted_TMF_layers <- paste0("Dec",c(t0:tT))
@@ -120,31 +95,32 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   ### AGGREGATE AND alignE TO GAEZ RESOLUTION ####
   # Currently, the data are hectares of deforestation in 3x3km grid cells annually. 
   # We aggregate this to ~9km grid cells by adding up the hectares of deforestation
-  for(type in transition_types){
-    # input stack 
-    tmf <- brick(here("input_data", "TMF", paste0("TMF_defo_",type,"_3km_",CNT,".tif")))
-    # plot(tmf[[15]])
-    # vtmf <- values(tmf[[4]])
-    # summary(vtmf)
-    
-    # Select only years used in this project
-    tmf <- tmf[[wanted_TMF_layers]]
-    
-    # define output file name
-    aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_",type,"_9km_",CNT,"_",t0,"_",tT,".tif"))
-    
-    # aggregate it from the 3km cells to 9km
-    raster::aggregate(tmf, fact = 3, # c(res(croped_gaez)[1]/res(tmf)[1], res(croped_gaez)[2]/res(tmf)[2]),
-                      expand = TRUE,
-                      fun = sum,
-                      na.rm = TRUE, # NA values are only in the sea. Where there is no forest loss, like in a city in Brazil, the value is 0 (see with plot())
-                      filename = aggr_output_name,
-                      # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares. 
-                      overwrite = TRUE)
-    
-    rm(aggr_output_name)
-    
-  } # closes the loop over deforestation types
+  # This is commented out because already computed 
+  # for(type in transition_types){
+  #   # input stack 
+  #   tmf <- brick(here("input_data", "TMF", paste0("TMF_defo_",type,"_3km_",CNT,".tif")))
+  #   # plot(tmf[[15]])
+  #   # vtmf <- values(tmf[[4]])
+  #   # summary(vtmf)
+  #   
+  #   # Select only years used in this project
+  #   tmf <- tmf[[wanted_TMF_layers]]
+  #   
+  #   # define output file name
+  #   aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_",type,"_9km_",CNT,"_",t0,"_",tT,".tif"))
+  #   
+  #   # aggregate it from the 3km cells to 9km
+  #   raster::aggregate(tmf, fact = 3, # c(res(croped_gaez)[1]/res(tmf)[1], res(croped_gaez)[2]/res(tmf)[2]),
+  #                     expand = TRUE,
+  #                     fun = sum,
+  #                     na.rm = TRUE, # NA values are only in the sea. Where there is no forest loss, like in a city in Brazil, the value is 0 (see with plot())
+  #                     filename = aggr_output_name,
+  #                     # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares. 
+  #                     overwrite = TRUE)
+  #   
+  #   rm(aggr_output_name)
+  #   
+  # } # closes the loop over deforestation types
   
   # output nameS of the above loop (this is a length-3 vector)
   aggregated_ouput_nameS <- here("temp_data", "processed_tmf", "tmf_aoi",  paste0("tmf_",transition_types,"_9km_",CNT,"_",t0,"_",tT,".tif"))
@@ -153,12 +129,12 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   
   #### TMF ANNUAL EXTENTS #### 
   # --> NEED TO MAKE IT IN GEE - COMPUTE TMF EXTENT FOR ALL YEARS SO DON'T HAVE TO MAKE REMAINING HERE 
-  tmfext <- brick(here("input_data", "TMF", paste0("TMF_extent_3km_",CNT,".tif")))
+  tmfext <- brick(here("input_data", "TMF", paste0("TMF_extent_classes1-2_3km_",CNT,".tif")))
   
   # Select only years used in this project
   tmfext <- tmfext[[wanted_TMF_layers]]
   
-  tmfext_aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_extent_9km_",CNT,"_",t0,"_",tT,".tif"))
+  tmfext_aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("TMF_extent_classes1-2_3km_",CNT,"_",t0,"_",tT,".tif"))
   # aggregate it from the 3km cells to ~9km
   raster::aggregate(tmfext, fact = 3, # c(res(croped_gaez)[1]/res(tmfext)[1], res(croped_gaez)[2]/res(tmfext)[2]),
                     expand = TRUE,
@@ -181,7 +157,7 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   names(agri) <- paste0("tmf_agri.",seq(t0, tT, 1)) 
   names(plantation) <- paste0("tmf_plantation.",seq(t0, tT, 1)) 
   names(flood) <- paste0("tmf_flood.",seq(t0, tT, 1)) 
-  names(tmfext) <- paste0("tmf_ext.",seq(t0, tT, 1)) 
+  names(tmfext) <- paste0("tmf_extent.",seq(t0, tT, 1)) 
   
   # Stack together the annual layers TMF data and GAEZ crop and pasture2000 cross sections 
   continental_stack <- stack(agri,
@@ -192,45 +168,26 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   continental_stack_names <- names(continental_stack)
   
   # Extract sum in countries 
-  countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
-  length(unique(countries$COUNTRY_NA)) == nrow(countries)
-  
   country_tmf <- raster::extract(x = continental_stack, 
                                   y = countries, 
                                   fun = sum, 
                                   na.rm = TRUE, 
                                   layer = 1, 
                                   nl = nlayers(continental_stack))
-                  
+  removeTmpFiles(h=0)
   
-  ### RASTER TO DATAFRAME ### 
+  country_tmf %>% class()
+  ncol(country_tmf) == nlayers(continental_stack)
+  nrow(country_tmf) == nrow(countries)
   
-  continental_stack <- stack(masked_stack_output_name)
+  colnames(country_tmf) <- names(continental_stack)
+  # summary(country_tmf[,"tmf_ext.2018"])
   
-  # all names are lost through the writing/reading operation, so rename layers 
-  names(continental_stack) <- continental_stack_names
+  country_tmf_df <- as.data.frame(country_tmf) 
+  country_tmf_df$country_name <- countries$COUNTRY_NA
   
-  # na.rm = TRUE does not matter much here, because there is no NA. 
-  # We also set long to false because we reshape with a proper function for more control
-  wide_df <- raster::as.data.frame(continental_stack, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) 
-  
-  rm(continental_stack)
-  
-  # Rename coordinate variables
-  names(wide_df)
-  head(wide_df[,c("x", "y")])
-  wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
-  
-  
-  ### WIDE TO LONG ### 
-  
-  # grid ID cannot simply be a sequence, because they wouldn't be unique once continental dataframes row-binded 
-  # thus add a continental prefix
-  wide_df$grid_id <- paste0(CNT, "_", seq(1, nrow(wide_df), 1) )
-  
-  # create also the continent variable now
-  wide_df$continent_name <- CNT
-  
+  country_tmf_df$continent_name <- CNT
+
   # the dot is, by construction of all variable names, only in the names of time varying variables. 
   # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
   # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
@@ -241,69 +198,53 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
                        names(tmfext))
   
   # reshape to long.
-  long_df <- stats::reshape(wide_df,
-                            varying = varying_vars,
-                            v.names = c("tmf_agri", "tmf_plantation", "tmf_flood", "tmf_ext"),
-                            sep = ".",
-                            timevar = "year",
-                            idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
-                            ids = "grid_id", # lonlat is our cross-sectional identifier.
-                            direction = "long",
-                            new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
+  long_country_tmf_df <- stats::reshape(country_tmf_df,
+                                        varying = varying_vars,
+                                        v.names = c("tmf_agri", "tmf_plantation", "tmf_flood", "tmf_extent"),
+                                        sep = ".",
+                                        timevar = "year",
+                                        idvar = "country_name", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
+                                        ids = "country_name", # lonlat is our cross-sectional identifier.
+                                        direction = "long",
+                                        new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
   
-  names(long_df)
+  names(long_country_tmf_df)
   # replace the indices from the raster::as.data.frame with actual years.
   
   years <- seq(t0, tT, 1)
-  long_df <- mutate(long_df, year = years[year])
+  long_country_tmf_df <- mutate(long_country_tmf_df, year = years[year])
   
-  long_df <- dplyr::arrange(long_df, grid_id, year)
-  
-  # d <- long_df[long_df$driven_loss != long_df$driven_loss_commodity,]
-  # d <- mutate(d, diff = driven_loss - driven_loss_commodity)
-  # summary(d$diff)
-  # d[d$diff>0 , c("driven_loss", "driven_loss_commodity")]
-  
-  long_df_list[[CNT]] <- long_df
+  long_country_tmf_df <- dplyr::arrange(long_country_tmf_df, country_name, year)
+
+  long_df_list[[CNT]] <- long_country_tmf_df
   
   rm(agri, plantation, flood, tmfext)
-  
-  rm(aggregated_ouput_nameS, tmfext_aggr_output_name, wide_df, long_df) 
+  rm(aggregated_ouput_nameS, tmfext_aggr_output_name, wide_df, long_country_tmf_df, country_tmf_df, country_tmf) 
 } # closes the loop over continents
 
 
 tropical_long_df <- bind_rows(long_df_list)
 
-saveRDS(tropical_long_df, here("temp_data", "merged_datasets", "tmf_aoi", paste0("tmf_pantrop_nomask_long_",t0,"_",tT,".Rdata")))
+tropical_long_df <- dplyr::mutate(tropical_long_df, tmf_deforestation = tmf_agri + tmf_plantation + tmf_flood)
+
+saveRDS(tropical_long_df, here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata")))
 
 rm(tropical_long_df, long_df_list)
 
 
 
 
-#### COUNTRY ANNUAL AVERAGES #### 
-final <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", paste0("tmf_aeay_pantrop_long_final_",t0,"_",tT,".Rdata")))
 
-country_final <- dplyr::select(final, year, continent_name, country_name, country_year, tmf_agri, tmf_plantation, tmf_flood, tmf_ext)
-rm(final)
-country_avges <- ddply(country_final, "country_year", summarise, 
-                       agriurba_defo = sum(tmf_agri, na.rm = TRUE),
-                       plantation_defo = sum(tmf_plantation, na.rm = TRUE),
-                       flood_defo = sum(tmf_flood, na.rm = TRUE),
-                       tmf_extent = sum(tmf_ext, na.rm = TRUE), 
-                       .progress = "text")
-
-country_year_final <- country_final[!duplicated(country_final$country_year),] 
-
-country_avges <- inner_join(country_avges, country_year_final[,c("year", "continent_name", "country_name", "country_year")], by = "country_year")
-
-country_avges <- dplyr::mutate(country_avges, deforestation = agriurba_defo + plantation_defo + flood_defo)
-country_avges <- dplyr::mutate(country_avges, deforestation = deforestation/1e6)
-country_avges <- dplyr::mutate(country_avges, tmf_extent = tmf_extent/1e6)
 
 
 
 # some checks against statistics in Vancutsem Science article
+names(long_country_tmf_df)
+long_country_tmf_df <- dplyr::mutate(long_country_tmf_df, tmf_deforestation = tmf_agri + tmf_plantation + tmf_flood)
+sum(long_country_tmf_df$tmf_deforestation, na.rm = T) / 1e6  # matches the 88.7 Mha deforested across the continent over 1990-2020 in Vancutsem et al. 2021 (Science), Tab. 10 first column 
+dplyr::filter(long_country_tmf_df, year == 1990) %>% dplyr::select(tmf_extent) %>% sum(na.rm = T) / 1e6  # 716.5 Mha, so a bit more than the 705.1 Mha in Vancutsem et al. Tab. 2. This is because we count regrowth here in tmf extent currently, while they don't. 
+
+
 # In Tab. 10, they report 39.6, 88.7, and 60.9 Mha deforestation over 1990-2020, in Africa, America and Asia resp.
 # (excluding regrowth, but including prior degradation)
 country_avges %>% filter(continent_name=="Africa") %>% dplyr::select(deforestation) %>% sum()
@@ -434,3 +375,21 @@ America[America$year > 2000 & America$year<2020,"deforestation"] %>% mean()
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  ### ### ### ### ### ### ### ### ### ### ### 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  ### ### ### ### ### ### ### ### ### ### ### 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  ### ### ### ### ### ### ### ### ### ### ### 
+### TMF AOI ### 
+# The procedure adopted in this script currently is to make all preparation by continental area of interest 
+
+ext_am <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_America.tif"))%>% extent()
+ext_af <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_Africa.tif"))%>% extent()
+ext_as <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_Asia.tif"))%>% extent()
+
+ext_list <- list(America = ext_am, 
+                 Africa = ext_af, 
+                 Asia = ext_as)
+ext_list
+
+# the smallest xmin (most western point) is that of America
+# the highest xmax (most eastern point) is that of Asia
+# the smallest ymin (most southern point) is the same for all (~ -30°)
+# the highest ymax (most northern point) is the same for all (~ 30°)
+# tmf_aoi <- extent(ext_am[1], ext_as[2], ext_af[3], ext_af[4])
+# this is not the same AOI as tropical_aoi used in other scripts. 
