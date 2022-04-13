@@ -1,80 +1,44 @@
 ##### 0. PACKAGES, WD, OBJECTS #####
 
 
-### WORKING DIRECTORY SHOULD BE CORRECT IF THIS SCRIPT IS RUN WITHIN R_project_for_individual_runs
-### OR CALLED FROM LUCFP PROJECT master.do FILE.
-### IN ANY CASE IT SHOULD BE (~/LUCFP/data_processing) 
-
+### WORKING DIRECTORY STARTS WHERE THIS SCRIPT IS LOCATED (see package "here")
+# input data is searched in a folder called "./input_data/" 
+# output data is stored in a folder called "./temp_data/" 
 
 ### PACKAGES ###
-# see this project's README for a better understanding of how packages are handled in this project. 
 
 # These are the packages needed in this particular script. 
-neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
-                    "here", "readstata13", "foreign", "readxl", "writexl",
-                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
-                    "lubridate","exactextractr",
-                    "doParallel", "foreach", "snow", 
-                    "knitr", "kableExtra",
-                    "DataCombine", 
-                    "fixest", 
-                    "boot", "fwildclusterboot", "sandwich",
-                    "ggplot2", "leaflet", "tmap", "dotwhisker")
-# Install them in their project-specific versions
-renv::restore(packages = neededPackages)
+neededPackages <- c("data.table", "plyr", "tidyr", "dplyr", "writexl",
+                    "here",
+                    "raster", "rgdal", "sp", "sf")
 
 # Load them 
 lapply(neededPackages, library, character.only = TRUE)
-
-# /!\/!\ IF renv::restore(neededPackages) FAILS TO INSTALL SOME PACKAGES /!\/!\ 
-
-# For instance sf could cause trouble https://github.com/r-spatial/sf/issues/921 
-# or magick, as a dependency of raster and rgdal. 
-
-# FOLLOW THESE STEPS:
-# 1. Remove these package names from neededPackages above, and rerun renv::restore(packages = neededPackages)
-# 2. Write them in troublePackages below, uncomment, and run the following code chunk: 
-
-# # /!\ THIS BREAKS THE PROJECT REPRODUCIBILITY GUARANTY /!\
-# troublePackages <- c("")
-# # Attempt to load packages from user's default libraries. 
-# lapply(troublePackages, library, lib.loc = default_libraries, character.only = TRUE)
-
-# 3. If the troubling packages could not be loaded ("there is no package called ‘’") 
-#   you should try to install them, preferably in their versions stated in the renv.lock file. 
-#   see in particular https://rstudio.github.io/renv/articles/renv.html 
 
 
 ### Raster global options
 rasterOptions(timer = TRUE, 
               progress = "text")
 
-### GLOBAL CRS USED ### 
-mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
-
-
-### GAEZ OBJECTS
-# in this script, GAEZ is the target raster of all aggregations / resamplings
-gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
-gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
-                         pattern = "", 
-                         full.names = FALSE)
-gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
-
-### COUNTRIES ### 
+### COUNTRIES
 countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
 length(unique(countries$COUNTRY_NA)) == nrow(countries)
 
+### TMF DATA
+# TMF deforestation data is in 9 stacks: 3 continents * 3 drivers (plantation, flood, agri), and each stack has 1990-2020 layers. 
+# Preparation in GEE, at: https://code.earthengine.google.com/
 
-### TMF DATA ###
-# So out of GEE, TMF data is in 9 stacks, 3 continents * 3 drivers (plantation, flood, agri), and each stack has 1990-2020 layers. 
+# TMF extent is in 3 stacks (for each continent), each with 1990-2020 layers.
+# Preparation in GEE, at: https://code.earthengine.google.com/
+
+# For all rasters: 
 # Resolution is 3km; 
 # Unit is hectares of Tropical Moist Forest (TMF) extent, or deforested and replaced with either agriculture/urbanism (agri), tree plantation (plantation), or water (flood)
 # there are no NAs. 
 
 
-### YEARS ### 
-# ---------------------------------- For this project, we need ALL years (1990-2020) --------------------------------------------------------------------
+### YEARS
+# ---------------------------------- Here, need ALL years (1990-2020) --------------------------------------------------------------------
 t0 <- 1990
 tT <- 2020
 wanted_TMF_layers <- paste0("Dec",c(t0:tT))
@@ -95,32 +59,31 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   ### AGGREGATE AND alignE TO GAEZ RESOLUTION ####
   # Currently, the data are hectares of deforestation in 3x3km grid cells annually. 
   # We aggregate this to ~9km grid cells by adding up the hectares of deforestation
-  # This is commented out because already computed 
-  # for(type in transition_types){
-  #   # input stack 
-  #   tmf <- brick(here("input_data", "TMF", paste0("TMF_defo_",type,"_3km_",CNT,".tif")))
-  #   # plot(tmf[[15]])
-  #   # vtmf <- values(tmf[[4]])
-  #   # summary(vtmf)
-  #   
-  #   # Select only years used in this project
-  #   tmf <- tmf[[wanted_TMF_layers]]
-  #   
-  #   # define output file name
-  #   aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_",type,"_9km_",CNT,"_",t0,"_",tT,".tif"))
-  #   
-  #   # aggregate it from the 3km cells to 9km
-  #   raster::aggregate(tmf, fact = 3, # c(res(croped_gaez)[1]/res(tmf)[1], res(croped_gaez)[2]/res(tmf)[2]),
-  #                     expand = TRUE,
-  #                     fun = sum,
-  #                     na.rm = TRUE, # NA values are only in the sea. Where there is no forest loss, like in a city in Brazil, the value is 0 (see with plot())
-  #                     filename = aggr_output_name,
-  #                     # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares. 
-  #                     overwrite = TRUE)
-  #   
-  #   rm(aggr_output_name)
-  #   
-  # } # closes the loop over deforestation types
+  for(type in transition_types){
+    # input 
+    tmf <- brick(here("input_data", "TMF", paste0("TMF_defo_",type,"_3km_",CNT,".tif")))
+    # plot(tmf[[15]])
+    # vtmf <- values(tmf[[4]])
+    # summary(vtmf)
+
+    # Select only years used in this project
+    tmf <- tmf[[wanted_TMF_layers]]
+
+    # define output file name
+    aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_",type,"_9km_",CNT,"_",t0,"_",tT,".tif"))
+
+    # aggregate it from the 3km cells to 9km
+    raster::aggregate(tmf, fact = 3, # c(res(croped_gaez)[1]/res(tmf)[1], res(croped_gaez)[2]/res(tmf)[2]),
+                      expand = TRUE,
+                      fun = sum,
+                      na.rm = TRUE, # NA values are only in the sea. Where there is no forest loss, like in a city in Brazil, the value is 0 (see with plot())
+                      filename = aggr_output_name,
+                      # datatype = "INT2U", # let the data be float, as we have decimals in the amount of hectares.
+                      overwrite = TRUE)
+
+    rm(aggr_output_name)
+
+  } # closes the loop over deforestation types
   
   # output nameS of the above loop (this is a length-3 vector)
   aggregated_ouput_nameS <- here("temp_data", "processed_tmf", "tmf_aoi",  paste0("tmf_",transition_types,"_9km_",CNT,"_",t0,"_",tT,".tif"))
@@ -134,7 +97,8 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   # Select only years used in this project
   tmfext <- tmfext[[wanted_TMF_layers]]
   
-  tmfext_aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("TMF_extent_classes1-2_3km_",CNT,"_",t0,"_",tT,".tif"))
+  tmfext_aggr_output_name <- here("temp_data", "processed_tmf", "tmf_aoi", paste0("TMF_extent_classes1-2_9km_",CNT,"_",t0,"_",tT,".tif"))
+  
   # aggregate it from the 3km cells to ~9km
   raster::aggregate(tmfext, fact = 3, # c(res(croped_gaez)[1]/res(tmfext)[1], res(croped_gaez)[2]/res(tmfext)[2]),
                     expand = TRUE,
@@ -209,8 +173,8 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
                                         new.row.names = NULL)#seq(from = 1, to = nrow(ibs_msk_df)*length(years), by = 1)
   
   names(long_country_tmf_df)
-  # replace the indices from the raster::as.data.frame with actual years.
-  
+
+  # Some polishing
   years <- seq(t0, tT, 1)
   long_country_tmf_df <- mutate(long_country_tmf_df, year = years[year])
   
@@ -222,174 +186,96 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   rm(aggregated_ouput_nameS, tmfext_aggr_output_name, wide_df, long_country_tmf_df, country_tmf_df, country_tmf) 
 } # closes the loop over continents
 
-
+# stack data frames from each continent
 tropical_long_df <- bind_rows(long_df_list)
 
+# total deforestation (for any driver)
 tropical_long_df <- dplyr::mutate(tropical_long_df, tmf_deforestation = tmf_agri + tmf_plantation + tmf_flood)
 
-saveRDS(tropical_long_df, here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata")))
+# country-year obs. are duplicated across continents, due to the loop over continents.
+# (the spatial join was over the full set of countries each time) 
+# but among the 3 duplicates, it's not always the case that 2 are empty and one is full, because a country can extract values from two continent-tmf-rasters
+# Therefore, I collapse the values across continents, for every country. 
+tropical_long_df <- readRDS(here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata"))) 
 
-rm(tropical_long_df, long_df_list)
+country_tmf_final <- tropical_long_df %>% ddply(.variables = c("country_name", "year"), 
+                                                .fun = summarise, 
+                                                tmf_extent = sum(tmf_extent, na.rm = TRUE),
+                                                tmf_deforestation = sum(tmf_deforestation, na.rm = TRUE),
+                                                tmf_agri = sum(tmf_agri, na.rm = TRUE),
+                                                tmf_plantation = sum(tmf_plantation, na.rm = TRUE),
+                                                tmf_flood = sum(tmf_flood, na.rm = TRUE))
+# check it's a balanced panel 
+length(unique(country_tmf_final$country_name))*length(unique(country_tmf_final$year)) == nrow(country_tmf_final)
+
+# remove also countries that are completely outside of the tropical belt, and thus completely empty of information 
+anyNA(country_tmf_final)
+
+empty <- country_tmf_final %>% 
+                            ddply(.variables = c("country_name"), 
+                                  .fun = summarise, 
+                                  empty = if_else(sum(tmf_extent)==0, 1, 0))
+
+country_tmf_final <- left_join(country_tmf_final, empty, "country_name")
+country_tmf_final <- dplyr::filter(country_tmf_final, empty == 0)
+country_tmf_final <- dplyr::select(country_tmf_final, -empty)
+
+# check it's still a balanced panel 
+length(unique(country_tmf_final$country_name))*length(unique(country_tmf_final$year)) == nrow(country_tmf_final)
+
+saveRDS(country_tmf_final, here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata")))
+
+write_xlsx(country_tmf_final, here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".xlsx")))
+
+
+country_tmf_final <- readRDS(here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata")))
 
 
 
+### Some checks against statistics in Vancutsem Science article, at continental level #### 
 
+# Deforestation, including after degradation, but excluding followed by regrowth
 
-
-
-
-# some checks against statistics in Vancutsem Science article
-names(long_country_tmf_df)
-long_country_tmf_df <- dplyr::mutate(long_country_tmf_df, tmf_deforestation = tmf_agri + tmf_plantation + tmf_flood)
-sum(long_country_tmf_df$tmf_deforestation, na.rm = T) / 1e6  # matches the 88.7 Mha deforested across the continent over 1990-2020 in Vancutsem et al. 2021 (Science), Tab. 10 first column 
-dplyr::filter(long_country_tmf_df, year == 1990) %>% dplyr::select(tmf_extent) %>% sum(na.rm = T) / 1e6  # 716.5 Mha, so a bit more than the 705.1 Mha in Vancutsem et al. Tab. 2. This is because we count regrowth here in tmf extent currently, while they don't. 
-
-
-# In Tab. 10, they report 39.6, 88.7, and 60.9 Mha deforestation over 1990-2020, in Africa, America and Asia resp.
-# (excluding regrowth, but including prior degradation)
-country_avges %>% filter(continent_name=="Africa") %>% dplyr::select(deforestation) %>% sum()
-country_avges %>% filter(continent_name=="America") %>% dplyr::select(deforestation) %>% sum()
-country_avges %>% filter(continent_name=="Asia") %>% dplyr::select(deforestation) %>% sum()
-# here, we obtain 33.8, 83.4, and 56 Mha respectively
-
-# Using aggregated and resampled rasters instead 
-# Resampled raster: 83.4 Mha too 
-agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_agri_America_1990_2020.tif")))
-plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_plantation_America_1990_2020.tif")))
-flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_flood_America_1990_2020.tif")))
+# America
+agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_agri_9km_America_1990_2020.tif")))
+plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_plantation_9km_America_1990_2020.tif")))
+flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_flood_9km_America_1990_2020.tif")))
 any <- overlay(stack(agri, plantation, flood), 
                fun = sum)
 vany <- values(any)
-sum(vany)/1e6
+sum(vany)/1e6 # = 88.5
+# pretty well matches the 88.7 Mha deforested in Latin America over 1990-2020 in Vancutsem et al. 2021 (Science), Tab. 10 first column 
 
-# Aggregated raster: 88.47 Mha, so very very similar to Vancutsem et al. 
-agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_agri_America_1990_2020.tif")))
-plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_plantation_America_1990_2020.tif")))
-flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_flood_America_1990_2020.tif")))
+# Asia
+agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_agri_9km_Asia_1990_2020.tif")))
+plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_plantation_9km_Asia_1990_2020.tif")))
+flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_flood_9km_Asia_1990_2020.tif")))
 any <- overlay(stack(agri, plantation, flood), 
                fun = sum)
 vany <- values(any)
-sum(vany)/1e6
+sum(vany)/1e6 # = 59.8
+# pretty well matches the 60.9 Mha deforested in Asia-Oceania over 1990-2020 in Vancutsem et al. 2021 (Science), Tab. 10 first column 
 
-# So the difference comes from the resampling. 
+# TMF, undisturbed and degraded, America in 1990
+tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("TMF_extent_classes1-2_9km_America_1990_2020.tif")))
+tmfext90 <- tmfext[[1]]
+vtmfext90 <- values(tmfext90)
+sum(vtmfext90)/1e6
+# 719 Mha, so a bit more than the 705.1 Mha in Vancutsem et al. Tab. 2. 
+# Maybe they removed some regions from what they call "Latin America", like French Guyane for instance
 
-# resampling with bilinear: 83.3
-croped_gaez <- crop(gaez, ext_list[["America"]])
-bilany <- resample(any, croped_gaez, method = "bilinear")
-sum(values(bilany))/1e6
+# TMF, undisturbed and degraded, Africa in 1990
+tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("TMF_extent_classes1-2_9km_Africa_1990_2020.tif")))
+tmfext90 <- tmfext[[1]]
+vtmfext90 <- values(tmfext90)
+sum(vtmfext90)/1e6
+# 280 Mha, so a bit more than the 273 Mha in Vancutsem et al. Tab. 2. 
 
-# and ngb (what we used, but layer by layer) : 83.4
-ngbany <- resample(any, croped_gaez, method = "ngb")
-sum(values(ngbany))/1e6
-
-# so it's really just a matter of resampling, not the method used, or what is done before; 
-# try project raster instead of resample: same results. 
-ngbany <- projectRaster(any, croped_gaez, method = "bilinear")
-sum(values(ngbany))/1e6
-
-# trying different resampling from terra: does not help. 
-any <- terra::rast(any)
-croped_gaez <- terra::rast(croped_gaez)
-terra::resample(any, croped_gaez, method = "near") %>% values() %>% sum()/1e6 # same as raster::resample
-terra::resample(any, croped_gaez, method = "bilinear") %>% values() %>% sum()/1e6 # same as raster::resample
-terra::resample(any, croped_gaez, method = "cubic") %>% values() %>% sum()/1e6 # 83.279
-terra::resample(any, croped_gaez, method = "cubicspline") %>% values() %>% sum()/1e6 # 83.278
-terra::resample(any, croped_gaez, method = "lanczos") %>% values() %>% sum()/1e6 # 83.281
+# TMF, undisturbed and degraded, Asia in 1990
+tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("TMF_extent_classes1-2_9km_Asia_1990_2020.tif")))
+tmfext90 <- tmfext[[1]]
+vtmfext90 <- values(tmfext90)
+sum(vtmfext90)/1e6
+# 322 Mha, so a bit more than the 311 Mha in Vancutsem et al. Tab. 2. 
 
 
-
-
-# TMF EXTENT 
-# In Tab. 2, they report 273.4, 705.1, 311,1 Mha TMF (undisturbed and degraded) in 1990 in Africa, America and ASia resp. 
-# They do not count regrowth, while I incude it. However, in 1990 this is not observed in their data anyways. 
-# Since we masked places where no deforestation ever occured, we should not use the final data frame to make such comparisons. 
-# Resampled raster: 677.07 Mha
-am_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_America_1990_2020.tif")))
-am_tmf90 <- values(am_tmfext[[1]])
-sum(am_tmf90)/1e6
-# Aggregated raster: 719.6 Mha
-am_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmfext_America_1990_2020.tif")))
-am_tmf90 <- values(am_tmfext[[1]])
-sum(am_tmf90)/1e6
-
-# with bilinear resampling, very similar sum: 677.29
-croped_gaez <- crop(gaez, ext_list[["America"]])
-aggr <- am_tmfext[[1]]
-resamp_bil <- resample(aggr, croped_gaez, method = "bilinear") 
-sum(values(resamp_bil))/1e6
-
-# Resampled Africa: 263.3 Mha
-af_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_Africa_1990_2020.tif")))
-af_tmf90 <- values(af_tmfext[[1]])
-sum(af_tmf90)/1e6
-
-# Resampled Asia: 303.4 Mha
-as_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_Asia_1990_2020.tif")))
-as_tmf90 <- values(as_tmfext[[1]])
-sum(as_tmf90)/1e6
-
-
-
-# Old tests --------------
-
-# they report 238.7, 616.4 and 244.1 Mha of TMF (undisturbed and degraded) in 2015 in Africa, Latin America, and Asia-Oceania resp. 
-country_avges %>% filter(continent_name=="Africa" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
-country_avges %>% filter(continent_name=="America" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
-country_avges %>% filter(continent_name=="Asia" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
-
-head(country_avges)
-brazil <- dplyr::filter(country_avges, country_name == "Brazil" & year > 2000)
-indonesia <- dplyr::filter(country_avges, country_name == "Indonesia" & year > 2000)
-
-
-plot(x = brazil$year, y = brazil$deforestation)
-plot(x = indonesia$year, y = indonesia$deforestation)
-plot(x = brazil$year, y = brazil$tmf_extent)
-plot(x = indonesia$year, y = indonesia$tmf_extent)
-
-# Compare with FIg. 3 in Vancutsem et al. 2021 Science. Indonesian panel
-# The present measure of deforestation is to be compare with the sum of 
-# - direct defo not followed by regrowth
-# - conversion to plantations
-# - conversion to water
-# - defor after degradatation not followed by regrowth (i.e. degradation -> no regrowth -> defor)
-# defor after degradation followed by regrowth (i.e. i.e. degradation -> regrowth -> defor)
-# degradation before defor
-
-
-America <- dplyr::filter(country_avges, continent_name == "America" & year > 1994)
-Asia <- dplyr::filter(country_avges, continent_name == "Asia" & year > 1994)
-America <- ddply(America, "year", summarise, 
-                 deforestation = sum(deforestation))
-Asia <- ddply(Asia, "year", summarise, 
-              deforestation = sum(deforestation))
-plot(x = America$year, y = America$deforestation)
-plot(x = Asia$year, y = Asia$deforestation)
-
-
-# compare with Table 11
-brazil[brazil$year > 2000 & brazil$year<2013,"deforestation"] %>% mean()
-America[America$year > 2000 & America$year<2013,"deforestation"] %>% mean()
-America[America$year > 2000 & America$year<2020,"deforestation"] %>% mean()
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  ### ### ### ### ### ### ### ### ### ### ### 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  ### ### ### ### ### ### ### ### ### ### ### 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  ### ### ### ### ### ### ### ### ### ### ### 
-### TMF AOI ### 
-# The procedure adopted in this script currently is to make all preparation by continental area of interest 
-
-ext_am <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_America.tif"))%>% extent()
-ext_af <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_Africa.tif"))%>% extent()
-ext_as <- stack(here("input_data", "TMF", "TMF_defo_agri_3km_Asia.tif"))%>% extent()
-
-ext_list <- list(America = ext_am, 
-                 Africa = ext_af, 
-                 Asia = ext_as)
-ext_list
-
-# the smallest xmin (most western point) is that of America
-# the highest xmax (most eastern point) is that of Asia
-# the smallest ymin (most southern point) is the same for all (~ -30°)
-# the highest ymax (most northern point) is the same for all (~ 30°)
-# tmf_aoi <- extent(ext_am[1], ext_as[2], ext_af[3], ext_af[4])
-# this is not the same AOI as tropical_aoi used in other scripts. 
