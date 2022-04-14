@@ -499,62 +499,77 @@ rm(df)
 
 
 ## Prepare bigger square grids
-# for ~45km grid cells (5 times larger grid cells in both dimensions, hence 25 times larger)
-bigger_25 <- aggregate(gaez, fact = 5, expand = TRUE, fun = sum)
-bigger_25_stars <- st_as_stars(bigger_25)
-bigger_25_sf <- st_as_sf(bigger_25_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
-
-bigger_25_sf$grid_id_25 <- seq(from = 1, to = nrow(bigger_25_sf))
-bigger_25_sf <- bigger_25_sf[,c("grid_id_25", "geometry")]
-
-# repeat for ~90km grid cells (10 times larger grid cells in both dimensions, hence 100 times larger)
-bigger_100 <- aggregate(gaez, fact = 10, expand = TRUE, fun = sum)
-bigger_100_stars <- st_as_stars(bigger_100)
-bigger_100_sf <- st_as_sf(bigger_100_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
-
-bigger_100_sf$grid_id_100 <- seq(from = 1, to = nrow(bigger_100_sf))
-bigger_100_sf <- bigger_100_sf[,c("grid_id_100", "geometry")]
-
-# repeat for ~180km grid cells (20 times larger grid cells in both dimensions, hence 400 times larger)
-bigger_400 <- aggregate(gaez, fact = 20, expand = TRUE, fun = sum)
-bigger_400_stars <- st_as_stars(bigger_400)
-bigger_400_sf <- st_as_sf(bigger_400_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
-
-bigger_400_sf$grid_id_400 <- seq(from = 1, to = nrow(bigger_400_sf))
-bigger_400_sf <- bigger_400_sf[,c("grid_id_400", "geometry")]
-
-# DO NOT TRANSFORM, because it makes the inner_join associate two bigger squares for each smaller one, 
-# I don't really know why, but it does not do so with geographic coordinates, and there is no mismatch, and no problem of imprecision due to 
-# geographic coordinates being used as planer because aoi is not near the pole. 
-# df_cs <- st_transform(df_cs, crs = mercator_world_crs)
-# bigger_50km_sf <- st_transform(bigger_50km_sf, crs = mercator_world_crs)
-# bigger_100km_sf <- st_transform(bigger_100km_sf, crs = mercator_world_crs)
-
-# join the variables
-df_cs <- st_join(x = df_cs,
-                  y = bigger_25_sf,
-                  join = st_within,
-                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
-                  left = FALSE)# performs inner join so returns only records that spatially match.
-
-df_cs <- st_join(x = df_cs,
-                  y = bigger_100_sf,
-                  join = st_within,
-                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
-                  left = FALSE)# performs inner join so returns only records that spatially match.
-
-df_cs <- st_join(x = df_cs,
-                  y = bigger_400_sf,
-                  join = st_within,
-                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
-                  left = FALSE)# performs inner join so returns only records that spatially match.
+# They are based on the resolution of the raster that has been converted to data frame.  
+# Available only by continent here 
+for(CNT in c("America", "Africa", "Asia")){
+  grid_base <- raster(here("temp_data", "merged_datasets", "tmf_aoi", paste0("anytype_masked_stack_",CNT,"_",t0,"_",tT,".tif")))
+  
+  # for ~45km grid cells (5 times larger grid cells in both dimensions, hence 25 times larger)
+  bigger_5 <- aggregate(grid_base, fact = 5, expand = TRUE, fun = sum)
+  bigger_5_stars <- st_as_stars(bigger_5)
+  bigger_5_sf <- st_as_sf(bigger_5_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+  
+  # Make the grid cell index. It is continent-specific, otherwise it won't be unique across continents. 
+  bigger_5_sf$grid_id_5 <- paste0(CNT, "_", seq(from = 1, to = nrow(bigger_5_sf)))
+  bigger_5_sf <- bigger_5_sf[,c("grid_id_5", "geometry")]
+  
+  # repeat for ~90km grid cells (10 times larger grid cells in both dimensions, hence 10 times larger)
+  bigger_10 <- aggregate(grid_base, fact = 10, expand = TRUE, fun = sum)
+  bigger_10_stars <- st_as_stars(bigger_10)
+  bigger_10_sf <- st_as_sf(bigger_10_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+  
+  # Make the grid cell index. It is continent-specific, otherwise it won't be unique across continents. 
+  bigger_10_sf$grid_id_10 <- paste0(CNT, "_", seq(from = 1, to = nrow(bigger_10_sf)))
+  bigger_10_sf <- bigger_10_sf[,c("grid_id_10", "geometry")]
+  
+  # repeat for ~180km grid cells (20 times larger grid cells in both dimensions, hence 20 times larger)
+  bigger_20 <- aggregate(grid_base, fact = 20, expand = TRUE, fun = sum)
+  bigger_20_stars <- st_as_stars(bigger_20)
+  bigger_20_sf <- st_as_sf(bigger_20_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+  
+  # Make the grid cell index. It is continent-specific, otherwise it won't be unique across continents. 
+  bigger_20_sf$grid_id_20 <- paste0(CNT, "_", seq(from = 1, to = nrow(bigger_20_sf)))
+  bigger_20_sf <- bigger_20_sf[,c("grid_id_20", "geometry")]
+  
+  # DO NOT TRANSFORM, because it makes the inner_join associate two bigger squares for each smaller one, 
+  # I don't really know why, but it does not do so with geographic coordinates, and there is no mismatch, and no problem of imprecision due to 
+  # geographic coordinates being used as planer because aoi is not near the pole. 
+  # df_cs <- st_transform(df_cs, crs = mercator_world_crs)
+  # bigger_50km_sf <- st_transform(bigger_50km_sf, crs = mercator_world_crs)
+  # bigger_100km_sf <- st_transform(bigger_100km_sf, crs = mercator_world_crs)
+  
+  # join the variables
+  df_cs <- st_join(x = df_cs,
+                    y = bigger_5_sf,
+                    join = st_within,
+                    prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
+                    left = TRUE)
+  
+  df_cs <- st_join(x = df_cs,
+                    y = bigger_10_sf,
+                    join = st_within,
+                    prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
+                    left = TRUE)
+  
+  df_cs <- st_join(x = df_cs,
+                    y = bigger_20_sf,
+                    join = st_within,
+                    prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
+                    left = TRUE)
+}
+# left = FALSE  performs inner join so returns only records that spatially match.
 
 df_cs <- st_drop_geometry(df_cs)
 
-length(unique(df_cs$grid_id)) == nrow(df_cs)
+df_cs[,grepl("grid_id_", names(df_cs))] <- sapply(df_cs[,grepl("grid_id_", names(df_cs))], function(x) {if_else(is.na(x), "", x)})
+
+# use max, as paste0 does not work...
+df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(grid_id_5 = max(c_across(cols = starts_with("grid_id_5"))),
+                                                      grid_id_1O = max(c_across(cols = starts_with("grid_id_10"))),
+                                                      grid_id_20 = max(c_across(cols = starts_with("grid_id_20")))) %>% as.data.frame()
 
 # Keep only new variable and id
-df_cs <- df_cs[,c("grid_id", "grid_id_25", "grid_id_100", "grid_id_400")]
+df_cs <- df_cs[,c("grid_id", "grid_id_5", "grid_id_10", "grid_id_20")]
 
 saveRDS(df_cs, here("temp_data", "merged_datasets", "tmf_aoi", "tmf_pantrop_cs_biggercells.Rdata"))
 
@@ -940,6 +955,9 @@ rm(df_cs, prices, price_avg, mapmat)
 # Base dataset (including outcome variable(s))
 df_base <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi",  paste0("tmf_aeay_pantrop_long_",t0,"_",tT,".Rdata")))
 
+# Remove unprocesed gaez variables, for memory purpose
+df_base <- dplyr::select(df_base,-all_of(gaez_crops))
+
 ## COUNTRY
 df_country <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", "tmf_pantrop_cs_country_nf.Rdata"))
 
@@ -957,9 +975,9 @@ final <- left_join(final, df_biggercells, by = "grid_id")
 rm(df_biggercells)
 
 # Create bigger cell-year identifier
-final <- mutate(final, grid_id_25_year = paste0(grid_id_25, "_", year))
-final <- mutate(final, grid_id_100_year = paste0(grid_id_100, "_", year))
-final <- mutate(final, grid_id_400_year = paste0(grid_id_400, "_", year))
+final <- mutate(final, grid_id_5_year = paste0(grid_id_5, "_", year))
+final <- mutate(final, grid_id_10_year = paste0(grid_id_10, "_", year))
+final <- mutate(final, grid_id_20_year = paste0(grid_id_20, "_", year))
 # length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
 
 ## EAEAR
