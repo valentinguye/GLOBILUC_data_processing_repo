@@ -989,177 +989,178 @@ rm(df_stdeaear)
 
 saveRDS(final, here("temp_data", "merged_datasets", "tmf_aoi", paste0("tmf_aeay_pantrop_long_final_",t0,"_",tT,".Rdata")))
 
-
-
-
-#### COUNTRY ANNUAL AVERAGES #### 
-final <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", paste0("tmf_aeay_pantrop_long_final_",t0,"_",tT,".Rdata")))
-
-country_final <- dplyr::select(final, year, continent_name, country_name, country_year, tmf_agri, tmf_plantation, tmf_flood, tmf_ext)
 rm(final)
-country_avges <- ddply(country_final, "country_year", summarise, 
-                       agriurba_defo = sum(tmf_agri, na.rm = TRUE),
-                       plantation_defo = sum(tmf_plantation, na.rm = TRUE),
-                       flood_defo = sum(tmf_flood, na.rm = TRUE),
-                       tmf_extent = sum(tmf_ext, na.rm = TRUE), 
-                       .progress = "text")
-
-country_year_final <- country_final[!duplicated(country_final$country_year),] 
-
-country_avges <- inner_join(country_avges, country_year_final[,c("year", "continent_name", "country_name", "country_year")], by = "country_year")
-
-country_avges <- dplyr::mutate(country_avges, deforestation = agriurba_defo + plantation_defo + flood_defo)
-country_avges <- dplyr::mutate(country_avges, deforestation = deforestation/1e6)
-country_avges <- dplyr::mutate(country_avges, tmf_extent = tmf_extent/1e6)
 
 
 
-# some checks against statistics in Vancutsem Science article
-# In Tab. 10, they report 39.6, 88.7, and 60.9 Mha deforestation over 1990-2020, in Africa, America and Asia resp.
-# (excluding regrowth, but including prior degradation)
-country_avges %>% filter(continent_name=="Africa") %>% dplyr::select(deforestation) %>% sum()
-country_avges %>% filter(continent_name=="America") %>% dplyr::select(deforestation) %>% sum()
-country_avges %>% filter(continent_name=="Asia") %>% dplyr::select(deforestation) %>% sum()
-# here, we obtain 33.8, 83.4, and 56 Mha respectively
-
-# Using aggregated and resampled rasters instead 
-# Aggregated by fact = 3: 
-# America: 88.4 Mha 
-agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_agri_9km_America_1990_2020.tif")))
-plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_plantation_9km_America_1990_2020.tif")))
-flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_flood_9km_America_1990_2020.tif")))
-any <- overlay(stack(agri, plantation, flood), 
-               fun = sum)
-vany <- values(any)
-sum(vany)/1e6
-
-# Asia : 59.8
-agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_agri_9km_Asia_1990_2020.tif")))
-plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_plantation_9km_Asia_1990_2020.tif")))
-flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_flood_9km_Asia_1990_2020.tif")))
-any <- overlay(stack(agri, plantation, flood), 
-               fun = sum)
-vany <- values(any)
-sum(vany)/1e6
-
-# Resampled raster: 83.4 Mha too 
-agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_agri_America_1990_2020.tif")))
-plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_plantation_America_1990_2020.tif")))
-flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_flood_America_1990_2020.tif")))
-any <- overlay(stack(agri, plantation, flood), 
-               fun = sum)
-vany <- values(any)
-sum(vany)/1e6
-
-# Aggregated raster: 88.47 Mha, so very very similar to Vancutsem et al. 
-agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_agri_America_1990_2020.tif")))
-plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_plantation_America_1990_2020.tif")))
-flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_flood_America_1990_2020.tif")))
-any <- overlay(stack(agri, plantation, flood), 
-               fun = sum)
-vany <- values(any)
-sum(vany)/1e6
-
-# So the difference comes from the resampling. 
-
-# resampling with bilinear: 83.3
-croped_gaez <- crop(gaez, ext_list[["America"]])
-bilany <- resample(any, croped_gaez, method = "bilinear")
-sum(values(bilany))/1e6
-
-# and ngb (what we used, but layer by layer) : 83.4
-ngbany <- resample(any, croped_gaez, method = "ngb")
-sum(values(ngbany))/1e6
-
-# so it's really just a matter of resampling, not the method used, or what is done before; 
-# try project raster instead of resample: same results. 
-ngbany <- projectRaster(any, croped_gaez, method = "bilinear")
-sum(values(ngbany))/1e6
-
-# trying different resampling from terra: does not help. 
-any <- terra::rast(any)
-croped_gaez <- terra::rast(croped_gaez)
-terra::resample(any, croped_gaez, method = "near") %>% values() %>% sum()/1e6 # same as raster::resample
-terra::resample(any, croped_gaez, method = "bilinear") %>% values() %>% sum()/1e6 # same as raster::resample
-terra::resample(any, croped_gaez, method = "cubic") %>% values() %>% sum()/1e6 # 83.279
-terra::resample(any, croped_gaez, method = "cubicspline") %>% values() %>% sum()/1e6 # 83.278
-terra::resample(any, croped_gaez, method = "lanczos") %>% values() %>% sum()/1e6 # 83.281
-
-
-
-
-# TMF EXTENT 
-# In Tab. 2, they report 273.4, 705.1, 311,1 Mha TMF (undisturbed and degraded) in 1990 in Africa, America and ASia resp. 
-# They do not count regrowth, while I incude it. However, in 1990 this is not observed in their data anyways. 
-# Since we masked places where no deforestation ever occured, we should not use the final data frame to make such comparisons. 
-# Resampled raster: 677.07 Mha
-am_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_America_1990_2020.tif")))
-am_tmf90 <- values(am_tmfext[[1]])
-sum(am_tmf90)/1e6
-# Aggregated raster: 719.6 Mha
-am_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmfext_America_1990_2020.tif")))
-am_tmf90 <- values(am_tmfext[[1]])
-sum(am_tmf90)/1e6
-
-# with bilinear resampling, very similar sum: 677.29
-croped_gaez <- crop(gaez, ext_list[["America"]])
-aggr <- am_tmfext[[1]]
-resamp_bil <- resample(aggr, croped_gaez, method = "bilinear") 
-sum(values(resamp_bil))/1e6
-
-# Resampled Africa: 263.3 Mha
-af_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_Africa_1990_2020.tif")))
-af_tmf90 <- values(af_tmfext[[1]])
-sum(af_tmf90)/1e6
-
-# Resampled Asia: 303.4 Mha
-as_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_Asia_1990_2020.tif")))
-as_tmf90 <- values(as_tmfext[[1]])
-sum(as_tmf90)/1e6
-
-
-
-# Old tests --------------
-
-# they report 238.7, 616.4 and 244.1 Mha of TMF (undisturbed and degraded) in 2015 in Africa, Latin America, and Asia-Oceania resp. 
-country_avges %>% filter(continent_name=="Africa" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
-country_avges %>% filter(continent_name=="America" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
-country_avges %>% filter(continent_name=="Asia" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
-    
-head(country_avges)
-brazil <- dplyr::filter(country_avges, country_name == "Brazil" & year > 2000)
-indonesia <- dplyr::filter(country_avges, country_name == "Indonesia" & year > 2000)
-
-
-plot(x = brazil$year, y = brazil$deforestation)
-plot(x = indonesia$year, y = indonesia$deforestation)
-plot(x = brazil$year, y = brazil$tmf_extent)
-plot(x = indonesia$year, y = indonesia$tmf_extent)
-
-# Compare with FIg. 3 in Vancutsem et al. 2021 Science. Indonesian panel
-# The present measure of deforestation is to be compare with the sum of 
-# - direct defo not followed by regrowth
-# - conversion to plantations
-# - conversion to water
-# - defor after degradatation not followed by regrowth (i.e. degradation -> no regrowth -> defor)
-# defor after degradation followed by regrowth (i.e. i.e. degradation -> regrowth -> defor)
-# degradation before defor
-
-
-America <- dplyr::filter(country_avges, continent_name == "America" & year > 1994)
-Asia <- dplyr::filter(country_avges, continent_name == "Asia" & year > 1994)
-America <- ddply(America, "year", summarise, 
-                 deforestation = sum(deforestation))
-Asia <- ddply(Asia, "year", summarise, 
-                 deforestation = sum(deforestation))
-plot(x = America$year, y = America$deforestation)
-plot(x = Asia$year, y = Asia$deforestation)
-
-
-# compare with Table 11
-brazil[brazil$year > 2000 & brazil$year<2013,"deforestation"] %>% mean()
-America[America$year > 2000 & America$year<2013,"deforestation"] %>% mean()
-America[America$year > 2000 & America$year<2020,"deforestation"] %>% mean()
+# #### COUNTRY ANNUAL AVERAGES #### 
+# final <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", paste0("tmf_aeay_pantrop_long_final_",t0,"_",tT,".Rdata")))
+# 
+# country_final <- dplyr::select(final, year, continent_name, country_name, country_year, tmf_agri, tmf_plantation, tmf_flood, tmf_ext)
+# rm(final)
+# country_avges <- ddply(country_final, "country_year", summarise, 
+#                        agriurba_defo = sum(tmf_agri, na.rm = TRUE),
+#                        plantation_defo = sum(tmf_plantation, na.rm = TRUE),
+#                        flood_defo = sum(tmf_flood, na.rm = TRUE),
+#                        tmf_extent = sum(tmf_ext, na.rm = TRUE), 
+#                        .progress = "text")
+# 
+# country_year_final <- country_final[!duplicated(country_final$country_year),] 
+# 
+# country_avges <- inner_join(country_avges, country_year_final[,c("year", "continent_name", "country_name", "country_year")], by = "country_year")
+# 
+# country_avges <- dplyr::mutate(country_avges, deforestation = agriurba_defo + plantation_defo + flood_defo)
+# country_avges <- dplyr::mutate(country_avges, deforestation = deforestation/1e6)
+# country_avges <- dplyr::mutate(country_avges, tmf_extent = tmf_extent/1e6)
+# 
+# 
+# 
+# # some checks against statistics in Vancutsem Science article
+# # In Tab. 10, they report 39.6, 88.7, and 60.9 Mha deforestation over 1990-2020, in Africa, America and Asia resp.
+# # (excluding regrowth, but including prior degradation)
+# country_avges %>% filter(continent_name=="Africa") %>% dplyr::select(deforestation) %>% sum()
+# country_avges %>% filter(continent_name=="America") %>% dplyr::select(deforestation) %>% sum()
+# country_avges %>% filter(continent_name=="Asia") %>% dplyr::select(deforestation) %>% sum()
+# # here, we obtain 33.8, 83.4, and 56 Mha respectively
+# 
+# # Using aggregated and resampled rasters instead 
+# # Aggregated by fact = 3: 
+# # America: 88.4 Mha 
+# agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_agri_9km_America_1990_2020.tif")))
+# plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_plantation_9km_America_1990_2020.tif")))
+# flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_flood_9km_America_1990_2020.tif")))
+# any <- overlay(stack(agri, plantation, flood), 
+#                fun = sum)
+# vany <- values(any)
+# sum(vany)/1e6
+# 
+# # Asia : 59.8
+# agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_agri_9km_Asia_1990_2020.tif")))
+# plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_plantation_9km_Asia_1990_2020.tif")))
+# flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("tmf_flood_9km_Asia_1990_2020.tif")))
+# any <- overlay(stack(agri, plantation, flood), 
+#                fun = sum)
+# vany <- values(any)
+# sum(vany)/1e6
+# 
+# # Resampled raster: 83.4 Mha too 
+# agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_agri_America_1990_2020.tif")))
+# plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_plantation_America_1990_2020.tif")))
+# flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmf_flood_America_1990_2020.tif")))
+# any <- overlay(stack(agri, plantation, flood), 
+#                fun = sum)
+# vany <- values(any)
+# sum(vany)/1e6
+# 
+# # Aggregated raster: 88.47 Mha, so very very similar to Vancutsem et al. 
+# agri <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_agri_America_1990_2020.tif")))
+# plantation <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_plantation_America_1990_2020.tif")))
+# flood <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmf_flood_America_1990_2020.tif")))
+# any <- overlay(stack(agri, plantation, flood), 
+#                fun = sum)
+# vany <- values(any)
+# sum(vany)/1e6
+# 
+# # So the difference comes from the resampling. 
+# 
+# # resampling with bilinear: 83.3
+# croped_gaez <- crop(gaez, ext_list[["America"]])
+# bilany <- resample(any, croped_gaez, method = "bilinear")
+# sum(values(bilany))/1e6
+# 
+# # and ngb (what we used, but layer by layer) : 83.4
+# ngbany <- resample(any, croped_gaez, method = "ngb")
+# sum(values(ngbany))/1e6
+# 
+# # so it's really just a matter of resampling, not the method used, or what is done before; 
+# # try project raster instead of resample: same results. 
+# ngbany <- projectRaster(any, croped_gaez, method = "bilinear")
+# sum(values(ngbany))/1e6
+# 
+# # trying different resampling from terra: does not help. 
+# any <- terra::rast(any)
+# croped_gaez <- terra::rast(croped_gaez)
+# terra::resample(any, croped_gaez, method = "near") %>% values() %>% sum()/1e6 # same as raster::resample
+# terra::resample(any, croped_gaez, method = "bilinear") %>% values() %>% sum()/1e6 # same as raster::resample
+# terra::resample(any, croped_gaez, method = "cubic") %>% values() %>% sum()/1e6 # 83.279
+# terra::resample(any, croped_gaez, method = "cubicspline") %>% values() %>% sum()/1e6 # 83.278
+# terra::resample(any, croped_gaez, method = "lanczos") %>% values() %>% sum()/1e6 # 83.281
+# 
+# 
+# 
+# 
+# # TMF EXTENT 
+# # In Tab. 2, they report 273.4, 705.1, 311,1 Mha TMF (undisturbed and degraded) in 1990 in Africa, America and ASia resp. 
+# # They do not count regrowth, while I incude it. However, in 1990 this is not observed in their data anyways. 
+# # Since we masked places where no deforestation ever occured, we should not use the final data frame to make such comparisons. 
+# # Resampled raster: 677.07 Mha
+# am_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_America_1990_2020.tif")))
+# am_tmf90 <- values(am_tmfext[[1]])
+# sum(am_tmf90)/1e6
+# # Aggregated raster: 719.6 Mha
+# am_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("aggrgaez_tmfext_America_1990_2020.tif")))
+# am_tmf90 <- values(am_tmfext[[1]])
+# sum(am_tmf90)/1e6
+# 
+# # with bilinear resampling, very similar sum: 677.29
+# croped_gaez <- crop(gaez, ext_list[["America"]])
+# aggr <- am_tmfext[[1]]
+# resamp_bil <- resample(aggr, croped_gaez, method = "bilinear") 
+# sum(values(resamp_bil))/1e6
+# 
+# # Resampled Africa: 263.3 Mha
+# af_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_Africa_1990_2020.tif")))
+# af_tmf90 <- values(af_tmfext[[1]])
+# sum(af_tmf90)/1e6
+# 
+# # Resampled Asia: 303.4 Mha
+# as_tmfext <- brick( here("temp_data", "processed_tmf", "tmf_aoi", paste0("resampledgaez_tmfext_Asia_1990_2020.tif")))
+# as_tmf90 <- values(as_tmfext[[1]])
+# sum(as_tmf90)/1e6
+# 
+# 
+# 
+# # Old tests --------------
+# 
+# # they report 238.7, 616.4 and 244.1 Mha of TMF (undisturbed and degraded) in 2015 in Africa, Latin America, and Asia-Oceania resp. 
+# country_avges %>% filter(continent_name=="Africa" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
+# country_avges %>% filter(continent_name=="America" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
+# country_avges %>% filter(continent_name=="Asia" & year == 1989) %>% dplyr::select(tmf_extent) %>% sum()
+#     
+# head(country_avges)
+# brazil <- dplyr::filter(country_avges, country_name == "Brazil" & year > 2000)
+# indonesia <- dplyr::filter(country_avges, country_name == "Indonesia" & year > 2000)
+# 
+# 
+# plot(x = brazil$year, y = brazil$deforestation)
+# plot(x = indonesia$year, y = indonesia$deforestation)
+# plot(x = brazil$year, y = brazil$tmf_extent)
+# plot(x = indonesia$year, y = indonesia$tmf_extent)
+# 
+# # Compare with FIg. 3 in Vancutsem et al. 2021 Science. Indonesian panel
+# # The present measure of deforestation is to be compare with the sum of 
+# # - direct defo not followed by regrowth
+# # - conversion to plantations
+# # - conversion to water
+# # - defor after degradatation not followed by regrowth (i.e. degradation -> no regrowth -> defor)
+# # defor after degradation followed by regrowth (i.e. i.e. degradation -> regrowth -> defor)
+# # degradation before defor
+# 
+# 
+# America <- dplyr::filter(country_avges, continent_name == "America" & year > 1994)
+# Asia <- dplyr::filter(country_avges, continent_name == "Asia" & year > 1994)
+# America <- ddply(America, "year", summarise, 
+#                  deforestation = sum(deforestation))
+# Asia <- ddply(Asia, "year", summarise, 
+#                  deforestation = sum(deforestation))
+# plot(x = America$year, y = America$deforestation)
+# plot(x = Asia$year, y = Asia$deforestation)
+# 
+# 
+# # compare with Table 11
+# brazil[brazil$year > 2000 & brazil$year<2013,"deforestation"] %>% mean()
+# America[America$year > 2000 & America$year<2013,"deforestation"] %>% mean()
+# America[America$year > 2000 & America$year<2020,"deforestation"] %>% mean()
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  ### ### ### ### ### ### ### ### ### ### ### 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  ### ### ### ### ### ### ### ### ### ### ### 
