@@ -356,7 +356,6 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           glm_iter = 25,
                           
                           # parameters for APE computation 
-                          CLUSTER = "reachable",#"subdistrict",
                           stddev = FALSE, # if TRUE, the PEs are computed for a one standard deviation (after removing variation in the fixed-effect dimensions)
                           rel_lu_change = 0.01, 
                           abs_lu_change = 1, 
