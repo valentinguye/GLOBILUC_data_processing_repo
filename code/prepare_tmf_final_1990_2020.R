@@ -112,7 +112,7 @@ long_df_list <- list()
 
 # type <- "agri"
 # CNT <- "America"
-transition_types <- c("agri", "plantation", "flood")
+transition_types <- c("agricommo", "plantationcommo", "flood")
 continents <- c("America", "Africa", "Asia")#  
 
 for(CNT in continents){ # the order of the loops matter for the mask making operation, see below. 
@@ -256,8 +256,8 @@ for(CNT in continents){ # the order of the loops matter for the mask making oper
   
   #### STACK RASTERS TO MERGE ####
   # Read layers to be stacked
-  agri <- brick(aggregated_ouput_nameS["agri"])
-  plantation <- brick(aggregated_ouput_nameS["plantation"])
+  agri <- brick(aggregated_ouput_nameS["agricommo"])
+  plantation <- brick(aggregated_ouput_nameS["plantationcommo"])
   flood <- brick(aggregated_ouput_nameS["flood"])
   tmfext <- brick(tmfext_aggr_output_name)
   gaez <- brick(gaez_resampled_output_name)
@@ -558,18 +558,24 @@ for(CNT in c("America", "Africa", "Asia")){
                     left = TRUE)
 }
 # left = FALSE  performs inner join so returns only records that spatially match.
-
+# df_cs1 <- df_cs
 df_cs <- st_drop_geometry(df_cs)
 
 df_cs[,grepl("grid_id_", names(df_cs))] <- sapply(df_cs[,grepl("grid_id_", names(df_cs))], function(x) {if_else(is.na(x), "", x)})
 
 # use max, as paste0 does not work...
-df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(grid_id_5 = max(c_across(cols = starts_with("grid_id_5"))),
-                                                      grid_id_1O = max(c_across(cols = starts_with("grid_id_10"))),
-                                                      grid_id_20 = max(c_across(cols = starts_with("grid_id_20")))) %>% as.data.frame()
+df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(newname_5 = max(c_across(cols = starts_with("grid_id_5"))),
+                                                      newname_10 = max(c_across(cols = starts_with("grid_id_10"))),
+                                                      newname_20 = max(c_across(cols = starts_with("grid_id_20")))) %>% as.data.frame()
 
+# head(df_cs) 
 # Keep only new variable and id
-df_cs <- df_cs[,c("grid_id", "grid_id_5", "grid_id_10", "grid_id_20")]
+df_cs <- df_cs[,c("grid_id", "newname_5", "newname_10", "newname_20")]
+names(df_cs) <- c("grid_id", "grid_id_5", "grid_id_10", "grid_id_20")
+# length(unique(df_cs$grid_id_5))
+length(unique(df_cs$grid_id_10))
+length(unique(df_cs$grid_id_20))
+
 
 saveRDS(df_cs, here("temp_data", "merged_datasets", "tmf_aoi", "tmf_pantrop_cs_biggercells.Rdata"))
 
@@ -958,12 +964,18 @@ df_base <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi",  paste0("tmf_
 # Remove unprocesed gaez variables, for memory purpose
 df_base <- dplyr::select(df_base,-all_of(gaez_crops))
 
+## EAEAR
+df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi",  "tmf_pantrop_cs_stdeaear.Rdata"))  
+
+final <- left_join(df_base, df_stdeaear, by = "grid_id") # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
+rm(df_stdeaear)
+
 ## COUNTRY
 df_country <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", "tmf_pantrop_cs_country_nf.Rdata"))
 
 # Merge them and remove to save memory 
-final <- left_join(df_base, df_country, by = "grid_id")
-rm(df_base, df_country)
+final <- left_join(final, df_country, by = "grid_id")
+rm(df_country)
 
 # Create country-year identifier
 final <- mutate(final, country_year = paste0(country_name, "_", year))
@@ -979,12 +991,6 @@ final <- mutate(final, grid_id_5_year = paste0(grid_id_5, "_", year))
 final <- mutate(final, grid_id_10_year = paste0(grid_id_10, "_", year))
 final <- mutate(final, grid_id_20_year = paste0(grid_id_20, "_", year))
 # length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
-
-## EAEAR
-df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi",  "tmf_pantrop_cs_stdeaear.Rdata"))  
-
-final <- left_join(final, df_stdeaear, by = "grid_id") # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
-rm(df_stdeaear)
 
 
 saveRDS(final, here("temp_data", "merged_datasets", "tmf_aoi", paste0("tmf_aeay_pantrop_long_final_",t0,"_",tT,".Rdata")))
