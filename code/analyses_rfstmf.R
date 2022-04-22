@@ -110,7 +110,9 @@ colnames(eaear_mapmat) <- c("Prices", "Crops")
 ### MAIN DATA SET ### 
 main_data <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", "tmf_aeay_pantrop_long_final_1990_2020.Rdata"))
 # release some memory upfront
-main_data <- dplyr::filter(main_data, year >= 2011, year <= 2019)
+main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
+
+main_data <- dplyr::mutate(main_data, tmf_deforestation = tmf_agri + tmf_plantation)
 
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_aesi_long_final.Rdata"))
 
@@ -320,6 +322,8 @@ for(CNT in c("America", "Africa", "Asia")){
   prepared_maps[[CNT]][["plan"]] <- plan_accu_pct
   prepared_maps[[CNT]][["floo"]] <- floo_accu_pct
   
+  prepared_maps[[CNT]][["defo"]] <- sum(stack(agri_accu_pct, plan_accu_pct), na.rm = TRUE)
+  
   rm(a, agri_accu, plan_accu, floo_accu, agri_accu_pct, plan_accu_pct, floo_accu_pct)
 }
 
@@ -330,9 +334,9 @@ land <- land[land$scalerank==0, c("geometry")]
 #plot(land)
 spLand <- as(land, "Spatial")
 
-am <- prepared_maps[["America"]][["plan"]]
-af <- prepared_maps[["Africa"]][["plan"]]
-as <- prepared_maps[["Asia"]][["plan"]]
+am <- prepared_maps[["America"]][["defo"]]
+af <- prepared_maps[["Africa"]][["defo"]]
+as <- prepared_maps[["Asia"]][["defo"]]
 
 #library(gridExtra)
 library(rasterVis)
@@ -396,6 +400,36 @@ tmf_agri_den <- density(main_data$tmf_deforestation)
 
 
 
+
+#### EAEAR CORRELATION MATRIX ####
+# work on the cross section
+mdcs <- main_data[!duplicated(main_data$grid_id),]
+
+cor_mat_abs <-  cor(dplyr::select(mdcs, all_of(eaear_mapmat[,"Crops"])))
+#cor_mat_std2 <-  cor(dplyr::select(si, all_of(paste0(mapmat_si[,"Crops"], "_std2"))), use = "complete.obs")
+
+cortests <- cor_mat_abs
+j_exposures <- list()
+length(j_exposures) <- length(eaear_mapmat[,"Crops"])
+names(j_exposures) <- eaear_mapmat[,"Crops"]
+
+for(serie1 in colnames(cortests)){
+  
+  for(serie2 in row.names(cortests)){
+    
+    cortests[serie1, serie2] <- cor.test(mdcs[,serie1], mdcs[,serie2], )$p.value
+  }
+  j_exposures[[serie1]] <- cor_mat_abs[cortests[serie1, ] < 0.05, serie1]
+}
+# store, for each crop, which other crop it is most correlated with
+corr_mapmat <- cbind(eaear_mapmat[,"Crops"],NA)
+colnames(corr_mapmat) <- c("Crops", "fst_corr")
+for(crop in eaear_mapmat[,"Crops"]){
+  x <- j_exposures[[crop]]
+  corr_mapmat[corr_mapmat[,"Crops"]==crop, "fst_corr"] <- names(x)[x == max(x[x<max(x)])] 
+}
+
+
 #### REGRESSION FUNCTION #### 
 
 ### TEMPORARY OBJECTS 
@@ -404,28 +438,32 @@ start_year = 2011
 end_year = 2019
 continent = "America"
 
+pre_process <- TRUE
+pre_processed_data <- pre_d_clean_agri
+
 rfs_rando <- ""
 original_rfs_treatments <- c("statute_conv")
 rfs_lead <- 3
-rfs_lag <- 3 
+rfs_lag <- 3
 rfs_fya <-  0
 rfs_pya <- 0
 aggr_dyn <- TRUE
-exposure_rfs <- "eaear_Soy_compo"
+exposure_rfs <- "eaear_Banana"
 group_exposure_rfs <- FALSE
 control_all_absolute_rfs <- TRUE
-annual_rfs_controls <- FALSE
+most_correlated_only = FALSE
+annual_rfs_controls <- TRUE
 
 control_pasture <- FALSE
 pasture_trend <- FALSE
 
 fc_trend <- FALSE
-s_trend <- TRUE
+s_trend <- FALSE
 fc_s_trend <- FALSE
 
 sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
 
-fe = "grid_id + grid_id_10" #   
+fe = "grid_id + year" #   
 preclean_level = "FE"
 distribution <- "quasipoisson"
 offset <- FALSE
@@ -445,7 +483,9 @@ rm(outcome_variable, start_year, end_year, continent,
    original_rfs_treatments, rfs_lead, rfs_lag, exposure_rfs, group_exposure_rfs, control_absolute_rfs, control_all_absolute_rfs, remaining, sjpos, fe, distribution, invhypsin, conley_cutoff, se, boot_cluster, coefs_to_aggregate, 
    output, glm_iter)
 
-make_main_reg <- function(outcome_variable = "tmf_agri", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
+make_main_reg <- function(pre_process = FALSE, 
+                          pre_processed_data = NULL,
+                          outcome_variable = "tmf_agri", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
                           start_year = 2011, 
                           end_year = 2019, 
                           continent = "all", # one of "Africa", "America", "Asia", or "all"
@@ -458,9 +498,10 @@ make_main_reg <- function(outcome_variable = "tmf_agri", # one of "nd_first_loss
                           rfs_pya = 0,
                           aggr_dyn = TRUE, # whether to report aggregate coefficients of all leads and lags ("all") or leads and lags separately ("leadlag"), or no aggregate (any other string)
                           exposure_rfs = "eaear_Soy_compo",
-                          group_exposure_rfs = FALSE, # if exposure_rfs is length 1, it does not matter whether this option is TRUE or FALSE
-                          control_all_absolute_rfs = TRUE,
-                          annual_rfs_controls = FALSE,
+                          group_exposure_rfs = FALSE, # This is deprecated, as it was relevant only when rfs exposures where standardized and could thus be added. If exposure_rfs is length 1, it does not matter whether this option is TRUE or FALSE.
+                          control_all_absolute_rfs = TRUE, # there is not really an alternative where this could be FALSE and have sense. 
+                          most_correlated_only = TRUE, # but this restricts the controls to only interactions with the most correlated crop. 
+                          annual_rfs_controls = TRUE,
                           
                           control_pasture = FALSE,
                           pasture_trend = FALSE,
@@ -471,7 +512,7 @@ make_main_reg <- function(outcome_variable = "tmf_agri", # one of "nd_first_loss
                           
                           sjpos = FALSE, # should the sample be restricted to cells where sj is positive? 
                         
-                          fe = "grid_id + grid_id_10_year", 
+                          fe = "grid_id + country_year", 
                           preclean_level = "FE", 
                           distribution = "quasipoisson",#  "quasipoisson", 
                           invhypsin = TRUE, # if distribution is gaussian, should the dep. var. be transformed to inverse hyperbolic sine?
@@ -491,7 +532,7 @@ make_main_reg <- function(outcome_variable = "tmf_agri", # one of "nd_first_loss
 ){
   
   # Define the outcome_variable based on the crop under study (if we are not in the placebo case)
-  if(exposure_rfs %in% c("eaear_Oilpalm", "eaear_Rubber") & outcome_variable != "tmf_flood"){
+  if(exposure_rfs %in% c("eaear_Oilpalm", "eaear_Rubber") & outcome_variable == "tmf_agri"){
     outcome_variable <- "tmf_plantation"
   }
   
@@ -547,19 +588,27 @@ make_main_reg <- function(outcome_variable = "tmf_agri", # one of "nd_first_loss
   
   
   #### MAKE THE VARIABLES NEEDED IN THE DATA
-  # manipulate a different data set so that original one can be provided to all functions and not read again every time. 
-  d <- main_data
   
-  # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "continent_name", # "country_name", "country_year",
-                                 # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
-                                 "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
-                                 outcome_variable, "pasture_share_2000",
-                                 unique(c(eaear_mapmat[,"Crops"], exposure_rfs))))) #sj, 
-  
-  # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", unique(c(rfs_treatments, all_rfs_treatments)))], by = c("year"))#, all_treatments
-  
+  # this options is to gain some time, when the data is always the same across crop exposure/regressions
+  if(pre_process){
+    
+    d <- pre_processed_data
+    
+    } else {
+      # manipulate a different data set so that original one can be provided to all functions and not read again every time. 
+      d <- main_data
+      
+      # Keep only in data the useful variables 
+      d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                     # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                     "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                     outcome_variable, "tmf_agri", "tmf_flood", "tmf_plantation",
+                                     "pasture_share_2000",
+                                     eaear_mapmat[,"Crops"], exposure_rfs )))) #sj, 
+      
+      # Merge only the prices needed, not the whole price dataframe
+      d <- left_join(d, prices[,c("year", unique(c(rfs_treatments, all_rfs_treatments)))], by = c("year"))#, all_treatments
+    } 
   
   if((distribution == "gaussian") & invhypsin){
     # transform dependent variable, if gaussian GLM 
@@ -597,6 +646,18 @@ make_main_reg <- function(outcome_variable = "tmf_agri", # one of "nd_first_loss
   # 1pya is the avg of current and lag1 values, which are grouped together because they reflect the same kind of mechanism. 
   if(control_all_absolute_rfs){
     all_abs <- eaear_mapmat[, "Crops"][!(eaear_mapmat[, "Crops"] %in% exposure_rfs)]
+    
+    # # if we are regressing tmf_plantation, then there is no need to control for all the crops that are not potential drivers (by construction of the product) 
+    # if(outcome_variable == "tmf_plantation"){
+    #   all_abs <- all_abs[grepl(pattern = "Rubber", all_abs) | grepl(pattern = "Oilpalm", all_abs)]
+    #   
+    #   # in this case, we control for annual effects on the other one. 
+    #   annual_rfs_controls <- TRUE
+    # }
+    
+    if(most_correlated_only){
+      all_abs <- all_abs[all_abs %in% corr_mapmat[corr_mapmat[,"Crops"]==exposure_rfs,"fst_corr"]]
+    }
     
     # add the share of pasture in grid cell in 2000 as an exposure to pastures (if the exposure of interest is not pasture)
     if(control_pasture & !grepl("Fodder", exposure_rfs)){
@@ -728,75 +789,81 @@ make_main_reg <- function(outcome_variable = "tmf_agri", # one of "nd_first_loss
   
   ### KEEP OBSERVATIONS THAT: ####
   
-  # - are suitable to crop j 
-  if(sjpos){
-    d <- dplyr::filter(d, !!as.symbol(sj) > 0)  
-  }
-  
-  # # - are in study period 
-  # if(start_year != 2011 | end_year != 2019){
-  #   d <- dplyr::filter(d, year >= start_year)
-  #   d <- dplyr::filter(d, year <= end_year)
-  # }
-  
-  # - are in study area
-  if(continent != "all"){
-    d <- dplyr::filter(d, continent_name == continent)
-  }
-  
-  # have remaining forest
-  # d <- dplyr::filter(d, remaining_fc > 0)
-  
-  # remove units with no country name (in the case of all_drivers data set currently, because nearest_feature function has not been used in this case, see add_variables.R)
-  # d <- dplyr::filter(d, !is.na(country_name))
-  
-  used_vars <- unique(c("grid_id", "year", "lat", "lon","continent_name", # "country_name",  "country_year",  # "remaining_fc", "accu_defo_since2k", # "sj_year",
-                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
-                        outcome_variable, regressors, controls, 
-                        exposure_rfs, original_rfs_treatments, rfs_treatments)) # this is necessary to reconstruct variables in randomization inference processes
-  
-  
-
-  
-  # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
-  # for instance, there are some NAs in the suitability index (places in water that we kept while processing other variables...) 
-  usable <- lapply(used_vars, FUN = function(var){is.finite(d[,var]) | is.character(d[,var])})
-  # used_vars[!(used_vars%in%names(d))]
-  names(usable) <- used_vars            
-  usable <- bind_cols(usable)
-  filter_vec <- base::rowSums(usable)
-  filter_vec <- filter_vec == length(used_vars)
-  d <- d[filter_vec, c(used_vars)]
-  if(anyNA(d)){stop()}
-  rm(filter_vec, usable)
-  
-  
-  # is.na(d$Oilpalm) 
-  
-  # experience deforestation at least once (automatically removed if distribution is quasipoisson, but not if it's gaussian. 
-  # Though we want identical samples to compare distributional assumptions, or FE specifications
-  if(preclean_level == "FE"){
-    preclean_level <- fe
-  }
-  temp_est <- feglm(fml = as.formula(paste0(outcome_variable, " ~ 1 | ", preclean_level)),
-                    data = d,
-                    family = "poisson")
-  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
-  if(length(temp_est$obs_selection)>0){
-    d_clean <- d[unlist(temp_est$obs_selection),]
-  }  else { 
+  # if pre-processed data is supplied, this does not need to be done
+  if(pre_process){
     d_clean <- d
+    rm(d)
+  } else {
+    # - are suitable to crop j 
+    if(sjpos){
+      d <- dplyr::filter(d, !!as.symbol(exposure_rfs) > 0)  
+    }
+    
+    # - are in study period
+    # if(start_year != 2011 | end_year != 2019){
+      d <- dplyr::filter(d, year >= start_year)
+      d <- dplyr::filter(d, year <= end_year)
+    # }
+    
+    # - are in study area
+    if(continent != "all"){
+      d <- dplyr::filter(d, continent_name == continent)
+    }
+    
+    # have remaining forest
+    # d <- dplyr::filter(d, remaining_fc > 0)
+    
+    # remove units with no country name (in the case of all_drivers data set currently, because nearest_feature function has not been used in this case, see add_variables.R)
+    # d <- dplyr::filter(d, !is.na(country_name))
+    
+    used_vars <- unique(c("grid_id", "year", "lat", "lon","continent_name", "country_name",  "country_year",  # "remaining_fc", "accu_defo_since2k", # "sj_year",
+                          "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                          outcome_variable, "tmf_agri", "tmf_flood", "tmf_plantation",
+                          regressors, controls, 
+                          exposure_rfs, original_rfs_treatments, rfs_treatments)) # this is necessary to reconstruct variables in randomization inference processes
+    
+    
+  
+    
+    # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
+    # for instance, there are some NAs in the suitability index (places in water that we kept while processing other variables...) 
+    usable <- lapply(used_vars, FUN = function(var){is.finite(d[,var]) | is.character(d[,var])})
+    # used_vars[!(used_vars%in%names(d))]
+    names(usable) <- used_vars            
+    usable <- bind_cols(usable)
+    filter_vec <- base::rowSums(usable)
+    filter_vec <- filter_vec == length(used_vars)
+    d <- d[filter_vec, c(used_vars)]
+    if(anyNA(d)){stop()}
+    rm(filter_vec, usable)
+    
+    
+    # is.na(d$Oilpalm) 
+    
+    # experience deforestation at least once (automatically removed if distribution is quasipoisson, but not if it's gaussian. 
+    # Though we want identical samples to compare distributional assumptions, or FE specifications
+    if(preclean_level == "FE"){
+      preclean_level <- fe
+    }
+    temp_est <- feglm(fml = as.formula(paste0(outcome_variable, " ~ 1 | ", preclean_level)),
+                      data = d,
+                      family = "poisson")
+    # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+    if(length(temp_est$obs_selection)>0){
+      d_clean <- d[unlist(temp_est$obs_selection),]
+    }  else { 
+      d_clean <- d
+    }
+    
+    # if we don't remove obs that have no remaining forest, and if we don't remove always 0 outcome obs. in previous step, d IS A BALANCED PANEL !!
+    # this is a matter only if we do beta process, with cluster bootstrap
+    # if(!nrow(d) == length(unique(d$grid_id))*length(unique(d$year))){
+    #   warning("data is not balanced")
+    # }
+    rm(d)
   }
   
-  # if we don't remove obs that have no remaining forest, and if we don't remove always 0 outcome obs. in previous step, d IS A BALANCED PANEL !!
-  # this is a matter only if we do beta process, with cluster bootstrap
-  # if(!nrow(d) == length(unique(d$grid_id))*length(unique(d$year))){
-  #   warning("data is not balanced")
-  # }
-  rm(d)
-  
-  
-  ### REGRESSIONS
+  ### REGRESSIONS ####
   
   # Store only information necessary, in a dataframe. otherwise the output of fixest estimation is large and we can't collect too many at the same time (over loops)  
   # either there are several elemnts in regressors, and then we want to aggregate them, or there is only one. 
@@ -1347,44 +1414,147 @@ make_main_reg <- function(outcome_variable = "tmf_agri", # one of "nd_first_loss
 }
 
 
-
-est_parameters <- list(outcome_variable  = "tmf_agri",
-                       sjpos = FALSE,
-                       lags = 3,
-                       leads = 3,
-                       fya = 0, 
-                       pya = 0,
-                       distribution = "quasipoisson")
-
-
-
 #### RFS CUMMULATIVE LEADS & LAGS 2011-2019 ####
 rfs_eaear_3ll_2011 <- list(all = list(), 
                            America = list(), 
                            Africa = list(), 
                            Asia = list())
 
-for(CNT in c("all", "America", "Africa", "Asia")){#, , "all", "America", "Africa", "Asia" 
+# prepare data set in advance, to repeat in all regressions
+agri_crops <- eaear_mapmat[,"Crops"][!(eaear_mapmat[,"Crops"] %in% c("eaear_Oilpalm", "eaear_Rubber"))]
+plantation_crops <- c("eaear_Oilpalm", "eaear_Rubber")
+all_rfs_treatments <- grep(pattern = "statute_conv", names(prices), value = TRUE)
+
+CNT <- "America"
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
+  
+  est_parameters <- list(outcome_variable  = "tmf_agri",
+                         continent = CNT,
+                         start_year = 2011, 
+                         end_year = 2019, 
+                         most_correlated_only = TRUE,
+                         annual_rfs_controls = TRUE,
+                         sjpos = FALSE,
+                         lags = 3,
+                         leads = 3,
+                         fya = 0, 
+                         pya = 0,
+                         fe = "grid_id + year",
+                         cluster_var1 = "grid_id_10",
+                         distribution = "quasipoisson")
+  d <- main_data
+  
+  # Keep only in data the useful variables 
+  d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                        # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                        "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
+                                        "pasture_share_2000",
+                                        eaear_mapmat[,"Crops"] ))))
+  
+  # Merge only the prices needed, not the whole price dataframe
+  d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
+  
+  # - are suitable to crop j 
+  if(est_parameters[["sjpos"]]){
+    d <- dplyr::filter(d, !!as.symbol(exposure_rfs) > 0)
+  }
+  
+  # - are in study period
+  # if(start_year != 2011 | end_year != 2019){
+  d <- dplyr::filter(d, year >= est_parameters[["start_year"]])
+  d <- dplyr::filter(d, year <= est_parameters[["end_year"]])
+  # }
+  
+  # - are in study area
+  if(continent != "all"){
+    d <- dplyr::filter(d, continent_name == est_parameters[["continent"]])
+  }
+  
+  temp_est <- feglm(fml = as.formula(paste0("tmf_agri", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  temp_est <- feglm(fml = as.formula(paste0("tmf_plantation", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_plantation <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_plantation <- d
+  }
+  
+  rm(d)
+
+  # Regressions of tmf_agri
   elm <- 1
-  for(rfs_exp in eaear_mapmat[,"Crops"]){#eaear_mapmat[,"Crops"]
-    rfs_eaear_3ll_2011[[CNT]][[elm]] <- make_main_reg(continent = CNT,
-                                                      start_year = 2011,
-                                                      end_year = 2019,
+  for(rfs_exp in agri_crops){#eaear_mapmat[,"Crops"]
+    rfs_eaear_3ll_2011[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                      pre_processed_data = pre_d_clean_agri, # NOTICE THIS
                                                       
-                                                      rfs_rando = "",
+                                                      outcome_variable = "tmf_agri", # AND THIS
+                                                      continent = est_parameters[["continent"]],
+                                                      start_year = est_parameters[["start_year"]],
+                                                      end_year = est_parameters[["end_year"]],
+                                                      
+                                                      aggr_dyn = TRUE,
+                                                      exposure_rfs = rfs_exp,
+                                                      
                                                       original_rfs_treatments = c("statute_conv"),
                                                       rfs_lead = est_parameters[["leads"]], 
                                                       rfs_lag = est_parameters[["lags"]],
                                                       rfs_fya = est_parameters[["fya"]],  #ya,
                                                       rfs_pya = est_parameters[["pya"]], #ya,
+                                                      
+                                                      most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                      annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                
+                                                      fe = est_parameters[["fe"]], 
+                                                      cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                      
+                                                      rfs_rando = ""
+    )
+    
+    names(rfs_eaear_3ll_2011[[CNT]])[elm] <- rfs_exp
+    elm <- elm + 1
+  }
+  # Regressions of tmf_plantation
+  for(rfs_exp in agri_crops){#eaear_mapmat[,"Crops"]
+    rfs_eaear_3ll_2011[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                      pre_processed_data = pre_d_clean_plantation, # NOTICE THIS
+                                                      
+                                                      outcome_variable = "tmf_plantation", # AND THIS
+                                                      continent = est_parameters[["continent"]],
+                                                      start_year = est_parameters[["start_year"]],
+                                                      end_year = est_parameters[["end_year"]],
+                                                      
                                                       aggr_dyn = TRUE,
                                                       exposure_rfs = rfs_exp,
                                                       
-                                                      sjpos = est_parameters[["sjpos"]],
-                                                      distribution = est_parameters[["distribution"]]
+                                                      original_rfs_treatments = c("statute_conv"),
+                                                      rfs_lead = est_parameters[["leads"]], 
+                                                      rfs_lag = est_parameters[["lags"]],
+                                                      rfs_fya = est_parameters[["fya"]],  #ya,
+                                                      rfs_pya = est_parameters[["pya"]], #ya,
+                                                      
+                                                      most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                      annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                      
+                                                      fe = est_parameters[["fe"]], 
+                                                      cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                      
+                                                      rfs_rando = ""
     )
     
-    names(rfs_eaear_3ll_2011[[CNT]])[elm] <- paste0("absexp_X_statute_conv_aggr_3llall_2011")
+    names(rfs_eaear_3ll_2011[[CNT]])[elm] <- rfs_exp
     elm <- elm + 1
   }
 }
@@ -1454,6 +1624,8 @@ crop_groups <- list(c("Group 1", "Biomass crops", "Sugar crops"), # "Groundnut",
       #eaear_Groundnut = "Groundnut", 
       eaear_Maizegrain = "Maize",
       
+      eaear_Fodder = "Pasture",
+      
       eaear_Biomass = "Biomass crops",
       eaear_Cotton = "Cotton",
       eaear_Cereals = "Cereals",
@@ -1468,8 +1640,6 @@ crop_groups <- list(c("Group 1", "Biomass crops", "Sugar crops"), # "Groundnut",
       
       eaear_Coconut = "Coconut", 
       eaear_Oilpalm = "Oil palm",
-      
-      eaear_Fodder = "Pasture",
       
       eaear_Citrus = "Citrus",
       eaear_Tobacco = "Tobacco", 
