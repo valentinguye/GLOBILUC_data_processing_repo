@@ -668,7 +668,7 @@ df_cs <- st_drop_geometry(df_cs)
 # Keep only new variable and id
 df_cs <- df_cs[,c("grid_id", "continent_name")]
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_long_continent.Rdata"))
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_cs_continent.Rdata"))
 rm(df_cs)
         
 
