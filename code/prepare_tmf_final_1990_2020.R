@@ -403,18 +403,18 @@ df_cs <- st_transform(df_cs, crs = mercator_world_crs)
 countries <- st_transform(countries, crs = mercator_world_crs)
 
 # This is much much faster (like 5 minutes vs. 6h).
-# df_cs <- st_join(x = countries[,c("OBJECTID", "COUNTRY_NA")],
-#                  y = df_cs,
-#                  join = st_contains,
-#                  prepared = TRUE,
-#                  left = FALSE)# performs inner join so returns only records that spatially match.
+df_cs <- st_join(x = countries[,c("OBJECTID", "COUNTRY_NA")],
+                 y = df_cs,
+                 join = st_contains,
+                 prepared = TRUE,
+                 left = FALSE)# performs inner join so returns only records that spatially match.
 
 
 # However, we use st_nearest_feature so that all points match a country
-df_cs <- st_join(x = df_cs,
-                 y = countries,
-                 join = st_nearest_feature,
-                 left = TRUE)
+# df_cs <- st_join(x = df_cs,
+#                  y = countries,
+#                  join = st_nearest_feature,
+#                  left = TRUE)
 
 rm(countries)
 

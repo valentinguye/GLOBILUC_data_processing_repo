@@ -759,6 +759,15 @@ make_main_reg <- function(pre_process = FALSE,
     }    
   }
   
+  if(s_trend_loga){
+    for(eaear_exp_rfs in exposure_rfs){
+      varname <- paste0(eaear_exp_rfs, "_trend_expo")
+      controls <- c(controls, varname)
+      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * log((year-2007)))
+    }    
+    
+  }
+  
   if(fc_s_trend){
     # d <- mutate(d, forest_cover_suitability_trend := !!as.symbol(sj)*fc_2000*(year))#-2000 # doesn't change anything that it's multiplied by 1...19 or 2001...2019
     # controls <- c(controls, "forest_cover_suitability_trend")

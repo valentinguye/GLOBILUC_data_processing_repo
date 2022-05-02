@@ -107,7 +107,7 @@ eaear_mapmat <- matrix(data = eaear_mapmat_data,
 colnames(eaear_mapmat) <- c("Prices", "Crops")
 
 
-### MAIN DATA SET ### 
+### MAIN DATA SETS #### 
 main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeay_long_final.Rdata"))
 # release some memory upfront
 main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
@@ -292,82 +292,61 @@ ggplot(w_rfs, aes(x=year, y=`Billions of gallons (ethanol-equivalent)`/coeff, fi
 
 #### DES STATS EAEAR #### 
 
-### MAP OF TROPICAL COMMODITY DRIVEN DEFORESTATION ### 
-prepared_maps <- list(America = list(), 
-                      Africa = list(), 
-                      Asia = list())
-for(CNT in c("America", "Africa", "Asia")){
-  fullstack <- brick(here("temp_data", "merged_datasets", "tmf_aoi", paste0("anytype_masked_stack_",CNT,"_1990_2020.tif")) )
-  agri <- fullstack[[1:31]]
-  plan <- fullstack[[32:62]]
-  floo <- fullstack[[63:93]]
-  tmfx <- fullstack[[94:124]]
-  gaez <- fullstack[[125:174]]
-  pst2k <- fullstack[[175]]
-  
-  names(agri) <- paste0("tmf_agri.",seq(1990, 2020, 1)) 
-  names(plan) <- paste0("tmf_plantation.",seq(1990, 2020, 1)) 
-  names(floo) <- paste0("tmf_flood.",seq(1990, 2020, 1)) 
-  names(tmfx) <- paste0("tmf_ext.",seq(1990, 2020, 1)) 
-  
-  # sum over 2011-2019
-  agri_accu <- sum(agri[[22:30]], na.rm = TRUE)
-  plan_accu <- sum(plan[[22:30]], na.rm = TRUE)
-  floo_accu <- sum(floo[[22:30]], na.rm = TRUE)
-  
-  # vcdl <- values(agri_accu)
-  # summary(vcdl)
-  # rm(vcdl)
-  # turn zeros into NAs
-  agri_accu <- reclassify(agri_accu, cbind(0, NA))
-  #plot(agri_accu)
-  a <- area(agri_accu)
-  agri_accu <- stack(agri_accu, a)
-  agri_accu_pct <- overlay(agri_accu, fun = function(x, y){pct <- x/(100*y)
-  pct <- if_else(pct>1, 1, pct)
-  return(pct)})
-  # vpct <- values(agri_accu_pct)
-  # summary(vpct)
-  
-  plan_accu <- reclassify(plan_accu, cbind(0, NA))
-  #plot(plan_accu)
-  a <- area(plan_accu)
-  plan_accu <- stack(plan_accu, a)
-  plan_accu_pct <- overlay(plan_accu, fun = function(x, y){pct <- x/(100*y)
-  pct <- if_else(pct>1, 1, pct)
-  return(pct)})
-  
-  floo_accu <- reclassify(floo_accu, cbind(0, NA))
-  #plot(floo_accu)
-  a <- area(floo_accu)
-  floo_accu <- stack(floo_accu, a)
-  floo_accu_pct <- overlay(floo_accu, fun = function(x, y){pct <- x/(100*y)
-  pct <- if_else(pct>1, 1, pct)
-  return(pct)})
-  
-  prepared_maps[[CNT]][["agri"]] <- agri_accu_pct
-  prepared_maps[[CNT]][["plan"]] <- plan_accu_pct
-  prepared_maps[[CNT]][["floo"]] <- floo_accu_pct
-  
-  prepared_maps[[CNT]][["defo"]] <- sum(stack(agri_accu_pct, plan_accu_pct), na.rm = TRUE)
-  
-  rm(a, agri_accu, plan_accu, floo_accu, agri_accu_pct, plan_accu_pct, floo_accu_pct)
-}
 
-### MAKE CONTINENT PANEL MAPs 
+### MAP OF TROPICAL COMMODITY DRIVEN DEFORESTATION ### 
+cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_commo_resampledgaez_0119.tif")) 
+
+cdl_accu <- sum(cdl[[11:19]], na.rm = TRUE)
+vcdl <- values(cdl_accu)
+summary(vcdl)
+rm(vcdl)
+cdl_accu <- reclassify(cdl_accu, cbind(0, NA))
+#plot(cdl_accu)
+a <- area(cdl_accu)
+cdl_accu <- stack(cdl_accu, a)
+accu_pct <- overlay(cdl_accu, fun = function(x, y){pct <- x/(100*y)
+pct <- if_else(pct>1, 1, pct)
+return(pct)})
+vpct <- values(accu_pct)
+summary(vpct)
+
+america_coords <- matrix(c(-95, 25, -33, 25,
+                           -33, -30, -95, -30, 
+                           -95, 25), ncol = 2, byrow = TRUE)
+
+america_ext <- st_polygon(list(america_coords)) %>% st_sfc(crs = 4326)
+
+africa_coords <- matrix(c(-19, 20, 25, 20,
+                          25, -10, -19, -10, 
+                          -19, 20), ncol = 2, byrow = TRUE)
+
+africa_ext <- st_polygon(list(africa_coords)) %>% st_sfc(crs = 4326)
+
+asia_coords <- matrix(c(80, 30, 150, 30,
+                        150, -10, 80, -10, 
+                        80, 30), ncol = 2, byrow = TRUE)
+
+asia_ext <- st_polygon(list(asia_coords)) %>% st_sfc(crs = 4326)
+
+
+
+sfc <- c(asia_ext, america_ext, africa_ext)
+continents <- st_sf(data.frame(continent_name = c("Asia", "America", "Africa"), geom = sfc))
+
+
 land <- st_read(here("input_data", "ne_50m_land"))
 unique(land$scalerank)
 land <- land[land$scalerank==0, c("geometry")]
 #plot(land)
 spLand <- as(land, "Spatial")
 
-am <- prepared_maps[["America"]][["defo"]]
-af <- prepared_maps[["Africa"]][["defo"]]
-as <- prepared_maps[["Asia"]][["defo"]]
+
+am <- crop(accu_pct, continents[continents$continent_name=="America",])
+af <- crop(accu_pct, continents[continents$continent_name=="Africa",])
+as <- crop(accu_pct, continents[continents$continent_name=="Asia",])
 
 #library(gridExtra)
 library(rasterVis)
-
 pam <- levelplot(am, margin = FALSE, 
                  xlab = "", ylab = "",
                  #colorkey=FALSE,
@@ -407,32 +386,36 @@ pas <-levelplot(as, margin = FALSE,
 ) + 
   layer(sp.polygons(spLand, lwd=1)) 
 
-# It's necessary to call the objects to display the maps
-
 pam
 paf
 pas
 
-# make some comparisons with driven loss 
-drivenloss  <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "driverloss_all_aeay_long_final.Rdata"))
+# make some comparisons with tmf
+tmf  <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", "tmf_aeay_pantrop_long_final_1990_2020.Rdata"))
 
-drivenloss <- dplyr::filter(drivenloss, year >=2011 & year <= 2019)
+tmf <- dplyr::filter(tmf, year >=2011 & year <= 2019)
+losscommo <- dplyr::filter(main_data, year >=2011 & year <= 2019)
 
-drivenloss_den <- density(drivenloss$driven_loss_commodity)
+tmf <- dplyr::mutate(tmf, tmf_deforestation = tmf_agri + tmf_plantation)
 
-main_data <- dplyr::mutate(main_data, tmf_deforestation = tmf_agri + tmf_plantation)
+tmf_den <- density(tmf$tmf_deforestation)
 
-tmf_agri_den <- density(main_data$tmf_deforestation)
+losscommo_den <- density(losscommo$loss_commodity)
 
+tmf_as <- tmf[tmf$continent == "Asia",]
+losscommo_as <- losscommo_as[losscommo_as$continent == "Asia",]
 
+summary(tmf_as$tmf_deforestation)
+summary(losscommo_as$loss_commodity)
 
+gaez_as <- crop(gaez, continents[continents$continent_name=="Asia",])
 
 
 #### REGRESSION FUNCTION #### 
 
 ### TEMPORARY OBJECTS 
 outcome_variable = "loss_commodity" 
-start_year = 2011
+start_year = 2010
 end_year = 2019
 continent = "all"
 
@@ -441,14 +424,14 @@ pre_processed_data <- pre_d_clean_agri
 
 rfs_rando <- ""
 original_rfs_treatments <- c("statute_conv")
+rfs_lag <- 2
 rfs_lead <- 3
-rfs_lag <- 3
 rfs_fya <-  0
 rfs_pya <- 0
 aggr_dyn <- TRUE
-exposure_rfs <- "eaear_Banana"
+exposure_rfs <- eaear_mapmat[,"Crops"]#"eaear_Oilpalm"
 group_exposure_rfs <- FALSE
-control_all_absolute_rfs <- TRUE
+control_all_absolute_rfs <- FALSE
 most_correlated_only = FALSE
 annual_rfs_controls <- FALSE
 
@@ -456,7 +439,8 @@ control_pasture <- FALSE
 pasture_trend <- FALSE
 
 fc_trend <- FALSE
-s_trend <- TRUE
+s_trend <- FALSE
+s_trend_loga <- FALSE
 fc_s_trend <- FALSE
 
 sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
@@ -505,6 +489,7 @@ make_main_reg <- function(pre_process = FALSE,
                           pasture_trend = FALSE,
                           remaining = FALSE, # should remaining forest be controlled for STOP DOING THIS BECAUSE IT INTRODUCES NICKELL BIAS
                           s_trend = TRUE,
+                          s_trend_loga = FALSE,
                           fc_trend = FALSE,
                           fc_s_trend = FALSE,
                           
@@ -529,10 +514,10 @@ make_main_reg <- function(pre_process = FALSE,
                           output = "coef_table" # one of "data", est_object, or "coef_table" 
 ){
   
-  # Define the outcome_variable based on the crop under study (if we are not in the placebo case)
-  if(exposure_rfs %in% c("eaear_Oilpalm", "eaear_Rubber") & outcome_variable == "tmf_agri"){
-    outcome_variable <- "tmf_plantation"
-  }
+  # # Define the outcome_variable based on the crop under study (if we are not in the placebo case)
+  # if(exposure_rfs %in% c("eaear_Oilpalm", "eaear_Rubber") & outcome_variable == "tmf_agri"){
+  #   outcome_variable <- "tmf_plantation"
+  # }
   
   #### PREPARE NEEDED VARIABLE NAMES
   # this does not involve data, just arguments of the make_reg function
@@ -753,8 +738,17 @@ make_main_reg <- function(pre_process = FALSE,
     for(eaear_exp_rfs in exposure_rfs){
       varname <- paste0(eaear_exp_rfs, "_trend")
       controls <- c(controls, varname)
-      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * (year-2000))
+      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * (year-2007))
     }    
+  }
+  
+  if(s_trend_loga){
+    for(eaear_exp_rfs in exposure_rfs){
+      varname <- paste0(eaear_exp_rfs, "_trend_expo")
+      controls <- c(controls, varname)
+      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * log((year-2007)))
+    }    
+    
   }
   
   if(fc_s_trend){
@@ -814,11 +808,16 @@ make_main_reg <- function(pre_process = FALSE,
     # remove units with no country name (in the case of all_drivers data set currently, because nearest_feature function has not been used in this case, see add_variables.R)
     # d <- dplyr::filter(d, !is.na(country_name))
     
-    used_vars <- unique(c("grid_id", "year", "lat", "lon","continent_name", "country_name",  "country_year",  # "remaining_fc", "accu_defo_since2k", # "sj_year",
+    used_vars <- unique(c("grid_id", "year", "lat", "lon","continent_name",  "country_year",  #"country_name",  "remaining_fc", "accu_defo_since2k", # "sj_year",
                           "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                           outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
-                          regressors, controls, 
-                          exposure_rfs, original_rfs_treatments, rfs_treatments)) # this is necessary to reconstruct variables in randomization inference processes
+                          regressors, controls))
+    
+    # this is necessary to reconstruct variables in randomization inference processes
+    if(rfs_rando != ""){
+      used_vars <- unique(c(used_vars, exposure_rfs, original_rfs_treatments, rfs_treatments))
+    }                        
+                        
     
     
     
@@ -961,7 +960,7 @@ make_main_reg <- function(pre_process = FALSE,
   }
   
   
-  if(aggr_dyn & rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0){
+  if(aggr_dyn & control_all_absolute_rfs & rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0){
     # In this case, we are interested in LEAD AND LAG effects, aggregated separately, and all together.
     df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
     
@@ -1033,7 +1032,7 @@ make_main_reg <- function(pre_process = FALSE,
                                                lower.tail = FALSE, 
                                                df = fixest_df)) 
   }
-  if(aggr_dyn & rfs_lead == 0 & rfs_lag == 0 & rfs_fya > 0 & rfs_pya > 0){
+  if(aggr_dyn & control_all_absolute_rfs & rfs_lead == 0 & rfs_lag == 0 & rfs_fya > 0 & rfs_pya > 0){
     # In this case, we are interested in AVERAGE LEAD AND LAG effects, separately and aggregated
     df_res <- rbind(rep(NA, ncol(df_res)), df_res)
     
@@ -1063,7 +1062,7 @@ make_main_reg <- function(pre_process = FALSE,
                                                lower.tail = FALSE, 
                                                df = fixest_df)) 
   }
-  if(aggr_dyn & rfs_lead > 0 & rfs_lag == 0 & rfs_fya == 0 & rfs_pya > 0){
+  if(aggr_dyn & control_all_absolute_rfs & rfs_lead > 0 & rfs_lag == 0 & rfs_fya == 0 & rfs_pya > 0){
     # In this case, we are interested in aggregated LEAD effects, and all together.
     
     # first aggregate leads
@@ -1126,7 +1125,82 @@ make_main_reg <- function(pre_process = FALSE,
                                                df = fixest_df)) 
   }
   
-  
+  if(aggr_dyn & rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0 & 
+     length(controls) == 0 # this is the case when there is no trend AND control_all_absolute_rfs is FALSE 
+  ){
+    for(EOI in exposure_rfs){
+      # In this case, we are interested in LEAD AND LAG effects, aggregated separately, and all together.
+      df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
+      
+      # ORDER MATTERS
+      aggr_names <- paste0(EOI, c("_X_aggrleads", "_X_aggrlags"))
+      row.names(df_res)[1:2] <- aggr_names
+      # regressors of interest
+      base_reg_name <- paste0(EOI,"_X_",original_rfs_treatments)
+      # Contemporaneous value is NOT in leads
+      lead_roi <- c(grep(pattern = paste0(base_reg_name,"_lead"), 
+                         regressors, value = TRUE))
+      # Contemporaneous value is in lags
+      lag_roi <- c(base_reg_name, 
+                   grep(pattern = paste0(base_reg_name,"_lag"), 
+                        regressors, value = TRUE))
+      
+      df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[lead_roi] %>% sum()
+      df_res[aggr_names[2],"Estimate"] <- reg_res$coefficients[lag_roi] %>% sum()
+      
+      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+      df_res[aggr_names[1],"Std. Error"] <- reg_res$cov.scaled[lead_roi, lead_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      df_res[aggr_names[2],"Std. Error"] <- reg_res$cov.scaled[lag_roi, lag_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      
+      df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
+      df_res[aggr_names[2],"t value"]  <- (df_res[aggr_names[2],"Estimate"] - 0)/(df_res[aggr_names[2],"Std. Error"])
+      
+      # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+      # does not make a significant difference given sample size
+      df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
+                                                 lower.tail = FALSE, 
+                                                 df = fixest_df)) 
+      df_res[aggr_names[2],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[2],"t value"]), 
+                                                 lower.tail = FALSE, 
+                                                 df = fixest_df)) 
+      
+      
+      ## Then (on top of dataframe), aggregate all leads and lags together
+      # it's important that overall aggregate comes after, for at least two reasons in current code:
+      # 1. because selection of estimate to plot is based on order: it takes the first row of df_res 
+      # 2. so that aggr_names corresponds to *_X_aggrall in randomization inference below
+      
+      df_res <- rbind(rep(NA, ncol(df_res)), df_res)
+      
+      # ORDER MATTERS
+      aggr_names <- paste0(EOI, c("_X_aggrall"))
+      row.names(df_res)[1] <- aggr_names
+      # regressors of interest
+      base_reg_name <- paste0(EOI,"_X_",original_rfs_treatments)
+      
+      # Contemporaneous, lead, and lag values
+      all_roi <- c(base_reg_name, 
+                   grep(pattern = paste0(base_reg_name,"_lead"), 
+                        regressors, value = TRUE),
+                   grep(pattern = paste0(base_reg_name,"_lag"), 
+                        regressors, value = TRUE))
+      
+      df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[all_roi] %>% sum()
+      
+      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+      df_res[aggr_names[1],"Std. Error"] <- reg_res$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      
+      df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
+      
+      # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+      # does not make a significant difference given sample size
+      df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
+                                                 lower.tail = FALSE, 
+                                                 df = fixest_df)) 
+    }
+  }
   # take data set as exactly used in estimation - NOT NECESSARY anymore, given the precleaning
   # if(length(reg_res$obs_selection) > 0){
   #   d_clean <- d_clean[reg_res$obs_selection[[1]], ]
@@ -1413,7 +1487,7 @@ make_main_reg <- function(pre_process = FALSE,
 
 
 #### RFS CUMMULATIVE LEADS & LAGS 2011-2019 ####
-rfs_eaear_3ll_2011_mostcor <- list(all = list(), 
+rfs_2lag3lead_notrend_joint <- list(all = list(), 
                            America = list(), 
                            Africa = list(), 
                            Asia = list())
@@ -1425,21 +1499,23 @@ all_rfs_treatments <- grep(pattern = "statute_conv", names(prices), value = TRUE
 
 CNT <- "America"
 
-for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
   
   est_parameters <- list(outcome_variable  = "loss_commodity",
                          continent = CNT,
-                         start_year = 2011, 
+                         start_year = 2010, 
                          end_year = 2019, 
-                         most_correlated_only = TRUE,
+                         most_correlated_only = FALSE,
                          annual_rfs_controls = TRUE,
                          sjpos = FALSE,
-                         lags = 3,
+                         lags = 2,
                          leads = 3,
                          fya = 0, 
                          pya = 0,
+                         s_trend = FALSE, 
+                         s_trend_loga = FALSE,
                          fe = "grid_id + country_year",
-                         cluster_var1 = "grid_id_10",
+                         cluster_var1 = "grid_id_20",
                          distribution = "quasipoisson")
   d <- main_data
   
@@ -1498,7 +1574,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia"
   # Regressions of tmf_agri
   elm <- 1
   for(rfs_exp in agri_crops){#eaear_mapmat[,"Crops"]
-    rfs_eaear_3ll_2011_mostcor[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+    rfs_2lag3lead_notrend_joint[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
                                                       pre_processed_data = pre_d_clean_agri, # NOTICE THIS
                                                       
                                                       outcome_variable = "loss_commodity", # AND THIS
@@ -1508,7 +1584,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia"
                                                       
                                                       aggr_dyn = TRUE,
                                                       exposure_rfs = rfs_exp,
-                                                      
+
                                                       original_rfs_treatments = c("statute_conv"),
                                                       rfs_lead = est_parameters[["leads"]], 
                                                       rfs_lag = est_parameters[["lags"]],
@@ -1518,18 +1594,20 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia"
                                                       most_correlated_only = est_parameters[["most_correlated_only"]],
                                                       annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
                                                       
+                                                      s_trend = est_parameters[["s_trend"]],
+                                                      s_trend_loga = est_parameters[["s_trend_loga"]],
                                                       fe = est_parameters[["fe"]], 
                                                       cluster_var1 = est_parameters[["cluster_var1"]], 
                                                       
                                                       rfs_rando = ""
     )
     
-    names(rfs_eaear_3ll_2011_mostcor[[CNT]])[elm] <- rfs_exp
+    names(rfs_2lag3lead_notrend_joint[[CNT]])[elm] <- rfs_exp
     elm <- elm + 1
   }
   # Regressions of tmf_plantation
   for(rfs_exp in plantation_crops){#eaear_mapmat[,"Crops"]
-    rfs_eaear_3ll_2011_mostcor[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+    rfs_2lag3lead_notrend_joint[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
                                                       pre_processed_data = pre_d_clean_plantation, # NOTICE THIS
                                                       
                                                       outcome_variable = "loss_commodity", # AND THIS
@@ -1549,13 +1627,15 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia"
                                                       most_correlated_only = est_parameters[["most_correlated_only"]],
                                                       annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
                                                       
+                                                      s_trend = est_parameters[["s_trend"]],
+                                                      s_trend_loga = est_parameters[["s_trend_loga"]],
                                                       fe = est_parameters[["fe"]], 
                                                       cluster_var1 = est_parameters[["cluster_var1"]], 
                                                       
                                                       rfs_rando = ""
     )
     
-    names(rfs_eaear_3ll_2011_mostcor[[CNT]])[elm] <- rfs_exp
+    names(rfs_2lag3lead_notrend_joint[[CNT]])[elm] <- rfs_exp
     elm <- elm + 1
   }
 }
@@ -1579,7 +1659,7 @@ dyn_df_list <- list()
 #   dyn_df_list[[dyn_des[dyn]]] <- dyn_df
 # }
 for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
-  dyn_df <- lapply(rfs_eaear_3ll_2011_mostcor[[CNT]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
+  dyn_df <- lapply(rfs_2lag3lead_notrend_joint[[CNT]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
   dyn_df$model <- CNT # dyn_des[dyn]
   dyn_df_list[[CNT]] <- dyn_df
@@ -1668,9 +1748,61 @@ crop_groups <- list(c("Group 1", "Biomass crops", "Sugar crops"), # "Groundnut",
 
 
 
+#### joint estimation #### 
+rfs_2lag3lead_notrend_joint <- list(all = list(), 
+                                    America = list(), 
+                                    Africa = list(), 
+                                    Asia = list())
+elm <- 1
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters <- list(outcome_variable  = "loss_commodity",
+                         continent = CNT,
+                         start_year = 2010, 
+                         end_year = 2019, 
+                         most_correlated_only = FALSE,
+                         annual_rfs_controls = FALSE,
+                         sjpos = FALSE,
+                         lags = 2,
+                         leads = 3,
+                         fya = 0, 
+                         pya = 0,
+                         s_trend = FALSE, 
+                         s_trend_loga = FALSE,
+                         fe = "grid_id + country_year",
+                         cluster_var1 = "grid_id_20",
+                         distribution = "quasipoisson")
+  
+  rfs_2lag3lead_notrend_joint[[CNT]][[elm]] <- make_main_reg(pre_process = FALSE,# NOTICE THIS
+  
+                                                             outcome_variable = est_parameters[["outcome_variable"]],
+                                                             continent = est_parameters[["continent"]],
+                                                             start_year = est_parameters[["start_year"]],
+                                                             end_year = est_parameters[["end_year"]],
+                                                             
+                                                             aggr_dyn = TRUE,
+                                                             exposure_rfs = eaear_mapmat[,"Crops"], # AND THIS
+                                                             control_all_absolute_rfs = FALSE, # AND THIS
+                                                             
+                                                             original_rfs_treatments = c("statute_conv"),
+                                                             rfs_lead = est_parameters[["leads"]], 
+                                                             rfs_lag = est_parameters[["lags"]],
+                                                             rfs_fya = est_parameters[["fya"]],  #ya,
+                                                             rfs_pya = est_parameters[["pya"]], #ya,
+                                                             
+                                                             most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                             
+                                                             s_trend = est_parameters[["s_trend"]],
+                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                             fe = est_parameters[["fe"]], 
+                                                             cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                             
+                                                             rfs_rando = ""
+  )
+  
 
-
-
+}
 
 
 
