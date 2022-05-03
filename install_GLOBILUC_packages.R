@@ -33,7 +33,7 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
                     "doParallel", "foreach", "snow", 
                     "knitr", "kableExtra",
                     "DataCombine", 
-                    "fixest", 
+                    "fixest", "urca", "punitroots",
                     "boot", "fwildclusterboot", "sandwich",
                     "ggplot2", "leaflet", "tmap", "dotwhisker")
 
@@ -121,6 +121,7 @@ if(FALSE){
   #library(ExPanDaR)
   library(DataCombine)
   library(fixest)
+  library(urca)
   library(boot)
   library(sandwich)
   library(fwildclusterboot)
@@ -135,6 +136,14 @@ if(FALSE){
   library(viridis)
   library(hrbrthemes)
   library(tmap)
+  
+  # all those are necessary for punitroots to install correctly
+  library(gss)
+  library(fBasics)
+  library(fUnitRoots)
+  library(punitroots)
+  
+  
 }
 
 # necessary currently because renv changes the downloaded method at every new session to curl... 
@@ -143,9 +152,13 @@ if(renv:::renv_download_method() != getOption("download.file.method")){
 }
 
 # If new packages are needed along the project data processing workflow, one should: 
-new_pck <- c("terra")
+new_pck <- c("fUnitRoots")
 # 1. install the packages in the project library (the default if you are within the project)
 install.packages(new_pck)
+
+# specifically for punitroots:
+# install.packages("punitroots", repos="http://R-Forge.R-project.org", type = "source")
+
 # devtools::install_github("julianhinz/R_glmhdfe")
 # 2. add 'library(package)' in the list above, and ',"package"' in the neededPackages vector above, and save the present file.
 # 3. perform an implicit (the default) snapshot, that writes to the renv.lock file the packages at

@@ -440,7 +440,7 @@ psd$us_ah_maize_mha <- psd$UnitedStates.Area_Harvested.Maize / 1000
 w_rfs <- left_join(rfs, psd[,c("year", "us_ah_maize_mha")], by = "year")
 
 w_rfs <- w_rfs %>% 
-  dplyr::filter(year<=2020) %>% 
+  dplyr::filter(year>=2000 & year<=2020) %>% 
   dplyr::select(year, statute_advanced, statute_conv, final_advanced, final_conv, 
                 us_ah_maize_mha) %>% 
   dplyr::mutate(statute_conv = statute_conv - final_conv, 
