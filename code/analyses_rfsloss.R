@@ -16,7 +16,7 @@ neededPackages = c("Matrix",
                    "raster", "rgdal",  "sp", "sf", # "spdep",
                    "DataCombine",
                    "knitr", "kableExtra",
-                   "fixest", "boot", "urca",   #"msm", "car",  "sandwich", "lmtest",  "multcomp",
+                   "fixest", "boot", "urca", "plm",   #"msm", "car",  "sandwich", "lmtest",  "multcomp",
                    "ggplot2", "dotwhisker", "viridis", "hrbrthemes", "rasterVis", #"tmap",# "leaflet", "htmltools"
                    "foreach", "parallel"
 )
@@ -469,7 +469,7 @@ conley_cutoff <- 100
 clustering = "oneway" # either "oneway" or "twoway". If oneway, it clusters on cluster_var1. 
 cluster_var1 = "grid_id_10" 
 cluster_var2 = "grid_id_5_year"
-
+dyn_tests = TRUE
 output = "est_object"
 glm_iter <- 25 
 
@@ -526,6 +526,7 @@ make_main_reg <- function(pre_process = FALSE,
                           # old argument: cluster ="grid_id", # the cluster level if se = "cluster" (i.e. one way)
                           # coefstat = "confint", # one of "se", "tstat", "confint"
                           glm_iter = 25,
+                          dyn_tests = FALSE, # should the Fisher-type panel unit root test be returned, instead of the regressions, for the outcome_variable and the first regressor
                           output = "coef_table" # one of "data", est_object, or "coef_table" 
 ){
   
@@ -878,6 +879,18 @@ make_main_reg <- function(pre_process = FALSE,
     # }
     rm(d)
   }
+  
+  
+  ### Fisher-type panel unit root test  
+  # We need to convert the data to a pdata.frame format, to use this interface in purtest 
+  pd_clean <- pdata.frame(d_clean[,c("grid_id", "year", outcome_variable, regressors[1])], index = c("grid_id", "year"))
+  fpur <- plm::purtest(d_clean[,c("loss_commodity", regressors[1])], 
+                              lags = 1, # length(unique(d_clean$year)) - 1, 
+                              exo = "intercept",
+                              method = "invlogit",
+                              N = length(unique(d_clean$grid_id)))
+  
+  # note that the results of the tests are independent of the crop chosen for exposure. 
   
   ### REGRESSIONS ####
   
@@ -2173,6 +2186,94 @@ crop_groups <- list(c("Group 1", "Biomass crops", "Sugar crops"), # "Groundnut",
 
 
 #### DYNAMICS DESCRIPTIVES #### 
+## RFS time series (un-interacted instrument) ##
+rfs <- dplyr::arrange(rfs, year)
+ts_rfs <- rfs[rfs$year>=2008,c("statute_conv")]
+plot(ts_rfs)
+lines(lowess(ts_rfs), col = 3)
+
+# Dickey Fuller tests
+adf_rfs <- ur.df(ts_rfs, 
+                 type = "trend")
+
+cbind(
+t(adf_rfs@teststat),
+adf_rfs@cval)
+
+# INTERPRETTION.
+# First, note that in the model tested, lag = 0 means that there IS a unit root (see Wikipedia intuition section). 
+# While trend and intercept terms = 0 reflect there is NO trend or intercept. 
+
+# phi2 is the statistic for the null that all three of trend, intercept, AND lag are (jointly, it is) null (= 0) 
+# Rejecting the null, i.e. phi2 > critical value means AT LEAST one of the three is non zero. (Does not say if it's the trend/intercept, or the lag). 
+# Not rejecting it means that possibly there is a unit root (lag=0) and no trend and no intercept. --> Check phi3
+# phi3: rejecting the null, i.e. phi3 > cval means AT LEAST one of drift OR lag is non zero. 
+# Not rejecting means that possibly there is a unit root (lag=0) AND no intercept. --> Check tau3
+# tau3: rejecting the null that lag = 0 means that there ISN'T a unit root. 
+# Not rejecting it means there may be a unit root. 
+
+# Note from Wikipedia that "As this test is asymmetrical, we are only concerned with negative values of our test statistic. 
+# If the calculated test statistic is less (more negative) than the critical value, then the null hypothesis is rejected and no unit root is present."
+
+# Here, all tests fail to reject the null. This is most likely due to the length of the time series that underpowers the tests. 
+# If well powered, this could mean that there is no trend nor intercept, but there is a unit root. 
+
+# That there might be a unit root is confirmed by the least specified test: 
+adf_rfs <- ur.df(ts_rfs, 
+                 type = "none")
+
+cbind(
+  t(adf_rfs@teststat),
+  adf_rfs@cval)
+
+# However, the presence of a unit root and the absence of an intercept can be rejected at 5% confidence in this specification
+adf_rfs <- ur.df(ts_rfs, 
+                 type = "drift")
+cbind(
+  t(adf_rfs@teststat),
+  adf_rfs@cval)
+
+
+
+# On KPSS: 
+# "A major disadvantage for the KPSS test is that it has a high rate of Type I errors (it tends to reject the null hypothesis too often)." Combine with ADF 
+ur.kpss(ts_rfs) %>% summary()
+ur.kpss(diff(ts_rfs, differences = 2)) %>% summary() # --> second differencing necessary
+
+## Outcome time series (summed within years) ##
+cropexposed <- main_data[main_data$year >= 2008,]
+cropexposed <- dplyr::arrange(cropexposed, year)
+ts_defo <- ddply(cropexposed, "year", summarise, 
+                  pantrop_defo = sum(loss_commodity, na.rm = TRUE))
+
+plot(ts_defo)
+lines(lowess(ts_defo), col = 3)
+
+# Dickey Fuller tests
+adf_defo <- ur.df(ts_defo$pantrop_defo, 
+                  type = "trend")
+cbind(
+  t(adf_defo@teststat),
+  adf_defo@cval)
+
+adf_defo <- ur.df(ts_defo$pantrop_defo, 
+                 type = "drift")
+cbind(
+  t(adf_defo@teststat),
+  adf_defo@cval)
+
+adf_defo <- ur.df(ts_defo$pantrop_defo, 
+                  type = "none")
+cbind(
+  t(adf_defo@teststat),
+  adf_defo@cval)
+
+# what the tests tell is that we cannot reject that there is a unit root nor that there is no trend nor intercept. 
+# So there might be a unit root and no trend nor intercept, but failure to reject is most probably due to underpower. 
+
+
+
+### Fisher-type panel unit root test ### 
 CNT <- "America"
 for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
   
@@ -2230,26 +2331,16 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
                     family = "poisson")
   # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
   if(length(temp_est$obs_selection)>0){
-    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+    d_clean <- d[unlist(temp_est$obs_selection),]
   }  else { 
-    pre_d_clean_agri <- d
+    d_clean <- d
   }
  
+
   
   
    
 }
-
-cropexposed <- main_data[main_data$eaear_Oilpalm > 0,]
-soyexposed <- main_data[main_data$eaear_Soy_compo > 0,]
-ts_defo_ <- ddply(cropexposed, "year", summarise, 
-                  pantrop_defo = sum(loss_commodity, na.rm = TRUE))
-
-
-plot(ts_defo)
-lines(lowess(ts_defo), col = 3)
-
-plot(rfs[c("year", "statute_conv")])
 
 
 
