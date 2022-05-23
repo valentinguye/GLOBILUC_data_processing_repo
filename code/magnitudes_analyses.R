@@ -459,7 +459,15 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
  
   
   #### INSTRUMENTS #### 
-
+  
+  # est-ce qu'on met les instruments dans les controls comme pour lucfp ?  
+  if(IV_REG){
+    
+    instruments <- paste0("wa_iv_",instru_share,"_imp",imp, "_lag", c(1:(x_pya+1)))
+    
+    controls <- c(controls, instruments)
+  } 
+  
   if(rfs_reg){
     instruments <- c()
     for(rfs_var in rfs_treatments){
@@ -630,73 +638,113 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # is.na(d$Oilpalm) 
   
   # experience deforestation at least once (automatically removed if distribution is quasipoisson, but not if it's gaussian. 
-  # Though we want identical samples to compare distributional assumptions)
-  if(distribution_2nd == "gaussian"){
-    # # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
-    obstormv <- obs2remove(fml = as.formula(paste0(outcome_variable, " ~ ", fe)),
-                           data = d,
-                           family = "poisson")
-    # this is necessary to handle cases when there is no obs. to remove
-    if(length(obstormv)>0){
-      d <- d[-obstormv,]
-    } else {
-      d <- d
-    }
-    rm(obstormv)
+  # Though we want identical samples to compare distributional assumptions, or FE specifications
+  if(preclean_level == "FE"){
+    preclean_level <- fe
   }
-  
-  if(fe != "grid_id + country_year"){
-    # # - and those with not only zero outcome, i.e. that feglm would remove, see ?fixest::obs2remove
-    obstormv <- obs2remove(fml = as.formula(paste0(outcome_variable, " ~ grid_id + country_year")),
-                           data = d,
-                           family = "poisson")
-    # this is necessary to handle cases when there is no obs. to remove
-    if(length(obstormv)>0){
-      d <- d[-obstormv,]
-    } else {
-      d <- d
-    }
-    rm(obstormv)
+  temp_est <- feglm(fml = as.formula(paste0(outcome_variable, " ~ 1 | ", preclean_level)),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    d_clean <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    d_clean <- d
   }
   
   # if we don't remove obs that have no remaining forest, and if we don't remove always 0 outcome obs. in previous step, d IS A BALANCED PANEL !!
-  # this is important for the cluster boostrap approach that follows
-  if(!nrow(d) == length(unique(d$grid_id))*length(unique(d$year))){
-    warning("data is not balanced")
-  }
-  d_clean <- d
+  # this is a matter only if we do beta process, with cluster bootstrap
+  # if(!nrow(d) == length(unique(d$grid_id))*length(unique(d$year))){
+  #   warning("data is not balanced")
+  # }
   rm(d)
   
+  # save these for later
+  avg_defo_ha <- (fitstat(temp_est, "my")[[1]]) %>% round(1)
+  
+  G <- length(unique(d_clean[,cluster_var1]))
+  
   d_clean_save <- d_clean
+  
+  ## Infrastructure to store outputs from estimations below
+  toreturn <- list(firstg_summary = NA, 
+                   boot_info = NA,
+                   APE_mat = NA)
+  output_list <- list()
+  
   ### FORMULAE ####
   
-  # endo var should be cropland extent in t+l (lead) 
-  fml_1st <- as.formula(paste0(endo_vars,
-                               " ~ ", 
-                               paste0(instruments, collapse = "+"),
-                               " + ",
-                               paste0(controls, collapse = "+"),
-                               " | ", 
-                               fe))
+  # INTRUMENTS ARE IN CONTROLS   
+  # store first stage formulae in this list 
+  fml_1st_list <- list()
+  classic_iv_fixest_fml <- list()
+  for(f in 1:length(endo_vars)){
+    fml_1st_list[[f]] <- as.formula(paste0(endo_vars[f],
+                                           " ~ ", 
+                                           paste0(controls, collapse = "+"), #  instruments are in controls
+                                           " | ", 
+                                           fe))
+    
+    # this is not for within bootstraps, but to fit in feols-iv in fixest package to extract 1st stage stats readily
+    classic_iv_fixest_fml[[f]] <- as.formula(paste0(outcome_variable,
+                                                    " ~ ", 
+                                                    paste0(controls[!(controls %in% instruments)], collapse = "+"), # only "included" controls, i.e. z1, i.e. not instruments.
+                                                    " | ",
+                                                    fe, 
+                                                    " | ",
+                                                    endo_vars[f], 
+                                                    " ~ ",
+                                                    paste0(instruments, collapse = "+")))
+    
+  }
+  
+  
+  # need to specify the names of first stages' residuals now
+  errors_1stg <- paste0("est_res_1st_", c(1:length(endo_vars)))
   
   fml_2nd <- as.formula(paste0(outcome_variable,
-                               " ~ ", endo_vars,
-                               " + est_res_1st +", 
-                               paste0(controls, collapse = "+"),
+                               " ~ ", 
+                               paste0(endo_vars, collapse = "+"),
+                               " + ", 
+                               paste0(errors_1stg, collapse = "+"),
+                               " + ",
+                               paste0(controls[!(controls %in% instruments)], collapse = "+"), # only "included" controls, i.e. z1, i.e. not instruments.
                                " | ",
                                fe))
-  
-  ### REGRESSIONS
-  # Storing infrastructure
-  
-  # Run first and second stages once. Will be necessary to get some fit stats from the first stage
-  if(clustering =="twoway"){
-    se <- as.formula(paste0("~ ", paste0(c(cluster_var1, cluster_var2), collapse = "+")))
+  ## ESTIMATION 
+  se <- as.formula(paste0("~ ", paste0(c(cluster_var1, cluster_var2), collapse = "+")))
   }
   if(clustering =="oneway"){
     se <- as.formula(paste0("~ ", cluster_var1))
   }
   
+  # We run the first stage outside the bootstrapping process, in order to extract related information
+  est_1st_list <- list()
+  Ftest_list <- list()
+  Waldtest_list <- list()
+  for(f in 1:length(endo_vars)){
+    tsls <- fixest::feols(classic_iv_fixest_fml[[f]], 
+                          data = d_clean)
+    
+    # Extract first stage information
+    # est_1st <- summary(tsls, stage = 1)
+    # est_1st_list[[f]] <- summary(est_1st, .vcov = vcov(est_1st, cluster = CLUSTER))#se = "cluster", cluster = CLUSTER
+    
+    Ftest_list[[f]] <- fitstat(tsls, type = "ivf1")
+    Waldtest_list[[f]] <- fitstat(tsls, type = "ivwald1")
+    
+    est_1st_list[[f]] <- summary(fixest::feols(fml_1st_list[[f]], d_clean), cluster = se)
+    
+    # save residuals 
+    # d_clean[,errors_1stg[f]] <- summary(est_1st, stage = 1)$residuals 
+  }
+
+toreturn[["firstg_summary"]] <- est_1st_list
+
+Fstat <- unlist(Ftest_list)[[1]] %>% round(2)
+Waldstat <- unlist(Waldtest_list)[[1]] %>% as.numeric() %>% round(2)
+
+
   # We run the first stage outside the bootstrapping process, in order to extract related information
   est_1st <- fixest::feglm(fml_1st, 
                            data = d_clean, 

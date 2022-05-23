@@ -447,7 +447,7 @@ rfs_lag <- 2
 rfs_lead <- 3
 rfs_fya <-  0
 rfs_pya <- 0
-lag_controls = NULL,
+lag_controls = NULL
 aggr_dyn <- TRUE
 exposure_rfs <- eaear_mapmat[,"Crops"]#"eaear_Oilpalm"
 group_exposure_rfs <- FALSE
@@ -2735,7 +2735,7 @@ saveRDS(rfs_1lag3lead_notrend_clt10_pstctrl, here("temp_data", "reg_results", "r
 
 
 
-#### JOIN MAIN AND ROBUSTNESS #### 
+#### PLOT MAIN FILTERED BY ROBUSTNESS #### 
 # gather all robustness results in a list 
 robu_list <- list(#rfs_1lag1lead_notrend_clt10, 
   rfs_1lag2lead_notrend_clt10, 
@@ -3006,6 +3006,783 @@ dyn_df_lmt <- dplyr::filter(dyn_df_lmt, continent != "Africa")
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank()) }
 
+
+
+
+
+
+
+#### PLOT AGGR LEAD AND LAGS WHEN t-2 IN CUMULATIVE EFFECTS ####
+rm(dyn_df)
+dyn_df_list <- list()
+for(CNT in c("America", "Africa", "Asia")){
+  dyn_df <- lapply(rfs_2lag3lead_notrend_clt10[[CNT]], FUN = function(x){as.data.frame(x)[c(1:3),]}) %>% bind_rows()
+  
+  dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  
+  dyn_df$model <- "Via realized mediation"
+  dyn_df$model[grepl("aggrleads", row.names(dyn_df))] <- "Via anticipations"
+  dyn_df$model[grepl("aggrall", row.names(dyn_df))] <- "Cumulative effect"
+  #dyn_df$model <- factor(dyn_df$model, levels = c("Via realized mediation", "Via anticipations", "Cumulative effects" ))
+  
+  dyn_df$continent <- CNT
+  
+  dyn_df_list[[CNT]] <- dyn_df
+}
+
+dyn_df <- bind_rows(dyn_df_list)
+
+dyn_df$continent <- factor(dyn_df$continent, levels = c("America", "Africa", "Asia"))
+
+dyn_df$significant01 <- if_else(dyn_df[,"Pr(>|t|)"] < 0.1, "p-value < .1", "")
+# dyn_df <- dyn_df[dyn_df$significant01 != "", ]
+
+names(dyn_df)[names(dyn_df)=="Estimate"] <- "estimate"
+names(dyn_df)[names(dyn_df)=="Std. Error"] <- "std.error"
+row.names(dyn_df) <- NULL
+
+# dyn_df <- left_join(dyn_df, df[,c("term", "model", "highlight")], 
+#                     by = c("term" = "term", "continent" = "model"))
+
+# Limite to main crops of interest for conciseness
+dyn_df_lmt <- dyn_df[dyn_df$term %in% limited_crops1,]
+
+# adhoc remove africa, since there is nothing to highlight in current specification
+dyn_df_lmt <- dplyr::filter(dyn_df_lmt, continent != "Africa")
+
+{dwplot(dyn_df_lmt,
+        dot_args = list(size = 2.5,aes(shape = model, col = model, alpha = significant01)),#,  shape = direction,
+        whisker_args = list(size = 1, aes(col = model, alpha = significant01)),#alpha = significant01 linetype = model, 
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>%  
+    relabel_predictors(c(#eaear_Barley = "Barley",
+      #eaear_Groundnut = "Groundnut", 
+      eaear_Maizegrain = "Maize",
+      
+      eaear_Fodder = "Pasture",
+      
+      eaear_Cereals = "Cereals",
+      eaear_Rice = "Rice",
+      
+      eaear_Soy_compo = "Soy", 
+      
+      eaear_Cotton = "Cotton",
+      eaear_Oilfeed_crops = "Oil crops",
+      
+      #eaear_Rapeseed = "Rapeseed", 
+      # eaear_Sorghum2 = "Sorghum", 
+      eaear_Biomass = "Biomass crops",
+      eaear_Sugar = "Sugar crops", 
+      #eaear_Sunflower = "Sunflower",
+      #eaear_Wheat = "Wheat",
+      
+      eaear_Coconut = "Coconut", 
+      eaear_Oilpalm = "Oil palm",
+      
+      eaear_Tobacco = "Tobacco", 
+      eaear_Citrus = "Citrus",
+      
+      eaear_Banana = "Banana", 
+      eaear_Cocoa_Coffee = "Cocoa or Coffee",
+      #eaear_Cocoa  = "Cocoa", 
+      #eaear_Coffee = "Coffee", 
+      eaear_Rubber = "Rubber", 
+      eaear_Tea = "Tea"
+    )) +
+    #scale_color_manual(values=wes_palette(n=4, name="Darjeeling1", type = "discrete")) +
+    scale_color_brewer(type = "div", palette="Dark2") +
+    guides(
+      shape = guide_legend("", reverse = T), 
+      colour = guide_legend("", reverse = T)
+    ) +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    facet_grid(cols = vars(continent))+
+    #ggtitle(title) +
+    #labs(title = "", subtitle = "", caption = "", tag = CNT) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.85, 0.05),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank()) }
+
+
+
+
+
+#### JOINT ESTIMATION #### 
+
+rfs_1lag3lead_notrend_clt10_joint <- list(all = list(), 
+                                          America = list(), 
+                                          Africa = list(), 
+                                          Asia = list())
+
+# prepare data set in advance, to repeat in all regressions
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  elm <- 1
+  rfs_1lag3lead_notrend_clt10_joint[[CNT]][[elm]] <- make_main_reg(pre_process = FALSE, # NOTICE THIS
+                                                                   
+                                                                   outcome_variable = "loss_commodity", 
+                                                                   continent = CNT, # AND THIS
+                                                                   start_year = est_parameters[["start_year"]],
+                                                                   end_year = est_parameters[["end_year"]],
+                                                                   
+                                                                   aggr_dyn = TRUE,
+                                                                   exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS
+                                                                   all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                                   
+                                                                   original_rfs_treatments = c("statute_conv"),
+                                                                   rfs_lead = est_parameters[["leads"]], 
+                                                                   rfs_lag = est_parameters[["lags"]],
+                                                                   rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                   rfs_pya = est_parameters[["pya"]], #ya,
+                                                                   
+                                                                   control_all_absolute_rfs = FALSE, # AND THIS
+                                                                   most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                   annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                   
+                                                                   s_trend = est_parameters[["s_trend"]],
+                                                                   s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                   fe = est_parameters[["fe"]], 
+                                                                   cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                   
+                                                                   rfs_rando = ""
+  )
+}    
+
+### PLOT COEFFICIENTS ### 
+# prepare regression outputs in a tidy data frame readable by dwplot
+
+rm(df)
+dyn_df_list <- list()
+
+for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
+  dyn_df <- lapply(rfs_1lag3lead_notrend_clt10_joint[[CNT]], FUN = function(x){x <- as.data.frame(x) 
+  return(x[grepl("_aggrall", row.names(x)),])}) %>% bind_rows()
+  dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  dyn_df$model <- CNT # dyn_des[dyn]
+  dyn_df_list[[CNT]] <- dyn_df
+}
+df <- bind_rows(dyn_df_list)
+df[df$model == "all", "model"] <- "Global"
+#df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
+df$significant01 <- ""
+df[df[,"Pr(>|t|)"] < 0.1, "significant01"] <- "p-value < .1"
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+row.names(df) <- NULL
+
+df_lmt <- df[df$term %in% limited_crops1,]
+{dwplot(df,
+        dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),#, alpha = significant01
+        whisker_args = list(size = 1, aes(alpha = significant01)),#alpha = significant01
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(#eaear_Barley = "Barley",
+      #eaear_Groundnut = "Groundnut", 
+      eaear_Maizegrain = "Maize",
+      
+      eaear_Fodder = "Pasture",
+      
+      eaear_Cereals = "Cereals",
+      eaear_Rice = "Rice",
+      
+      eaear_Soy_compo = "Soy", 
+      
+      eaear_Cotton = "Cotton",
+      eaear_Oilfeed_crops = "Oil crops",
+      
+      #eaear_Rapeseed = "Rapeseed", 
+      # eaear_Sorghum2 = "Sorghum", 
+      eaear_Biomass = "Biomass crops",
+      eaear_Sugar = "Sugar crops", 
+      #eaear_Sunflower = "Sunflower",
+      #eaear_Wheat = "Wheat",
+      
+      eaear_Coconut = "Coconut", 
+      eaear_Oilpalm = "Oil palm",
+      
+      eaear_Tobacco = "Tobacco", 
+      eaear_Citrus = "Citrus",
+      
+      eaear_Banana = "Banana", 
+      eaear_Cocoa_Coffee = "Cocoa or Coffee",
+      #eaear_Cocoa  = "Cocoa", 
+      #eaear_Coffee = "Coffee", 
+      eaear_Rubber = "Rubber", 
+      eaear_Tea = "Tea"
+    )) +
+    #scale_color_manual(values=wes_palette(n=4, name="Darjeeling1", type = "discrete")) +
+    scale_color_brewer(type = "qual", palette="Set1") +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    #ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.8, 0.05),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank()) }
+
+
+
+
+#### GAUSSIAN #### 
+est_parameters[["distribution"]] <- "gaussian"
+rfs_1lag3lead_notrend_clt10_gaussian <- list(all = list(), 
+                                             America = list(), 
+                                             Africa = list(), 
+                                             Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  elm <- 1
+  for(rfs_exp in est_parameters[["all_exposures_rfs"]]){#agri_crops eaear_mapmat[,"Crops"]
+    rfs_1lag3lead_notrend_clt10_gaussian[[CNT]][[elm]] <- make_main_reg(pre_process = FALSE,
+                                                                        
+                                                                        distribution = est_parameters[["distribution"]],
+                                                                        
+                                                                        outcome_variable = "loss_commodity", 
+                                                                        continent = est_parameters[["continent"]],
+                                                                        start_year = est_parameters[["start_year"]],
+                                                                        end_year = est_parameters[["end_year"]],
+                                                                        
+                                                                        aggr_dyn = TRUE,
+                                                                        exposure_rfs = rfs_exp,
+                                                                        all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                                        
+                                                                        original_rfs_treatments = c("statute_conv"),
+                                                                        rfs_lead = est_parameters[["leads"]], 
+                                                                        rfs_lag = est_parameters[["lags"]],
+                                                                        rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                        rfs_pya = est_parameters[["pya"]], #ya,
+                                                                        
+                                                                        most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                        annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                        
+                                                                        s_trend = est_parameters[["s_trend"]],
+                                                                        s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                        fe = est_parameters[["fe"]], 
+                                                                        cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                        
+                                                                        rfs_rando = ""
+    )
+    
+    names(rfs_1lag3lead_notrend_clt10_gaussian[[CNT]])[elm] <- rfs_exp
+    elm <- elm + 1
+  }
+  
+}
+est_parameters[["distribution"]] <- "quasipoisson"
+
+rm(df)
+dyn_df_list <- list()
+
+for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
+  dyn_df <- lapply(rfs_1lag3lead_notrend_clt10_gaussian[[CNT]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
+  dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  dyn_df$model <- CNT # dyn_des[dyn]
+  dyn_df_list[[CNT]] <- dyn_df
+}
+df <- bind_rows(dyn_df_list)
+df[df$model == "all", "model"] <- "Global"
+#df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
+df$significant01 <- ""
+df[df[,"Pr(>|t|)"] < 0.1, "significant01"] <- "p-value < .1"
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+row.names(df) <- NULL
+
+
+df_lmt <- df[df$term %in% limited_crops1,]
+{dwplot(df_lmt,
+        dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),#, alpha = significant01
+        whisker_args = list(size = 1, aes(alpha = significant01)),#alpha = significant01
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(#eaear_Barley = "Barley",
+      #eaear_Groundnut = "Groundnut", 
+      eaear_Maizegrain = "Maize",
+      
+      eaear_Fodder = "Pasture",
+      
+      eaear_Cereals = "Cereals",
+      eaear_Rice = "Rice",
+      
+      eaear_Soy_compo = "Soy", 
+      
+      eaear_Cotton = "Cotton",
+      eaear_Oilfeed_crops = "Oil crops",
+      
+      #eaear_Rapeseed = "Rapeseed", 
+      # eaear_Sorghum2 = "Sorghum", 
+      eaear_Biomass = "Biomass crops",
+      eaear_Sugar = "Sugar crops", 
+      #eaear_Sunflower = "Sunflower",
+      #eaear_Wheat = "Wheat",
+      
+      eaear_Coconut = "Coconut", 
+      eaear_Oilpalm = "Oil palm",
+      
+      eaear_Tobacco = "Tobacco", 
+      eaear_Citrus = "Citrus",
+      
+      eaear_Banana = "Banana", 
+      eaear_Cocoa_Coffee = "Cocoa or Coffee",
+      #eaear_Cocoa  = "Cocoa", 
+      #eaear_Coffee = "Coffee", 
+      eaear_Rubber = "Rubber", 
+      eaear_Tea = "Tea"
+    )) +
+    #scale_color_manual(values=wes_palette(n=4, name="Darjeeling1", type = "discrete")) +
+    scale_color_brewer(type = "qual", palette="Set1") +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    #ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.8, 0.05),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank()) }
+
+
+
+
+
+#### YEAR FE #### 
+est_parameters[["fe"]] <- "grid_id + year"
+rfs_1lag3lead_notrend_clt10_yearFE <- list(all = list(), 
+                                           America = list(), 
+                                           Africa = list(), 
+                                           Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  elm <- 1
+  for(rfs_exp in est_parameters[["all_exposures_rfs"]]){#agri_crops eaear_mapmat[,"Crops"]
+    rfs_1lag3lead_notrend_clt10_yearFE[[CNT]][[elm]] <- make_main_reg(pre_process = FALSE,
+                                                                      
+                                                                      outcome_variable = "loss_commodity", 
+                                                                      continent = est_parameters[["continent"]],
+                                                                      start_year = est_parameters[["start_year"]],
+                                                                      end_year = est_parameters[["end_year"]],
+                                                                      
+                                                                      aggr_dyn = TRUE,
+                                                                      exposure_rfs = rfs_exp,
+                                                                      all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                                      
+                                                                      original_rfs_treatments = c("statute_conv"),
+                                                                      rfs_lead = est_parameters[["leads"]], 
+                                                                      rfs_lag = est_parameters[["lags"]],
+                                                                      rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                      rfs_pya = est_parameters[["pya"]], #ya,
+                                                                      
+                                                                      most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                      annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                      
+                                                                      s_trend = est_parameters[["s_trend"]],
+                                                                      s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                      fe = est_parameters[["fe"]], 
+                                                                      cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                      
+                                                                      rfs_rando = ""
+    )
+    
+    names(rfs_1lag3lead_notrend_clt10_yearFE[[CNT]])[elm] <- rfs_exp
+    elm <- elm + 1
+  }
+  
+}
+est_parameters[["fe"]] <- "grid_id + country_year"
+
+rm(df)
+dyn_df_list <- list()
+
+for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
+  dyn_df <- lapply(rfs_1lag3lead_notrend_clt10_yearFE[[CNT]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
+  dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  dyn_df$model <- CNT # dyn_des[dyn]
+  dyn_df_list[[CNT]] <- dyn_df
+}
+df <- bind_rows(dyn_df_list)
+df[df$model == "all", "model"] <- "Global"
+#df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
+df$significant01 <- ""
+df[df[,"Pr(>|t|)"] < 0.1, "significant01"] <- "p-value < .1"
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+row.names(df) <- NULL
+
+
+df_lmt <- df[df$term %in% limited_crops1,]
+{dwplot(df_lmt,
+        dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),#, alpha = significant01
+        whisker_args = list(size = 1, aes(alpha = significant01)),#alpha = significant01
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(#eaear_Barley = "Barley",
+      #eaear_Groundnut = "Groundnut", 
+      eaear_Maizegrain = "Maize",
+      
+      eaear_Fodder = "Pasture",
+      
+      eaear_Cereals = "Cereals",
+      eaear_Rice = "Rice",
+      
+      eaear_Soy_compo = "Soy", 
+      
+      eaear_Cotton = "Cotton",
+      eaear_Oilfeed_crops = "Oil crops",
+      
+      #eaear_Rapeseed = "Rapeseed", 
+      # eaear_Sorghum2 = "Sorghum", 
+      eaear_Biomass = "Biomass crops",
+      eaear_Sugar = "Sugar crops", 
+      #eaear_Sunflower = "Sunflower",
+      #eaear_Wheat = "Wheat",
+      
+      eaear_Coconut = "Coconut", 
+      eaear_Oilpalm = "Oil palm",
+      
+      eaear_Tobacco = "Tobacco", 
+      eaear_Citrus = "Citrus",
+      
+      eaear_Banana = "Banana", 
+      eaear_Cocoa_Coffee = "Cocoa or Coffee",
+      #eaear_Cocoa  = "Cocoa", 
+      #eaear_Coffee = "Coffee", 
+      eaear_Rubber = "Rubber", 
+      eaear_Tea = "Tea"
+    )) +
+    #scale_color_manual(values=wes_palette(n=4, name="Darjeeling1", type = "discrete")) +
+    scale_color_brewer(type = "qual", palette="Set1") +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    #ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.8, 0.05),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank()) }
+
+#### DYNAMICS DESCRIPTIVES #### 
+## RFS time series (un-interacted instrument) ##
+rfs <- dplyr::arrange(rfs, year)
+ts_rfs <- rfs[rfs$year>=2008,c("statute_conv")]
+plot(ts_rfs)
+lines(lowess(ts_rfs), col = 3)
+
+# Dickey Fuller tests
+adf_rfs <- ur.df(ts_rfs, 
+                 type = "trend")
+
+m3 <- cbind(
+  t(adf_rfs@teststat),
+  adf_rfs@cval)
+
+# INTERPRETTION.
+# First, note that in the model tested, lag = 0 means that there IS a unit root (see Wikipedia intuition section). 
+# While trend and intercept terms = 0 reflect there is NO trend or intercept. 
+
+# phi2 is the statistic for the null that all three of trend, intercept, AND lag are (jointly, it is) null (= 0) 
+# Rejecting the null, i.e. phi2 > critical value means AT LEAST one of the three is non zero. (Does not say if it's the trend/intercept, or the lag). 
+# Not rejecting it means that possibly there is a unit root (lag=0) and no trend and no intercept. --> Check phi3
+# phi3: rejecting the null, i.e. phi3 > cval means AT LEAST one of drift OR lag is non zero. 
+# Not rejecting means that possibly there is a unit root (lag=0) AND no intercept. --> Check tau3
+# tau3: rejecting the null that lag = 0 means that there ISN'T a unit root. 
+# Not rejecting it means there may be a unit root. 
+
+# Note from Wikipedia that "As this test is asymmetrical, we are only concerned with negative values of our test statistic. 
+# If the calculated test statistic is less (more negative) than the critical value, then the null hypothesis is rejected and no unit root is present."
+
+# Here, all tests fail to reject the null. This is most likely due to the length of the time series that underpowers the tests. 
+# If well powered, this could mean that there is no trend nor intercept, but there is a unit root. 
+
+# That there might be a unit root is confirmed by the least specified test: 
+adf_rfs <- ur.df(ts_rfs, 
+                 type = "none")
+
+m1 <- cbind(
+  t(adf_rfs@teststat),
+  adf_rfs@cval)
+
+# However, the presence of a unit root and the absence of an intercept can be rejected at 5% confidence in this specification
+# meaning that once one does not control for a trend, a drift appears in the data. But specifying a trend, the trend is not significant. 
+# So we would say the drift-only is the best specification. We stop here. And once we stop at the drift, the presence of a unit root can be rejected. 
+# Meaning that the data is stationary, and the only pattern that should be specified is an intercept. 
+adf_rfs <- ur.df(ts_rfs, 
+                 type = "drift")
+m2 <- cbind(
+  t(adf_rfs@teststat),
+  adf_rfs@cval)
+
+
+### PLOT ### 
+adf_mat <- rbind(m3, m2, m1)
+colnames(adf_mat) <- NULL
+
+options(knitr.table.format = "latex")
+kable(adf_mat, booktabs = T, align = "r",
+      caption = "Augmented Dickey-Fuller tests of the RFS statutory mandates on conventional biofuels, 2008-2022") %>%
+  kable_styling(latex_options = c("scale_down", "hold_position")) %>%
+  add_header_above(c(" " = 1,
+                     "Statistic" = 1,
+                     "0.01" = 1,
+                     "0.05" = 1,
+                     "0.1" = 1),
+                   align = "c",
+                   strikeout = F) %>%
+  add_header_above(c(" " = 2,
+                     "Critical values" = 3),
+                   align = "c",
+                   strikeout = F) %>%
+  column_spec(column = 1,
+              width = "7em",
+              latex_valign = "b") %>% 
+  column_spec(column = c(2:(ncol(adf_mat))),
+              width = "4em",
+              latex_valign = "c")
+
+# On KPSS: 
+# Here, the null hypothesis IS stationarity. the drift only is type "mu", and the drift + trend is "tau". 
+# Use 1 lag as the default in ADF above
+# "A major disadvantage for the KPSS test is that it has a high rate of Type I errors (it tends to reject the null hypothesis too often)." Combine with ADF 
+ur.kpss(ts_rfs, type = "mu", use.lag = 1) %>% summary()
+
+ur.kpss(diff(ts_rfs, differences = 1), 
+        type = "mu", use.lag = 1) %>% summary() 
+
+ur.kpss(diff(ts_rfs, differences = 2), 
+        type = "mu", use.lag = 1) %>% summary() # --> second differencing necessary
+
+# Only once the TS is differenced twice, we cannot reject that it is stationary 
+# similar when specifying a trend in the deterministic component. 
+
+## Outcome time series (summed within years) ##
+cropexposed <- main_data[main_data$year >= 2008,]
+cropexposed <- dplyr::arrange(cropexposed, year)
+ts_defo <- ddply(cropexposed, "year", summarise, 
+                 pantrop_defo = sum(loss_commodity, na.rm = TRUE))
+
+plot(ts_defo)
+lines(lowess(ts_defo), col = 3)
+
+# Dickey Fuller tests
+adf_defo <- ur.df(ts_defo$pantrop_defo, 
+                  type = "trend")
+cbind(
+  t(adf_defo@teststat),
+  adf_defo@cval)
+
+adf_defo <- ur.df(ts_defo$pantrop_defo, 
+                  type = "drift")
+cbind(
+  t(adf_defo@teststat),
+  adf_defo@cval)
+
+adf_defo <- ur.df(ts_defo$pantrop_defo, 
+                  type = "none")
+cbind(
+  t(adf_defo@teststat),
+  adf_defo@cval)
+
+# what the tests tell is that we cannot reject that there is a unit root nor that there is no trend nor intercept. 
+# So there might be a unit root and no trend nor intercept, but failure to reject is most probably due to underpower. 
+
+
+
+### Fisher-type panel unit root test ### 
+CNT <- "America"
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  d <- main_data
+  
+  # Keep only in data the useful variables 
+  d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                        # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                        # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
+                                        "loss_commodity",
+                                        "pasture_share_2000",
+                                        eaear_mapmat[,"Crops"] ))))
+  
+  # Merge only the prices needed, not the whole price dataframe
+  d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
+  
+  
+  # - are in study period
+  # if(start_year != 2011 | end_year != 2019){
+  d <- dplyr::filter(d, year >= est_parameters[["start_year"]])
+  d <- dplyr::filter(d, year <= est_parameters[["end_year"]])
+  # }
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d, continent_name == est_parameters[["continent"]])
+  }
+  
+  used_vars <- unique(c("grid_id", "year", "lat", "lon","continent_name",  "country_year",  #"country_name",  "remaining_fc", "accu_defo_since2k", # "sj_year",
+                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                        "loss_commodity",# "tmf_agri", "tmf_flood", "tmf_plantation",
+                        eaear_mapmat[,"Crops"], "statute_conv"))    
+  
+  
+  # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
+  # for instance, there are some NAs in the suitability index (places in water that we kept while processing other variables...) 
+  usable <- lapply(used_vars, FUN = function(var){is.finite(d[,var]) | is.character(d[,var])})
+  # used_vars[!(used_vars%in%names(d))]
+  names(usable) <- used_vars            
+  usable <- bind_cols(usable)
+  filter_vec <- base::rowSums(usable)
+  filter_vec <- filter_vec == length(used_vars)
+  d <- d[filter_vec, c(used_vars)]
+  if(anyNA(d)){stop()}
+  rm(filter_vec, usable)
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    d_clean <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    d_clean <- d
+  }
+  
+  # make one "interacted instrument", i.e. one of our regressors. 
+  # note that the results of the tests are independent of the crop chosen for exposure.
+  d_clean <- dplyr::mutate(d_clean, eaear_Soy_compo_X_statute_conv = eaear_Soy_compo*statute_conv)
+  
+  ### Fisher-type panel unit root test  
+  # We need to convert the data to a pdata.frame format, to use this interface in purtest 
+  pd_clean <- pdata.frame(d_clean[,c("grid_id", "year", "loss_commodity", "eaear_Soy_compo_X_statute_conv")], index = c("grid_id", "year"))
+  # wide_d_clean <- reshape(pd_clean, direction = "wide", v.names = c(outcome_variable, regressors[1]),
+  #                         timevar = "grid_id", idvar = "year", times = "grid_id")
+  anyNA(pd_clean)
+  purt <- list()
+  correction <- "1"
+  for(correction in c("0", "1", "trend")){
+    purt[[correction]] <- plm::purtest(data = pd_clean,
+                                       object = as.formula(paste0("eaear_Soy_compo_X_statute_conv ~ ", correction)),
+                                       #object = pd_clean$eaear_Soy_compo_X_statute_conv, 
+                                       pmax = 1, # length(unique(d_clean$year)) - 1,
+                                       exo = "trend",
+                                       test = "invnormal", 
+                                       na.rm = TRUE)
+  }
+  
+}
+
+
+
+
+
+
+
+
+
+#### TMF PLANTATIONS #### 
+est_parameters[["outcome_variable"]] <- "tmf_plantation"
+rfs_TMF_1lag3lead_notrend_clt10 <- list(all = list(), 
+                                        America = list(), 
+                                        Africa = list(), 
+                                        Asia = list())
+
+d_all  <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", "tmf_aeay_pantrop_long_final_1990_2020.Rdata"))
+# release some memory upfront
+d_all <- dplyr::filter(d_all, year >= 2008, year <= 2019)
+
+d_all <- dplyr::mutate(d_all, tmf_deforestation = tmf_agri + tmf_plantation)
+
+# Keep only in data the useful variables 
+d_all <- dplyr::select(d_all, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                              # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                              "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                              "tmf_agri", "tmf_flood", "tmf_plantation",
+                                              "pasture_share_2000",
+                                              est_parameters[["all_exposures_rfs"]] )))) #sj, 
+
+# Merge only the prices needed, not the whole price dataframe
+d_all <- left_join(d_all, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
+
+# - are suitable to crop j 
+if(est_parameters[["sjpos"]]){
+  d_all <- dplyr::filter(d_all, !!as.symbol(exposure_rfs) > 0)
+}
+
+# - are in study period
+d_all <- dplyr::filter(d_all, year >= est_parameters[["start_year"]])
+d_all <- dplyr::filter(d_all, year <= est_parameters[["end_year"]])
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0(est_parameters[["outcome_variable"]], " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  elm <- 1
+  for(rfs_exp in plantation_crops){#agri_crops eaear_mapmat[,"Crops"]
+    rfs_TMF_1lag3lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                                   pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                                   outcome_variable = est_parameters[["outcome_variable"]], 
+                                                                   
+                                                                   continent = est_parameters[["continent"]],
+                                                                   start_year = est_parameters[["start_year"]],
+                                                                   end_year = est_parameters[["end_year"]],
+                                                                   
+                                                                   aggr_dyn = TRUE,
+                                                                   exposure_rfs = rfs_exp,
+                                                                   all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                                   
+                                                                   original_rfs_treatments = c("statute_conv"),
+                                                                   rfs_lead = est_parameters[["leads"]], 
+                                                                   rfs_lag = est_parameters[["lags"]],
+                                                                   rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                   rfs_pya = est_parameters[["pya"]], #ya,
+                                                                   
+                                                                   most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                   annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                   
+                                                                   s_trend = est_parameters[["s_trend"]],
+                                                                   s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                   fe = est_parameters[["fe"]], 
+                                                                   cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                   
+                                                                   rfs_rando = ""
+    )
+    
+    names(rfs_TMF_1lag3lead_notrend_clt10[[CNT]])[elm] <- rfs_exp
+    elm <- elm + 1
+  }
+  
+}
+est_parameters[["outcome_variable"]] <- "loss_commodity"
 
 
 
@@ -3517,174 +4294,6 @@ row.names(df) <- NULL
           legend.justification = c(0, 0), 
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank()) }
-
-
-
-
-
-
-#### DYNAMICS DESCRIPTIVES #### 
-## RFS time series (un-interacted instrument) ##
-rfs <- dplyr::arrange(rfs, year)
-ts_rfs <- rfs[rfs$year>=2008,c("statute_conv")]
-plot(ts_rfs)
-lines(lowess(ts_rfs), col = 3)
-
-# Dickey Fuller tests
-adf_rfs <- ur.df(ts_rfs, 
-                 type = "trend")
-
-cbind(
-  t(adf_rfs@teststat),
-  adf_rfs@cval)
-
-# INTERPRETTION.
-# First, note that in the model tested, lag = 0 means that there IS a unit root (see Wikipedia intuition section). 
-# While trend and intercept terms = 0 reflect there is NO trend or intercept. 
-
-# phi2 is the statistic for the null that all three of trend, intercept, AND lag are (jointly, it is) null (= 0) 
-# Rejecting the null, i.e. phi2 > critical value means AT LEAST one of the three is non zero. (Does not say if it's the trend/intercept, or the lag). 
-# Not rejecting it means that possibly there is a unit root (lag=0) and no trend and no intercept. --> Check phi3
-# phi3: rejecting the null, i.e. phi3 > cval means AT LEAST one of drift OR lag is non zero. 
-# Not rejecting means that possibly there is a unit root (lag=0) AND no intercept. --> Check tau3
-# tau3: rejecting the null that lag = 0 means that there ISN'T a unit root. 
-# Not rejecting it means there may be a unit root. 
-
-# Note from Wikipedia that "As this test is asymmetrical, we are only concerned with negative values of our test statistic. 
-# If the calculated test statistic is less (more negative) than the critical value, then the null hypothesis is rejected and no unit root is present."
-
-# Here, all tests fail to reject the null. This is most likely due to the length of the time series that underpowers the tests. 
-# If well powered, this could mean that there is no trend nor intercept, but there is a unit root. 
-
-# That there might be a unit root is confirmed by the least specified test: 
-adf_rfs <- ur.df(ts_rfs, 
-                 type = "none")
-
-cbind(
-  t(adf_rfs@teststat),
-  adf_rfs@cval)
-
-# However, the presence of a unit root and the absence of an intercept can be rejected at 5% confidence in this specification
-# meaning that once one does not control for a trend, a drift appears in the data. But specifying a trend, the trend is not significant. 
-# So we would say the drift-only is the best specification. We stop here. And once we stop at the drift, the presence of a unit root can be rejected. 
-# Meaning that the data is stationary, and the only pattern that should be specified is an intercept. 
-adf_rfs <- ur.df(ts_rfs, 
-                 type = "drift")
-cbind(
-  t(adf_rfs@teststat),
-  adf_rfs@cval)
-
-
-
-# On KPSS: 
-# "A major disadvantage for the KPSS test is that it has a high rate of Type I errors (it tends to reject the null hypothesis too often)." Combine with ADF 
-ur.kpss(ts_rfs) %>% summary()
-ur.kpss(diff(ts_rfs, differences = 2)) %>% summary() # --> second differencing necessary
-
-## Outcome time series (summed within years) ##
-cropexposed <- main_data[main_data$year >= 2008,]
-cropexposed <- dplyr::arrange(cropexposed, year)
-ts_defo <- ddply(cropexposed, "year", summarise, 
-                 pantrop_defo = sum(loss_commodity, na.rm = TRUE))
-
-plot(ts_defo)
-lines(lowess(ts_defo), col = 3)
-
-# Dickey Fuller tests
-adf_defo <- ur.df(ts_defo$pantrop_defo, 
-                  type = "trend")
-cbind(
-  t(adf_defo@teststat),
-  adf_defo@cval)
-
-adf_defo <- ur.df(ts_defo$pantrop_defo, 
-                  type = "drift")
-cbind(
-  t(adf_defo@teststat),
-  adf_defo@cval)
-
-adf_defo <- ur.df(ts_defo$pantrop_defo, 
-                  type = "none")
-cbind(
-  t(adf_defo@teststat),
-  adf_defo@cval)
-
-# what the tests tell is that we cannot reject that there is a unit root nor that there is no trend nor intercept. 
-# So there might be a unit root and no trend nor intercept, but failure to reject is most probably due to underpower. 
-
-
-
-### Fisher-type panel unit root test ### 
-CNT <- "America"
-for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
-  
-  est_parameters <- list(outcome_variable  = "tmf_agri",
-                         continent = CNT,
-                         start_year = 2010, 
-                         end_year = 2019, 
-                         most_correlated_only = FALSE,
-                         annual_rfs_controls = FALSE,
-                         sjpos = FALSE,
-                         lags = 2,
-                         leads = 3,
-                         fya = 0, 
-                         pya = 0,
-                         s_trend = FALSE, 
-                         s_trend_loga = FALSE,
-                         fe = "grid_id + country_year",
-                         clustering = "oneway",
-                         cluster_var1 = "grid_id_10",
-                         cluster_var2 = "grid_id_10",
-                         distribution = "quasipoisson")
-  d <- main_data
-  
-  # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
-                                        # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
-                                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
-                                        # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
-                                        "loss_commodity",
-                                        "pasture_share_2000",
-                                        eaear_mapmat[,"Crops"] ))))
-  
-  # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
-  
-  # - are suitable to crop j 
-  if(est_parameters[["sjpos"]]){
-    d <- dplyr::filter(d, !!as.symbol(exposure_rfs) > 0)
-  }
-  
-  # - are in study period
-  # if(start_year != 2011 | end_year != 2019){
-  d <- dplyr::filter(d, year >= est_parameters[["start_year"]])
-  d <- dplyr::filter(d, year <= est_parameters[["end_year"]])
-  # }
-  
-  # - are in study area
-  if(est_parameters[["continent"]] != "all"){
-    d <- dplyr::filter(d, continent_name == est_parameters[["continent"]])
-  }
-  
-  # Have tmf deforestation to agriculture at least once
-  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
-                    data = d,
-                    family = "poisson")
-  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
-  if(length(temp_est$obs_selection)>0){
-    d_clean <- d[unlist(temp_est$obs_selection),]
-  }  else { 
-    d_clean <- d
-  }
-  
-  
-  
-  
-  
-}
-
-
-
 
 
 
