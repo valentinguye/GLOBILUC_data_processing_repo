@@ -93,8 +93,8 @@ names(gaez) <- gaez_crops
 
 
 #### AGGREGATE AND RESAMPLE LOSS #### 
-losscommo <- brick(here("input_data", "10thLossSumGlass_maxP", "10thLoss_commodity_3km-0000000000-0000000000.tif"))
-losscommo2 <- brick(here("input_data", "10thLossSumGlass_maxP", "10thLoss_commodity_3km-0000000000-0000007680.tif"))
+# losscommo <- brick(here("input_data", "10thLossSumGlass_maxP", "10thLoss_commodity_3km-0000000000-0000000000.tif"))
+# losscommo2 <- brick(here("input_data", "10thLossSumGlass_maxP", "10thLoss_commodity_3km-0000000000-0000007680.tif"))
 
 
 ### Brick layers ### 
