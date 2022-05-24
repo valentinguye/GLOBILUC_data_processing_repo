@@ -92,7 +92,7 @@ eaear_mapmat_data <- c(
   "Rubber", "eaear_Rubber",
   #"Sorghum", "eaear_Sorghum2", 
   "Soy_index", "eaear_Soy_compo",
-  "Sugar", "eaear_Sugar", 
+  "Sugar", "eaear_Sugarcane", 
   #"Sunflower_oil", "eaear_Sunflower",
   "Tea", "eaear_Tea",
   "Tobacco", "eaear_Tobacco" 
@@ -110,7 +110,7 @@ agri_crops <- eaear_mapmat[,"Crops"][!(eaear_mapmat[,"Crops"] %in% c("eaear_Oilp
 plantation_crops <- c("eaear_Oilpalm", "eaear_Rubber")
 
 limited_crops1 <- c("eaear_Maizegrain", "eaear_Fodder", "eaear_Cereals", "eaear_Soy_compo", 
-                    "eaear_Oilfeed_crops", "eaear_Sugar", "eaear_Oilpalm", "eaear_Tobacco",
+                    "eaear_Oilfeed_crops", "eaear_Sugarcane", "eaear_Oilpalm", "eaear_Tobacco",
                     "eaear_Cocoa_Coffee")
 
 ### MAIN DATA SETS #### 
@@ -1548,6 +1548,29 @@ make_main_reg <- function(pre_process = FALSE,
   rm(toreturn)
 }
 
+### MAIN SPECIFICATION ### 
+est_parameters <- list(outcome_variable  = "loss_commodity",
+                       continent = NULL, # this is filled within the loop 
+                       start_year = 2009, 
+                       end_year = 2019, 
+                       most_correlated_only = FALSE,
+                       annual_rfs_controls = FALSE,
+                       all_exposures_rfs = eaear_mapmat[,"Crops"],
+                       sjpos = FALSE,
+                       lags = 1,
+                       leads = 3,
+                       fya = 0, 
+                       pya = 0,
+                       lag_controls = NULL,
+                       control_pasture = FALSE,
+                       s_trend = FALSE, 
+                       s_trend_loga = FALSE,
+                       fe = "grid_id + country_year",
+                       clustering = "oneway",
+                       cluster_var1 = "grid_id_10",
+                       cluster_var2 = "grid_id_10",
+                       distribution = "quasipoisson")
+
 
 #### RFS CUMMULATIVE LEADS & LAGS 2011-2019 ####
 rfs_1lag3lead_notrend_clt10 <- list(all = list(), 
@@ -1560,23 +1583,8 @@ CNT <- "America"
 
 for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
   
-  est_parameters <- list(outcome_variable  = "loss_commodity",
-                         continent = CNT,
-                         start_year = 2009, 
-                         end_year = 2019, 
-                         most_correlated_only = FALSE,
-                         annual_rfs_controls = FALSE,
-                         all_exposures_rfs = eaear_mapmat[,"Crops"],
-                         sjpos = FALSE,
-                         lags = 1,
-                         leads = 3,
-                         fya = 0, 
-                         pya = 0,
-                         s_trend = FALSE, 
-                         s_trend_loga = FALSE,
-                         fe = "grid_id + country_year",
-                         cluster_var1 = "grid_id_10",
-                         distribution = "quasipoisson")
+  est_parameters[["continent"]] <- CNT
+  
   d <- main_data
   
   # Keep only in data the useful variables 
@@ -1723,7 +1731,7 @@ crop_groups <- list(c("Group 1", "Cereals", "Rice"),
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -2828,7 +2836,7 @@ crop_groups <- list(c("Group 1", "Cereals", "Rice"),
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -2882,7 +2890,7 @@ df_lmt <- df[df$term %in% limited_crops1,]
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -2972,7 +2980,7 @@ dyn_df_lmt <- dplyr::filter(dyn_df_lmt, continent != "Africa")
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -3071,7 +3079,7 @@ dyn_df_lmt <- dplyr::filter(dyn_df_lmt, continent != "Africa")
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -3194,7 +3202,7 @@ df_lmt <- df[df$term %in% limited_crops1,]
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -3318,7 +3326,7 @@ df_lmt <- df[df$term %in% limited_crops1,]
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -3441,7 +3449,7 @@ df_lmt <- df[df$term %in% limited_crops1,]
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -3933,7 +3941,7 @@ crop_groups <- list(c("Group 1", "Biomass crops", "Sugar crops"), # "Groundnut",
       eaear_Rice = "Rice",
       eaear_Soy_compo = "Soy", 
       # eaear_Sorghum2 = "Sorghum", 
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -4079,7 +4087,7 @@ crop_groups <- list(c("Group 1", "Cereals", "Rice"),
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -4267,7 +4275,7 @@ row.names(df) <- NULL
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugar = "Sugar crops", 
+      eaear_Sugarcane = "Sugar crops", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       

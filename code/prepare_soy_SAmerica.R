@@ -81,7 +81,7 @@ gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 # Otherwise, calling brick on multiple layers takes some time, and calling stack on multiple layers implies that the object is kept in R memory, and it's ~.06Gb
 gaez <- brick(here(gaez_dir, "high_input_all.tif"))
 
-# first crop it to brazil aoi 
+# first crop it to southam aoi 
 gaez_southam <- crop(gaez, southam_aoi)
 rm(gaez)
 
@@ -189,7 +189,7 @@ aggregate(fc2k, fact = 3,
           filename = fc2k_aggr_output_name,
           overwrite = TRUE)
 
-# align to DRIVERS exactly 
+# align to GAEZ exactly 
 aggregated_fc2000 <- raster(fc2k_aggr_output_name)
 
 resample(x = aggregated_fc2000, 
@@ -221,6 +221,7 @@ losscommo <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", pa
 
 losscommo <- crop(losscommo, southam_aoi)
 
+# (fairly useless)
 resample(x = losscommo, 
          y = gaez_southam, 
          method = "ngb", # no difference between bilinear and ngb
@@ -265,7 +266,7 @@ names(fc2k) <- "fc_2000"
 names(pst2k) <- "pasture_share_2000"
 
 ## STACK 
-southam_stack <- stack(drivenloss_commodity,
+southam_stack <- stack(losscommo,
                         extent_soy, 
                         unidir_soy,
                         gaez_southam, fc2k, pst2k)
@@ -480,7 +481,10 @@ df_cs <- df_cs[,c("grid_id", "grid_id_5", "grid_id_10", "grid_id_20")]
 
 saveRDS(df_cs, here("temp_data", "merged_datasets", "southam_aoi", "loss_commodity_aeay_cs_biggercells.Rdata"))
 
-rm(df_cs, bigger_50km_sf, bigger_100km_sf, bigger_500km_sf)
+rm(df_cs, 
+   bigger_5, bigger_5_sf, bigger_5_stars,
+   bigger_10, bigger_10_sf, bigger_10_stars,
+   bigger_20, bigger_20_sf, bigger_20_stars)
 
 #### ADD REMAINING FOREST VARIABLE #### 
 # neither country nor continent information is relevant here. 
@@ -776,9 +780,6 @@ summary(df_cs$eaear_Soy_compo)
 df_cs <- dplyr::select(df_cs, -eaear_Soybean, -eaear_Soybean_meal, -eaear_Soybean_oil)
 
 
-
-### ### ### ### ### 
-
 # Select variables to save: all the eaear variables, standardized or not
 var_names <- grep(pattern = "eaear_", names(df_cs), value = TRUE) 
 df_cs <- df_cs[,c("grid_id", var_names)]
@@ -826,10 +827,10 @@ final <- left_join(final, df_stdeaear, by = "grid_id") # no issue with using gri
 rm(df_stdeaear)
 
 ## REMAINING
-df_remain <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "loss_commodity_aeay_long_remaining.Rdata"))
-
-final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
-rm(df_remain)
+# df_remain <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "loss_commodity_aeay_long_remaining.Rdata"))
+# 
+# final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
+# rm(df_remain)
 
 saveRDS(final, here("temp_data", "merged_datasets", "southam_aoi", "loss_commodity_aeay_long_final.Rdata"))
 

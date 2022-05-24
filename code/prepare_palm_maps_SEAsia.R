@@ -66,12 +66,6 @@ rasterOptions(timer = TRUE,
 ### GLOBAL CRS USED throughout the study ### 
 mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
 
-### GAEZ OBJECTS
-gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
-gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
-                         pattern = "", 
-                         full.names = FALSE)
-gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 
 ### SOUTH EAST ASIA AOI 
 aop <- raster(here("input_data", "aop_lower", "lower", "2001_op_lower.tif"))
@@ -85,33 +79,41 @@ SEAsia_aoi <- extent(c(94.955908, 120.404282, -5.941733, 7.363556 ))
 # r <- raster(here("input_data", "10thLossSumGlass_maxP_SEAsia_2001.tif"))
 
 
+### GAEZ OBJECTS
+# in this script, GAEZ is the target raster of all aggregations / resamplings
+gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
+gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+
+## THIS IS GAEZ IN FULL TROPICAL AOI 
+# a priori no issue if it's gaez in global aoi, i.e. not croped in prepare_gaez.R, it only needs to be a larger aoi than continental ones given above. 
+# besides, note that we brick the file that was already saved as a single brick of raster layers. 
+# Otherwise, calling brick on multiple layers takes some time, and calling stack on multiple layers implies that the object is kept in R memory, and it's ~.06Gb
+gaez <- brick(here(gaez_dir, "high_input_all.tif"))
+
+# first crop it to SEAsia aoi 
+gaez_SEAsia <- crop(gaez, SEAsia_aoi)
+rm(gaez)
+
+
+### YEAR OBJECTS
 all_years <- c(2001:2016) %>% as.character()
 
 midpoint_years <- c("2001", "2002", "2003", "2004", "2005", "2006", "2011", "2012", "2013", "2014")
 
 
-### DRIVERS CROPED AT TROPICAL AOI
-# this is necessary in other parts than prepare drivers, because it is the raster target 
-drivers <- raster(here("input_data", "curtis", "Goode_FinalClassification_19_05pcnt_prj", "Goode_FinalClassification_19_05pcnt_prj.tif"))
-
-# crop it to the tropical aoi
-drivers <- crop(drivers, SEAsia_aoi)
-
 ### SOME PATHS THAT ARE CALLED THROUGHOUT THE SCRIPT 
-op_resampled_output_name <- here("temp_data", "processed_aop", "SEAsia_aoi", "resampled_unidir_0216.tif")
+op_resampled_output_name <- here("temp_data", "processed_aop", "SEAsia_aoi", "op_unidir_resampledgaez_0216.tif")
 
-any_resampled_output_name <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "loss_drivers_any.tif")
-commodity_resampled_output_name <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "loss_drivers_commodity.tif")
-shifting_resampled_output_name <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "loss_drivers_shifting.tif")
-forestry_resampled_output_name <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "loss_drivers_forestry.tif")
-fire_resampled_output_name <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "loss_drivers_fire.tif")
-urba_resampled_output_name <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "loss_drivers_urba.tif")
 
-gaez_resampled_output_name <- here(gaez_dir, "SEAsia_resampleddrivers_high_input.tif")
-fc2k_resampled_output_name <- here("temp_data", "processed_fc2000", "SEAsia_aoi", "resampled_fc_2000.tif")
-pst2k_resampled_output_name <- here("temp_data", "processed_pasture2000", "SEAsia_aoi", "resampled_drivers_pasture_2000.tif")
+fc2k_resampled_output_name <- here("temp_data", "processed_fc2000", "SEAsia_aoi", "fc_resampledgaez_2000.tif")
+pst2k_resampled_output_name <- here("temp_data", "processed_pasture2000", "SEAsia_aoi", "pasture_resampledgaez_2000.tif")
 
-mask_path <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "always_zero_mask_lossdrivers_any.tif")
+commodity_resampled_output_name <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "loss_commo_resampledgaez_0119.tif")
+
+mask_path <- here("temp_data", "processed_lossdrivers", "SEAsia_aoi", "always_zero_mask_loss_commo_resampledgaez_0119.tif")
 
 #### TURN ALL RASTERS TO INT1U #### 
 # Do it now already such that no FLT4S is created/manipulated 
@@ -313,9 +315,9 @@ aggregate_annual <- function(time){
   unidir_annual <- raster(processname)
   
   # define output file name
-  output_filename <- here("temp_data", "processed_aop", "SEAsia_aoi", paste0("unidir_10km_", unidir_years[time], ".tif"))
+  output_filename <- here("temp_data", "processed_aop", "SEAsia_aoi", paste0("unidir_9km_", unidir_years[time], ".tif"))
   
-  raster::aggregate(unidir_annual, fact = 100, # multiplies in both directions by 100. Since current resolution is 100m, target resolution is 10000m, i.e. 10km
+  raster::aggregate(unidir_annual, fact = 90, # multiplies in both directions by 90. Since current resolution is 100m, target resolution is 9000m, i.e. 9km
                     expand = FALSE,
                     fun = aggregate_pixels,
                     na.rm = FALSE, # NA cells are in margins, see the NOTES part. If FALSE, aggregations at margins that use NA 
@@ -345,57 +347,27 @@ foreach(t = 1:length(unidir_years),
 
 # align to DRIVERS exactly 
 rasterlist <- list.files(path = here("temp_data", "processed_aop", "SEAsia_aoi"), 
-                         pattern = "unidir_10km_", 
+                         pattern = "unidir_9km_", 
                          full.names = TRUE) %>% as.list()
 aggregated <- brick(rasterlist)
 
 projectRaster(from = aggregated, 
-              to = drivers, 
-               method = "bilinear", # bilinear or ngb changes nothing 
-               filename = op_resampled_output_name, 
-               overwrite = TRUE)
-
-
-#### ALIGNE GAEZ ####
-gaez <- brick(here(gaez_dir, "high_input_all.tif"))
-gaez <- crop(gaez, SEAsia_aoi)
-
-# gaez$high_input_all.1 %>% values() %>% summary()
-
-# resample directly (without aggregating first) from the ~9km cells to ~10km (aggregate does not work bc resolutions are to close)
-
-# aligne
-resample(x = gaez, 
-         y = drivers, 
-         method = "ngb", # not a big difference between bilinear and ngb, but the latter is still a bit closer to initial gaez, and the former yields negative values.  
-         filename = gaez_resampled_output_name, 
+         to = gaez_SEAsia, 
+         method = "bilinear", # bilinear or ngb changes nothing 
+         filename = op_resampled_output_name, 
          overwrite = TRUE)
 
-# # takes the first layer
-# resbil <- raster(resampled_output_name)
-# resbil %>% values%>% summary()
-# rm(resbil)
-# 
-# # aligne
-# resample(x = gaez, 
-#          y = drivers, 
-#          method = "ngb", # bilinear or ngb changes nothing 
-#          filename = resampled_output_name, 
-#          overwrite = TRUE)
-# 
-# resngb <- raster(resampled_output_name)
-# 
-# resngb %>% values%>% summary()
-# gaez$high_input_all.1 %>% values %>% summary()
+
+
 
 #### 2000 FOREST COVER #### 
 fc2k <- raster(here("input_data", "fc_2000_3km_10th.tif"))
 
 fc2k <- crop(fc2k, SEAsia_aoi)
 
-fc2k_aggr_output_name <- here("temp_data", "processed_fc2000", "SEAsia_aoi", "aggr_fc_2000.tif")
+fc2k_aggr_output_name <- here("temp_data", "processed_fc2000", "SEAsia_aoi", "fc_9km_2000.tif")
 
-aggregate(fc2k, fact = c(res(drivers)[1]/res(fc2k)[1], res(drivers)[2]/res(fc2k)[2]),
+aggregate(fc2k, fact = 3,
           expand = FALSE,
           fun = sum,
           na.rm = TRUE,  # no NA values a priori mais bon 
@@ -406,7 +378,7 @@ aggregate(fc2k, fact = c(res(drivers)[1]/res(fc2k)[1], res(drivers)[2]/res(fc2k)
 aggregated_fc2000 <- raster(fc2k_aggr_output_name)
 
 resample(x = aggregated_fc2000, 
-         y = drivers, 
+         y = gaez_SEAsia, 
          method = "ngb", # ngb because bilinear yields negatie values
          filename = fc2k_resampled_output_name, 
          overwrite = TRUE)
@@ -420,7 +392,7 @@ pst2k <- crop(pst2k, SEAsia_aoi)
 pst2k <- reclassify(pst2k, cbind(NA, 0))
 
 resample(x = pst2k, 
-         y = drivers, 
+         y = gaez_SEAsia, 
          method = "ngb", # we use ngb and not bilinear because the output values' summary better fits that of the aggregated layer 
          # and the bilinear interpolation arguably smoothes the reprojection more than necessary given that from and to are already very similar.  
          filename = pst2k_resampled_output_name, 
@@ -429,85 +401,26 @@ resample(x = pst2k,
 
 
 #### DRIVEN DEFORESTATION DATA ####
-### ANY ### 
-# it is already aggregated at drivers resolution. Just crop it to the brazil aoi, and aline it to the previous rasters
-any_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_any.tif"))
-
-any_lossdrivers <- crop(any_lossdrivers, SEAsia_aoi)
-
-resample(x = any_lossdrivers, 
-         y = drivers, 
-         method = "ngb", # no difference between bilinear and ngb
-         filename = any_resampled_output_name, 
-         overwrite = TRUE)
 
 ### COMMODITY ###
-# it is already aggregated at drivers resolution. Just crop it to the brazil aoi, and aline it to the previous rasters
-commodity_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_commodity.tif"))
+# it is already aggregated at drivers resolution. Just crop it to the SEAsia aoi, and aline it to the previous rasters
+losscommo <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", paste0("loss_commo_resampledgaez_0119.tif")))
 
-commodity_lossdrivers <- crop(commodity_lossdrivers, SEAsia_aoi)
+losscommo <- crop(losscommo, SEAsia_aoi)
 
-resample(x = commodity_lossdrivers, 
-         y = drivers, 
+resample(x = losscommo, 
+         y = gaez_SEAsia, 
          method = "ngb", # no difference between bilinear and ngb
          filename = commodity_resampled_output_name, 
          overwrite = TRUE)
 
-### SHIFTING ###
-# it is already aggregated at drivers resolution. Just crop it to the brazil aoi, and aline it to the previous rasters
-shifting_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_shifting.tif"))
-
-shifting_lossdrivers <- crop(shifting_lossdrivers, SEAsia_aoi)
-
-resample(x = shifting_lossdrivers, 
-         y = drivers, 
-         method = "ngb", # no difference between bilinear and ngb
-         filename = shifting_resampled_output_name, 
-         overwrite = TRUE)
-
-### FORESTRY ###
-# it is already aggregated at drivers resolution. Just crop it to the brazil aoi, and aline it to the previous rasters
-forestry_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_forestry.tif"))
-
-forestry_lossdrivers <- crop(forestry_lossdrivers, SEAsia_aoi)
-
-resample(x = forestry_lossdrivers, 
-         y = drivers, 
-         method = "ngb", # no difference between bilinear and ngb
-         filename = forestry_resampled_output_name, 
-         overwrite = TRUE)
-
-### FIRE ###
-# it is already aggregated at drivers resolution. Just crop it to the brazil aoi, and aline it to the previous rasters
-fire_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_fire.tif"))
-
-fire_lossdrivers <- crop(fire_lossdrivers, SEAsia_aoi)
-
-resample(x = fire_lossdrivers, 
-         y = drivers, 
-         method = "ngb", # no difference between bilinear and ngb
-         filename = fire_resampled_output_name, 
-         overwrite = TRUE)
-
-### URBANIZATION ###
-# it is already aggregated at drivers resolution. Just crop it to the brazil aoi, and aline it to the previous rasters
-urba_lossdrivers <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_drivers_urba.tif"))
-
-urba_lossdrivers <- crop(urba_lossdrivers, SEAsia_aoi)
-
-resample(x = urba_lossdrivers, 
-         y = drivers, 
-         method = "ngb", # no difference between bilinear and ngb
-         filename = urba_resampled_output_name, 
-         overwrite = TRUE)
-
 
 #### PREPARE ALWAYS ZERO DEFORESTATION MASK #### 
-any_lossdrivers <- brick(any_resampled_output_name)
+losscommo <- brick(commodity_resampled_output_name)
 
 always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
 
-overlay(x = any_lossdrivers,
+overlay(x = losscommo,
         fun = always_zero,
         filename = mask_path,
         na.rm = TRUE,
@@ -517,30 +430,21 @@ overlay(x = any_lossdrivers,
 
 #### STACK AND MASK MAPBIOMASS, GAEZ, AND COMMODITY DEFORESTATION #### 
 # Read layers to be stacked
-drivenloss_commodity <- brick(commodity_resampled_output_name)
-drivenloss_shifting <- brick(shifting_resampled_output_name)
-drivenloss_forestry <- brick(forestry_resampled_output_name)
-drivenloss_fire <- brick(fire_resampled_output_name)
-drivenloss_urba <- brick(urba_resampled_output_name)
+losscommo <- brick(commodity_resampled_output_name)
 
 oilpalm <- brick(op_resampled_output_name)
 
-gaez <- brick(gaez_resampled_output_name)
 fc2k <- raster(fc2k_resampled_output_name)
 pst2k <- raster(pst2k_resampled_output_name)
 
 # It is important to explicitly rename layers that are going to be stacked and then called to reshape the data frame 
 # for time varying variables, the dot is important. 
-names(drivenloss_commodity) <- paste0("driven_loss_commodity.",seq(2001, 2019, 1)) 
-names(drivenloss_shifting) <- paste0("driven_loss_shifting.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
-names(drivenloss_forestry) <- paste0("driven_loss_forestry.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
-names(drivenloss_fire) <- paste0("driven_loss_fire.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
-names(drivenloss_urba) <- paste0("driven_loss_urba.",seq(2001, 2019, 1)) # note the difference with the names of phtfloss (not the same years)
+names(losscommo) <- paste0("loss_commodity.",seq(2001, 2019, 1)) 
 
 # NOTE THE DIFFERENT SET OF YEARS FOR THIS VARIABLE ( AND THUS DIFFERENT NUMBER OF LAYERS )
-names(oilpalm) <- paste0("oilpalm.",seq(2002, 2016, 1)) # this is indeed what has been selected in this land use preparation above
+names(oilpalm) <- paste0("unidir_oilpalm.",seq(2002, 2016, 1)) # this is indeed what has been selected in this land use preparation above
 
-names(gaez) <- gaez_crops
+names(gaez_SEAsia) <- gaez_crops
 
 names(fc2k) <- "fc_2000"
 names(pst2k) <- "pasture_share_2000"
@@ -555,13 +459,9 @@ names(pst2k) <- "pasture_share_2000"
 
 
 ## STACK 
-SEAsia_stack <- stack(drivenloss_commodity,
-                      drivenloss_shifting, 
-                      drivenloss_forestry, 
-                      drivenloss_fire,
-                      drivenloss_urba,
+SEAsia_stack <- stack(losscommo,
                       oilpalm,
-                      gaez, fc2k, pst2k)
+                      gaez_SEAsia, fc2k, pst2k)
 names(SEAsia_stack)
 
 ### MASK TO REMOVE ALWAYS ZERO PIXELS AND LIGHTEN THE DATA FRAMES ### 
@@ -588,10 +488,10 @@ head(wide_df[,c("x", "y")])
 wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
 
 # FILL MISSING YEARS FOR OILPALM DATA WRT. DEFORESTATION DATA 
-wide_df$oilpalm.2001 <- NA
-wide_df$oilpalm.2017 <- NA
-wide_df$oilpalm.2018 <- NA
-wide_df$oilpalm.2019 <- NA
+wide_df$unidir_oilpalm.2001 <- NA
+wide_df$unidir_oilpalm.2017 <- NA
+wide_df$unidir_oilpalm.2018 <- NA
+wide_df$unidir_oilpalm.2019 <- NA
 
 
 ### WIDE TO LONG ### 
@@ -604,19 +504,15 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 # fixed = TRUE is necessary (otherwise the dot is read as a regexp I guess)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
-varying_vars <- list(names(drivenloss_commodity),
-                     names(drivenloss_shifting),
-                     names(drivenloss_forestry),
-                     names(drivenloss_fire), 
-                     names(drivenloss_urba),
-                     paste0("oilpalm.",seq(2001, 2019, 1)))
+varying_vars <- list(paste0("loss_commodity.", seq(2001, 2019, 1)),
+                     paste0("unidir_oilpalm.",seq(2001, 2019, 1)))
 #varying_vars <- names(driverloss_gaez)[grep(".", names(driverloss_gaez), fixed = TRUE)]
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
-                          v.names = c("driven_loss_commodity", "driven_loss_shifting", "driven_loss_forestry", "driven_loss_fire", "driven_loss_urba", 
-                                      "oilpalm"),
+                          v.names = c("loss_commodity", 
+                                      "unidir_oilpalm"),
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -632,9 +528,9 @@ long_df <- mutate(long_df, year = years[year])
 
 long_df <- dplyr::arrange(long_df, grid_id, year)
 
-saveRDS(long_df, here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_long.Rdata"))
+saveRDS(long_df, here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long.Rdata"))
 
-rm(long_df, varying_vars, SEAsia_stack, gaez, mask, commodity_lossdrivers, fc2k, pst2k)
+rm(long_df, varying_vars, gaez, mask, commodity_lossdrivers, fc2k, pst2k)
 
 
 
