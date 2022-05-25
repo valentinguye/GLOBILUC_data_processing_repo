@@ -474,7 +474,7 @@ conley_cutoff <- 100
 clustering = "oneway" # either "oneway" or "twoway". If oneway, it clusters on cluster_var1. 
 cluster_var1 = "grid_id_10" 
 cluster_var2 = "grid_id_5_year"
-dyn_tests = TRUE
+# dyn_tests = TRUE
 output = "est_object"
 glm_iter <- 25 
 
@@ -533,7 +533,7 @@ make_main_reg <- function(pre_process = FALSE,
                           # old argument: cluster ="grid_id", # the cluster level if se = "cluster" (i.e. one way)
                           # coefstat = "confint", # one of "se", "tstat", "confint"
                           glm_iter = 25,
-                          dyn_tests = FALSE, # should the Fisher-type panel unit root test be returned, instead of the regressions, for the outcome_variable and the first regressor
+                          # dyn_tests = FALSE, # should the Fisher-type panel unit root test be returned, instead of the regressions, for the outcome_variable and the first regressor
                           output = "coef_table" # one of "data", est_object, or "coef_table" 
 ){
   

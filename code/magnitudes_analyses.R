@@ -89,6 +89,7 @@ setFixest_dict(c(grid_id = "grid cell",
 ### GLOBAL CRS USED ### 
 mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
 
+
 # this is mapmat for eaear 
 eaear_mapmat_data <- c(
   "Banana","eaear_Banana",
@@ -113,8 +114,6 @@ eaear_mapmat_data <- c(
   "Rubber", "eaear_Rubber",
   #"Sorghum", "eaear_Sorghum2", 
   "Soy_index", "eaear_Soy_compo",
-  "Sugar", "eaear_Sugar", 
-  "Sugar", "eaear_Sugarbeet", 
   "Sugar", "eaear_Sugarcane", 
   #"Sunflower_oil", "eaear_Sunflower",
   "Tea", "eaear_Tea",
@@ -129,10 +128,18 @@ eaear_mapmat <- matrix(data = eaear_mapmat_data,
 
 colnames(eaear_mapmat) <- c("Prices", "Crops")
 
+agri_crops <- eaear_mapmat[,"Crops"][!(eaear_mapmat[,"Crops"] %in% c("eaear_Oilpalm", "eaear_Rubber"))]
+plantation_crops <- c("eaear_Oilpalm", "eaear_Rubber")
+
+limited_crops1 <- c("eaear_Maizegrain", "eaear_Fodder", "eaear_Cereals", "eaear_Soy_compo", 
+                    "eaear_Oilfeed_crops", "eaear_Sugarcane", "eaear_Oilpalm", "eaear_Tobacco",
+                    "eaear_Cocoa_Coffee")
+
 
 ### MAIN DATA SET ### 
-brazil_data <- readRDS(here("temp_data", "merged_datasets", "brazil_aoi", "driverloss_all_aeay_long_final.Rdata"))
-southam_data <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "driverloss_all_aeay_long_final.Rdata"))
+brazil_data <- readRDS(here("temp_data", "merged_datasets", "brazil_aoi", "loss_commodity_aeay_long_final.Rdata"))
+southam_data <- readRDS(here("temp_data", "merged_datasets", "southam_aoi", "loss_commodity_aeay_long_final.Rdata"))
+seasia_data <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long_final.Rdata"))
 
 ### PRICE DATA ###
 prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
@@ -231,76 +238,58 @@ for(voi in rfs_vars){
 # prices[,c("year", grep(names(prices), pattern = "statute_conv", value = TRUE))] %>% tail(25)
 
 
-### HELPER FUNCTION TO BOOTSTRAP CLUSTER SE 
-# will tell boot::boot how to sample data at each replicate of statistic
-
-# without clustering
-ran.gen_blc <- function(original_data, arg_list){
-  
-  new_rowids <- sample(x = row.names(original_data), 
-                       size = arg_list[["size"]], 
-                       replace = TRUE)
-  
-  return(original_data[new_rowids,])
-}
-
-
-
 #### REGRESSION FUNCTION #### 
 
 ### TEMPORARY OBJECTS 
-outcome_variable = "driven_loss_commodity" # "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
-endo_vars = "pastures"
+outcome_variable = "loss_commodity" # "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
+endo_vars = "unidir_soy"
 start_year = 2011
 end_year = 2019
-region = "brazil"
+region = "southam"
 
 pasture_shares <- FALSE
 standardization = ""
 
-estimated_effect = "alpha"
-rfs_reg <- TRUE
 rfs_rando <- ""
 original_rfs_treatments <- c("statute_conv")
+rfs_lag <- 2
 rfs_lead <- 3
-rfs_lag <- 3 
 rfs_fya <-  0
 rfs_pya <- 0
+lag_controls = NULL
 aggr_dyn <- TRUE
-original_exposure_rfs <- "eaear_Fodder"
+exposure_rfs <- eaear_mapmat[,"Crops"]#"eaear_Oilpalm"
 group_exposure_rfs <- FALSE
-control_all_absolute_rfs <- TRUE
+control_all_absolute_rfs <- FALSE
+most_correlated_only = FALSE
 annual_rfs_controls <- FALSE
 
 control_pasture <- FALSE
 pasture_trend <- FALSE
 
 fc_trend <- FALSE
-s_trend <- TRUE
+s_trend <- FALSE
+s_trend_loga <- FALSE
 fc_s_trend <- FALSE
 
-sjpos <- FALSE
+sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
+
 fe = "grid_id + country_year" #   
-distribution_1st <- "quasipoisson"
-distribution_2nd <- "quasipoisson"
+preclean_level = "FE"
+distribution_1st = "quasipoisson"
+distribution_2nd = "quasipoisson"
 invhypsin = TRUE
 conley_cutoff <- 100
-# se <- "twoway"
-clustering <- "oneway"
-cluster_var1 <- "grid_id"
-cluster_var2 <- "grid_id_50km_year"
+clustering = "oneway" # either "oneway" or "twoway". If oneway, it clusters on cluster_var1. 
+cluster_var1 = "grid_id_10" 
+cluster_var2 = "grid_id_5_year"
 output = "est_object"
-
-boot_rep <- 2
 glm_iter <- 25 
 
-# parameters for APE computation 
-CLUSTER  <- "reachable"#"subdistrict",
-stddev <- FALSE # if TRUE, the PEs are computed for a one standard deviation (after removing variation in the fixed-effect dimensions)
-rel_lu_change  <- 0.01
-abs_lu_change  <- 1
-rounding <- 2
-
+stddev = FALSE # if TRUE, the PEs are computed for a one standard deviation (after removing variation in the fixed-effect dimensions)
+rel_lu_change = 0.01
+abs_lu_change = 1 
+rounding = 2
 
 rm(outcome_variable, start_year, end_year, pasture_shares, 
    standardization, group_prices, biofuel_focus, aggregate_K, control_interact_sj, control_interact_Pk, reference_crop, control_direct, 
@@ -311,14 +300,13 @@ rm(outcome_variable, start_year, end_year, pasture_shares,
 
 
 
-make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
-                          endo_vars = "pastures",
-                          start_year = 2001, 
-                          end_year = 2019, 
-                          region = "brazil", # one of "brazil", "southam", or "seasia" 
+make_main_reg <- function(region = "southam", # one of "brazil", "southam", or "seasia" 
+                          endo_vars = "unidir_soy", 
                           
-                          pasture_shares = FALSE, # if TRUE, and crop_j = "Fodder", then qj is proxied with the share of pasture area in 2000. 
-                          standardization = "_std2", # one of "", "_std", or "_std2"
+                          outcome_variable = "loss_commodity", # one of "nd_first_loss", "first_loss", "firstloss_glassgfc", "phtf_loss"
+                          start_year = 2011, 
+                          end_year = 2019, 
+                          continent = "all", # one of "Africa", "America", "Asia", or "all"
                           
                           rfs_rando = "", # either "between", "within", or any other string. If one of the former two, randomization inference of the type is performed
                           original_rfs_treatments = c("statute_conv"),
@@ -326,35 +314,43 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           rfs_lag = 0,
                           rfs_fya = 0, 
                           rfs_pya = 0,
+                          lag_controls = NULL, # which of the lags specified above should be CONTROLLED for rather than counted in the cumulative effect
                           aggr_dyn = TRUE, # whether to report aggregate coefficients of all leads and lags ("all") or leads and lags separately ("leadlag"), or no aggregate (any other string)
-                          original_exposure_rfs = "eaear_Soy_compo",
-                          group_exposure_rfs = FALSE, # if original_exposure_rfs is length 1, it does noe matter whether this option is TRUE or FALSE
-                          
-                          control_all_absolute_rfs = TRUE,
+                          exposure_rfs = "eaear_Soy_compo",
+                          all_exposures_rfs = eaear_mapmat[,"Crops"],
+                          group_exposure_rfs = FALSE, # This is deprecated, as it was relevant only when rfs exposures where standardized and could thus be added. If exposure_rfs is length 1, it does not matter whether this option is TRUE or FALSE.
+                          control_all_absolute_rfs = TRUE, # there is not really an alternative where this could be FALSE and have sense. 
+                          most_correlated_only = FALSE, # but this restricts the controls to only interactions with the most correlated crop. 
                           annual_rfs_controls = FALSE,
+                          
+                          # second stage dynamics
+                          annual = FALSE, 
+                          outcome_lags = 0, # 0 means current deforestation is regressed on current expansion. 1 means deforestation one year ago is regressed on current expansion, etc. 
+                          
                           control_pasture = FALSE,
                           pasture_trend = FALSE,
-                          # remaining = FALSE, # should remaining forest be controlled for STOP DOING THIS BECAUSE IT INTRODUCES NICKELL BIAS
+                          remaining = FALSE, # should remaining forest be controlled for STOP DOING THIS BECAUSE IT INTRODUCES NICKELL BIAS
                           s_trend = TRUE,
+                          s_trend_loga = FALSE,
                           fc_trend = FALSE,
                           fc_s_trend = FALSE,
                           
-                          sjpos = FALSE,
+                          sjpos = FALSE, # should the sample be restricted to cells where sj is positive? 
                           
                           fe = "grid_id + country_year", 
-                          distribution_1st = "quasipoisson",  
-                          distribution_2nd = "quasipoisson",  
+                          preclean_level = "FE", 
+                          distribution_1st = "quasipoisson",#  "quasipoisson", 
+                          distribution_2nd = "quasipoisson",#  "quasipoisson", 
                           invhypsin = TRUE, # if distribution is gaussian, should the dep. var. be transformed to inverse hyperbolic sine?
-                          clustering = "twoway", # either "oneway" or "twoway". If oneway, it clusters on cluster_var1. 
-                          cluster_var1 = "grid_id", 
-                          cluster_var2 = "grid_id_50km_year",
-                          # se = "twoway",# # passed to vcov argument. Currently, one of "cluster", "twoway", or an object of the form: 
-                          # - "exposure2ways" for the two-way clustering to be customed as original_exposure_rfs + country_year, and not along FE.   
-                          # - vcov_conley(lat = "lat", lon = "lon", cutoff = 100, distance = "spherical")
-                          # with cutoff the distance, in km, passed to fixest::vcov_conley, if se = "conley"  
-                          boot_rep = 500, # number of bootstrap replicates to compute APE SE. 
-                          glm_iter = 25,
                           
+                          clustering = "oneway", # either "oneway" or "twoway". If oneway, it clusters on cluster_var1. 
+                          cluster_var1 = "grid_id_10", 
+                          cluster_var2 = "grid_id_10",
+
+                          glm_iter = 25,
+                          # dyn_tests = FALSE, # should the Fisher-type panel unit root test be returned, instead of the regressions, for the outcome_variable and the first regressor
+                          boot_rep = 500, # number of bootstrap replicates to compute APE SE. 
+
                           # parameters for APE computation 
                           stddev = FALSE, # if TRUE, the PEs are computed for a one standard deviation (after removing variation in the fixed-effect dimensions)
                           rel_lu_change = 0.01, 
@@ -364,19 +360,15 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                           output = "coef_table" # one of "data", est_object, or "coef_table" 
 ){
   
-  # and this matrix is used to select exposure type, either eaear or aesi 
-  if(grepl("eaear_", original_exposure_rfs) & rfs_reg){
-    exp_matmap <- eaear_mapmat
-  }else{
-    exp_matmap <- mapmat_si
+  # Define the outcome_variable based on the crop under study (if we are not in the placebo case)
+  if(outcome_variable == "tmf_agri" & ("eaear_Oilpalm" %in% exposure_rfs | "eaear_Rubber" %in% exposure_rfs)){
+    outcome_variable <- "tmf_plantation"
   }
+  
   #### PREPARE NEEDED VARIABLE NAMES
   # this does not involve data, just arguments of the make_reg function
   # original_ names are used to get generic covariate names in coefficient tables (irrespective of modelling choices)
-
   
-  # this is all possible exposures, necessary in every specificaton
-  exposure_rfs <- paste0(original_exposure_rfs, standardization)
   
   all_rfs_treatments <- grep(pattern = original_rfs_treatments, names(prices), value = TRUE)
   
@@ -437,14 +429,26 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     d <- seasia_data
   }
   
+  if(grepl("tmf_", outcome_variable)){
+    d  <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", "tmf_aeay_pantrop_long_final_1990_2020.Rdata"))
+    # release some memory upfront
+    d <- dplyr::filter(d, year >= 2008, year <= 2019)
+    
+    d <- dplyr::mutate(d, tmf_deforestation = tmf_agri + tmf_plantation)
+  }
+  
+  # code below should work whether d is from tmf or losscommo 
   # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name", cluster_var1, cluster_var2, 
-                                 "fc_2000", "fc_2009", "remaining_fc", "pasture_share_2000", 
-                                 outcome_variable, endo_vars, exp_matmap[, "Crops"]
-                                 ))) 
+  d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                        # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                        outcome_variable, # "tmf_agri", "tmf_flood", "tmf_plantation",
+                                        endo_vars,
+                                        "pasture_share_2000",
+                                        eaear_mapmat[,"Crops"], exposure_rfs )))) #sj, 
   
   # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments, rfs_treatments)))], by = c("year"))#, all_treatments
+  d <- left_join(d, prices[,c("year", unique(c(rfs_treatments, all_rfs_treatments)))], by = c("year"))#, all_treatments
   
   
   # If we want the exposure to deforestation for pasture to be proxied with the share of pasture area in 2000, rather than suitability index, 
@@ -460,31 +464,21 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   
   #### INSTRUMENTS #### 
   
-  # est-ce qu'on met les instruments dans les controls comme pour lucfp ?  
-  if(IV_REG){
-    
-    instruments <- paste0("wa_iv_",instru_share,"_imp",imp, "_lag", c(1:(x_pya+1)))
-    
-    controls <- c(controls, instruments)
-  } 
-  
-  if(rfs_reg){
-    instruments <- c()
-    for(rfs_var in rfs_treatments){
-      if(group_exposure_rfs){
-        # group (sum) exposures
-        d <- dplyr::mutate(d, grp_exp = rowSums(across(.cols = (any_of(exposure_rfs)))))
-        # make the regressor of interest
-        varname <- paste0("grp_exp_X_", rfs_var)
+  instruments <- c()
+  for(rfs_var in rfs_treatments){
+    if(group_exposure_rfs){
+      # group (sum) exposures
+      d <- dplyr::mutate(d, grp_exp = rowSums(across(.cols = (any_of(exposure_rfs)))))
+      # make the regressor of interest
+      varname <- paste0("grp_exp_X_", rfs_var)
+      instruments <- c(instruments, varname)
+      d <- mutate(d, !!as.symbol(varname) := grp_exp * !!as.symbol(rfs_var))
+    }else{
+      for(exp_rfs in exposure_rfs){
+        # make instruments of interest
+        varname <- paste0(exp_rfs, "_X_", rfs_var)
         instruments <- c(instruments, varname)
-        d <- mutate(d, !!as.symbol(varname) := grp_exp * !!as.symbol(rfs_var))
-      }else{
-        for(exp_rfs in exposure_rfs){
-          # make instruments of interest
-          varname <- paste0(exp_rfs, "_X_", rfs_var)
-          instruments <- c(instruments, varname)
-          d <- mutate(d, !!as.symbol(varname) := !!as.symbol(exp_rfs) * !!as.symbol(rfs_var))
-        }
+        d <- mutate(d, !!as.symbol(varname) := !!as.symbol(exp_rfs) * !!as.symbol(rfs_var))
       }
     }
   }
@@ -493,10 +487,32 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # it's important that this is not conditioned on anything so these objects exist
   controls <- c()
   
+  controls <- c(controls, instruments)
+  
+  # remove lags of the treatment of interest from instruments (i.e. transfer them to controls)
+  if(length(lag_controls)>0){
+    lags_to_transfer <- c()
+    for(rfs_var in original_rfs_treatments){
+      lags_to_transfer <- c(lags_to_transfer, paste0(exposure_rfs, "_X_", rfs_var, "_lag", lag_controls))
+    }
+    
+    instruments <- instruments[instruments != lags_to_transfer]
+    
+    # controls <- c(controls, lags_to_transfer) # not in IV context
+    # no need to change their names, they are not captured by cumulative effects as long as they are in controls. 
+    
+    # old_controls <- c()
+    # for(old_rc in lags_to_transfer){
+    #   varname <- paste0("jexp_X_", old_rc)
+    #   controls <- c(controls, varname)
+    #   d <- mutate(d, !!as.symbol(varname) := !!as.symbol(exposure_rfs) * !!as.symbol(old_rc))
+    # }
+  }
+  
   # IT IS NORMAL THAT ABS. EXPOSURE CONTROLS ARE INTERACTED WITH 2fya AND 1pya: BOTH ARE AVERAGES OF TWO YEARS. 
   # 1pya is the avg of current and lag1 values, which are grouped together because they reflect the same kind of mechanism. 
   if(control_all_absolute_rfs){
-    all_abs <- exp_matmap[, "Crops"][!(exp_matmap[, "Crops"] %in% original_exposure_rfs)]
+    all_abs <- eaear_mapmat[, "Crops"][!(eaear_mapmat[, "Crops"] %in% original_exposure_rfs)]
     
     # add the share of pasture in grid cell in 2000 as an exposure to pastures (if the exposure of interest is not pasture)
     if(control_pasture & !grepl("Fodder", original_exposure_rfs)){
@@ -552,11 +568,6 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     }  
   }
   
-  
-  # from here, if we are in rfs process, sj may refer to the group of exposures
-  if((rfs_reg) & group_exposure_rfs){
-    sj <- "grp_exp"
-  }
   
   # add pasture share trend
   if(pasture_trend){
@@ -620,9 +631,12 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   # remove units with no country name (in the case of all_drivers data set currently, because nearest_feature function has not been used in this case, see add_variables.R)
   d <- dplyr::filter(d, !is.na(country_name))
 
-  used_vars <- unique(c("grid_id", "year", "lat", "lon", "country_name", "country_year", "continent_name",  cluster_var1, cluster_var2, #"remaining_fc", "accu_defo_since2k", # "sj_year",
-                       original_exposure_rfs, original_rfs_treatments, rfs_treatments, outcome_variable, endo_vars, instruments, controls))
-  
+  used_vars <- unique(c("grid_id", "year", "lat", "lon","continent_name",  "country_year",  #"country_name",  "remaining_fc", "accu_defo_since2k", # "sj_year",
+                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                        outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
+                        endo_vars, instruments, controls, 
+                        exposure_rfs, original_rfs_treatments, rfs_treatments))    # this is necessary to reconstruct variables in randomization inference processes
+
   # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
   # for instance, there are some NAs in the suitability index (places in water that we kept while processing other variables...) 
   usable <- lapply(used_vars, FUN = function(var){is.finite(d[,var]) | is.character(d[,var])})
@@ -660,7 +674,7 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
   rm(d)
   
   # save these for later
-  avg_defo_ha <- (fitstat(temp_est, "my")[[1]]) %>% round(1)
+  avg_defo_ha <- temp_est$fitted.values %>% mean() %>% round(1)
   
   G <- length(unique(d_clean[,cluster_var1]))
   
@@ -686,9 +700,15 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                            fe))
     
     # this is not for within bootstraps, but to fit in feols-iv in fixest package to extract 1st stage stats readily
+    if(length(controls[!(controls %in% instruments)] > 0)){
+      excluded_controls <- controls[!(controls %in% instruments)]
+    }else { 
+      excluded_controls <- 1 
+    }
+    
     classic_iv_fixest_fml[[f]] <- as.formula(paste0(outcome_variable,
                                                     " ~ ", 
-                                                    paste0(controls[!(controls %in% instruments)], collapse = "+"), # only "included" controls, i.e. z1, i.e. not instruments.
+                                                    paste0(excluded_controls, collapse = "+"), # only "included" controls, i.e. z1, i.e. not instruments.
                                                     " | ",
                                                     fe, 
                                                     " | ",
@@ -708,12 +728,12 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
                                " + ", 
                                paste0(errors_1stg, collapse = "+"),
                                " + ",
-                               paste0(controls[!(controls %in% instruments)], collapse = "+"), # only "included" controls, i.e. z1, i.e. not instruments.
+                               paste0(excluded_controls, collapse = "+"), # only "included" controls, i.e. z1, i.e. not instruments.
                                " | ",
                                fe))
   ## ESTIMATION 
   se <- as.formula(paste0("~ ", paste0(c(cluster_var1, cluster_var2), collapse = "+")))
-  }
+  
   if(clustering =="oneway"){
     se <- as.formula(paste0("~ ", cluster_var1))
   }
@@ -739,10 +759,108 @@ make_main_reg <- function(outcome_variable = "driven_loss_commodity", # one of "
     # d_clean[,errors_1stg[f]] <- summary(est_1st, stage = 1)$residuals 
   }
 
-toreturn[["firstg_summary"]] <- est_1st_list
+  toreturn[["firstg_summary"]] <- est_1st_list
+  
+  Fstat <- unlist(Ftest_list)[[1]] %>% round(2)
+  Waldstat <- unlist(Waldtest_list)[[1]] %>% as.numeric() %>% round(2)
 
-Fstat <- unlist(Ftest_list)[[1]] %>% round(2)
-Waldstat <- unlist(Waldtest_list)[[1]] %>% as.numeric() %>% round(2)
+  myfun_data <- d_clean
+  fsf_list <- fml_1st_list
+  ssf <- fml_2nd
+  num_iter <- 25
+  
+ctrl_fun_endo <- function(myfun_data, fsf_list, ssf, num_iter = 25){
+  
+  statistics <- tryCatch(expr = {
+    # As many first stages as there are endogenous variables
+    for(f in 1:length(endo_vars)){
+      BS_est_1st <- fixest::feols(fsf_list[[f]], 
+                                  data = myfun_data)
+      
+      # save residuals 
+      myfun_data[,errors_1stg[f]] <- BS_est_1st$residuals
+      rm(BS_est_1st)
+    }
+    
+    # 2nd stage
+    # increase glm algorithm number of iterations... iteratively 
+    # i.e. ask for more glm iterations only if it did not converge with fewer. 
+    # assign("warning", NULL)
+    # actually, this took more than 24h to run 500 bootstraps for all 9 plantation groups. 
+    # SO we rather impose low # of glm.iter, catch out all those that don't converge, and perform more bootstraps instead. 
+    
+    #while(num_iter <= 25 ) {
+    
+    BS_est_2nd <-   fixest::feglm(ssf, 
+                                  data = myfun_data, 
+                                  family = distribution_2nd, 
+                                  glm.iter = num_iter,
+                                  notes = TRUE) 
+    
+    
+    # # if feglm did not converge, try with more iterations
+    # if(class(BS_est_2nd) == "warnings"){
+    #   num_iter <- num_iter + 500
+    # 
+    # } else { # else, finish the estimation
+    #   num_iter <- 3000
+    # }
+    #}
+    
+    
+    ## MAKE APE 
+    # Unlike in the non-IV case, APEs are not estimated with the delta Method, because their SEs are only computed asymptotically, by bootstrap. 
+    # we don't need to compute inference statistics on them, as inference is handled by bootstrap (on APE).
+    
+    # select coefficient of interest 
+    roi <- BS_est_2nd$coefficients[endo_vars]
+    
+    boot_output <- c()
+    i <- 1
+    for(r in roi){
+      # the APE is different depending on the regressor of interest being in the log scale or not. 
+      if(grepl("ln_",endo_vars[1])){
+        boot_output[i] <- ((1+rel_lu_change)^(r) - 1)*100
+      } else{
+        boot_output[i] <- (exp(r*abs_lu_change) - 1)*100 
+      } 
+      i <- i+1
+    }
+    
+    # control function variables 
+    cfreg <- BS_est_2nd$coefficients[errors_1stg]
+    
+    # (i is already taken to the +1 level, so index i is empty at this point)
+    boot_output[i] <- sum(cfreg)
+    
+    boot_output
+    
+  }, # closes tryCatch expr argument  
+  warning = function(w) print("warning in feglm captured"), #
+  error = function(e) print("error in feglm captured"), 
+  finally = "0" ) # ça sert à rien, mais il faut passer quelque chose 
+  
+  # if, for this boot sample, fixest returns an error in either stage, or the second stage returns a warning, 
+  # then statistics is resp. an error or NULL, in which case we coerce it to NA 
+  if(!is.numeric(statistics)){
+    # this weird formula makes final_stats the right length, either 1 if annual = FALSE, 
+    # and, in the other case, the number of years the annual effects are estimated plus one for the cumulative effect, plus one for the 1st stage residual
+    final_stats <- rep(NA, annual*(outcome_lags) + 1 + 1)
+  } else {
+    # return both cumulative and annual APE as statistics to bootstrap, as well as the (cumulative) coeffs on control function terms
+    # which are in statistics
+    if(annual){ # PAS POSSIBLE DE FAIRE DU ANNUAL SI LE REFERENTIEL EST ENDO_VAR. 
+      final_stats <- c(sum(statistics[1:length(endo_vars)]), statistics) 
+    } else { 
+      final_stats <- statistics
+    }        
+  }
+  rm(statistics)      
+  
+  # statistics we want to evaluate the variance of:
+  return(final_stats)
+}
+
 
 
   # We run the first stage outside the bootstrapping process, in order to extract related information

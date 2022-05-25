@@ -530,14 +530,14 @@ long_df <- dplyr::arrange(long_df, grid_id, year)
 
 saveRDS(long_df, here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long.Rdata"))
 
-rm(long_df, varying_vars, gaez, mask, commodity_lossdrivers, fc2k, pst2k)
+rm(long_df, varying_vars, gaez_SEAsia, mask, losscommo, fc2k, pst2k)
 
 
 
 
 #### BIGGER CELL VARIABLES #### 
 ## Prepare base data
-path <- here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_long.Rdata")
+path <- here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long.Rdata")
 df <- readRDS(path)
 
 # Remove gaez variables
@@ -550,29 +550,34 @@ df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
 rm(df)
 
 ## Prepare bigger square grids
-# for ~50km grid cells (5 times larger grid cells in both dimensions, hence 25 times larger)
-bigger_50km <- aggregate(drivers, fact = 5, expand = TRUE, fun = sum)
-bigger_50km_stars <- st_as_stars(bigger_50km)
-bigger_50km_sf <- st_as_sf(bigger_50km_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+grid_base <- SEAsia_stack[[1]]
 
-bigger_50km_sf$grid_id_50km <- seq(from = 1, to = nrow(bigger_50km_sf))
-bigger_50km_sf <- bigger_50km_sf[,c("grid_id_50km", "geometry")]
+# for ~45km grid cells (5 times larger grid cells in both dimensions, hence 25 times larger)
+bigger_5 <- aggregate(grid_base, fact = 5, expand = TRUE, fun = sum)
+bigger_5_stars <- st_as_stars(bigger_5)
+bigger_5_sf <- st_as_sf(bigger_5_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
 
-# repeat for ~100km grid cells (10 times larger grid cells in both dimensions, hence 100 times larger)
-bigger_100km <- aggregate(drivers, fact = 10, expand = TRUE, fun = sum)
-bigger_100km_stars <- st_as_stars(bigger_100km)
-bigger_100km_sf <- st_as_sf(bigger_100km_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+# Make the grid cell index. It is continent-specific, otherwise it won't be unique across continents. 
+bigger_5_sf$grid_id_5 <- seq(from = 1, to = nrow(bigger_5_sf))
+bigger_5_sf <- bigger_5_sf[,c("grid_id_5", "geometry")]
 
-bigger_100km_sf$grid_id_100km <- seq(from = 1, to = nrow(bigger_100km_sf))
-bigger_100km_sf <- bigger_100km_sf[,c("grid_id_100km", "geometry")]
+# repeat for ~90km grid cells (10 times larger grid cells in both dimensions, hence 10 times larger)
+bigger_10 <- aggregate(grid_base, fact = 10, expand = TRUE, fun = sum)
+bigger_10_stars <- st_as_stars(bigger_10)
+bigger_10_sf <- st_as_sf(bigger_10_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
 
-# repeat for ~500km grid cells (50 times larger grid cells in both dimensions, hence 2500 times larger)
-bigger_500km <- aggregate(drivers, fact = 50, expand = TRUE, fun = sum)
-bigger_500km_stars <- st_as_stars(bigger_500km)
-bigger_500km_sf <- st_as_sf(bigger_500km_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+# Make the grid cell index. It is continent-specific, otherwise it won't be unique across continents. 
+bigger_10_sf$grid_id_10 <- seq(from = 1, to = nrow(bigger_10_sf))
+bigger_10_sf <- bigger_10_sf[,c("grid_id_10", "geometry")]
 
-bigger_500km_sf$grid_id_500km <- seq(from = 1, to = nrow(bigger_500km_sf))
-bigger_500km_sf <- bigger_500km_sf[,c("grid_id_500km", "geometry")]
+# repeat for ~180km grid cells (20 times larger grid cells in both dimensions, hence 20 times larger)
+bigger_20 <- aggregate(grid_base, fact = 20, expand = TRUE, fun = sum)
+bigger_20_stars <- st_as_stars(bigger_20)
+bigger_20_sf <- st_as_sf(bigger_20_stars, as_points = FALSE, merge = FALSE, na.rm = FALSE, long = FALSE)
+
+# Make the grid cell index. It is continent-specific, otherwise it won't be unique across continents. 
+bigger_20_sf$grid_id_20 <- seq(from = 1, to = nrow(bigger_20_sf))
+bigger_20_sf <- bigger_20_sf[,c("grid_id_20", "geometry")]
 
 # DO NOT TRANSFORM, because it makes the inner_join associate two bigger squares for each smaller one, 
 # I don't really know why, but it does not do so with geographic coordinates, and there is no mismatch, and no problem of imprecision due to 
@@ -582,57 +587,43 @@ bigger_500km_sf <- bigger_500km_sf[,c("grid_id_500km", "geometry")]
 # bigger_100km_sf <- st_transform(bigger_100km_sf, crs = mercator_world_crs)
 
 # join the variables
-df_cs <- st_join(x = bigger_50km_sf,
-                 y = df_cs,
-                 join = st_contains,
+df_cs <- st_join(x = df_cs,
+                 y = bigger_5_sf,
+                 join = st_within,
                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
-                 left = FALSE)# performs inner join so returns only records that spatially match.
+                 left = TRUE)
 
-df_cs <- st_join(x = bigger_100km_sf,
-                 y = df_cs,
-                 join = st_contains,
+df_cs <- st_join(x = df_cs,
+                 y = bigger_10_sf,
+                 join = st_within,
                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
-                 left = FALSE)# performs inner join so returns only records that spatially match.
+                 left = TRUE)
 
-df_cs <- st_join(x = bigger_500km_sf,
-                 y = df_cs,
-                 join = st_contains,
+df_cs <- st_join(x = df_cs,
+                 y = bigger_20_sf,
+                 join = st_within,
                  prepared = FALSE, # tests shows that this changes nothing, whether shapes are transformed or not
-                 left = FALSE)# performs inner join so returns only records that spatially match.
-
-
-df_cs <- st_drop_geometry(df_cs)
+                 left = TRUE)
 
 length(unique(df_cs$grid_id)) == nrow(df_cs)
 
-# Keep only new variable and id
-df_cs <- df_cs[,c("grid_id", "grid_id_50km", "grid_id_100km", "grid_id_500km")]
+df_cs <- st_drop_geometry(df_cs)
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_cs_biggercells.Rdata"))
+# Keep only new variable and id
+df_cs <- df_cs[,c("grid_id", "grid_id_5", "grid_id_10", "grid_id_20")]
+
+saveRDS(df_cs, here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_cs_biggercells.Rdata"))
 
 
 #### ADD REMAINING FOREST VARIABLE #### 
 # neither country nor continent information is relevant here. 
 
-df <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_long.Rdata"))
+df <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long.Rdata"))
 
 # Remove gaez variables
 df <- dplyr::select(df,-all_of(gaez_crops))
 
 year_list <- list()
-
-df <- mutate(df, 
-             driven_loss_any = driven_loss_commodity + driven_loss_shifting + driven_loss_forestry + driven_loss_fire + driven_loss_urba)
-
-# for some grid cells, deforestation from different drivers is positive in the same year. 
-# This probably comes from resampling/reprojecting operations, and can be observed here only when forest loss was positive in those places
-# dplyr::filter(df, driven_loss_commodity>0 & driven_loss_any > driven_loss_commodity)
-# df[df$grid_id == 110,]
-
-# just ensure that driven_loss_any is not counting 4 times too much deforestation in those places. 
-df[df$driven_loss_commodity>0 & df$driven_loss_any > df$driven_loss_commodity, ] <- dplyr::filter(df, 
-                                                                                                  driven_loss_commodity>0 & driven_loss_any > driven_loss_commodity) %>% 
-  mutate(driven_loss_any = driven_loss_commodity)
 
 
 # in the first year (2001), the past year accumulated deforestation is null. 
@@ -644,7 +635,7 @@ years <- 2008:2011 # we need it only 2007-2010, because we possibly use only tho
 for(y in years){
   sub_ <- df[df$year < y,]
   year_list[[as.character(y)]] <- ddply(sub_, "grid_id", summarise,
-                                        accu_defo_since2k = sum(driven_loss_any, na.rm = TRUE))
+                                        accu_defo_since2k = sum(loss_commodity, na.rm = TRUE))
   year_list[[as.character(y)]][,"year"] <- y
 }
 
@@ -667,7 +658,7 @@ df <- left_join(df, fc_2009, by = "grid_id")
 # put keep only new variables in remaining
 remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k", "fc_2009")] # fc_2000 is added as a raster layer in merge_* scripts
 
-saveRDS(remaining, here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_long_remaining.Rdata"))
+saveRDS(remaining, here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long_remaining.Rdata"))
 
 rm(year_list, sub_, accu_defo_df, df)
 
@@ -676,7 +667,7 @@ rm(year_list, sub_, accu_defo_df, df)
 #### GROUP AND STANDARDIZE AEAY VARIABLES #### 
 # all groupings in this section are motivated on the GAEZ v4 model documentation, and in particular Table A4-1.3
 
-df <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_long.Rdata"))
+df <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long.Rdata"))
 
 # Use cross section only
 df_cs <- df[!duplicated(df$grid_id),]
@@ -919,137 +910,18 @@ summary(df_cs$eaear_Soy_compo)
 # Retain processed soy commodities, because this is more traded, and more comparable to the other oil seeds that are expressed in oil too. 
 df_cs <- dplyr::select(df_cs, -eaear_Soybean, -eaear_Soybean_meal, -eaear_Soybean_oil)
 
-### STANDARDIZE ### 
-
-# divide each revenue variable by the sum of them, to standardize.
-# To understand this line, see https://dplyr.tidyverse.org/articles/rowwise.html#row-wise-summary-functions
-df_cs <- dplyr::mutate(df_cs, eaear_sum = rowSums(across(.cols = any_of(eaear2std))))
-
-df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(eaear2std),
-                                     .fns = ~./eaear_sum, 
-                                     .names = paste0("{.col}", "_std"))) 
-
-df_cs <- dplyr::select(df_cs, -eaear_sum)
-
-## Second way to standardize: for each crop that can be matched with a price, 
-# standardize by dividing by the sum of the suitability indexes of the N (N = 1,2) crops with the highest suitability (among all, not only among the six drivers), 
-# and give a 0 value to the crops that are not in the top N suitability index. 
-# if N = 1, this procedure is equivalent to sj = 1[Sj = max(Si)]
-
-# this code is intricate but it handles potential but unlikely cases where two crops have equal EAEAR
-
-# identify the highest suitability index values (in every grid cell)
-df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_eaear = max(c_across(cols = any_of(eaear2std)))) %>% as.data.frame()
-
-# and for the alternative set of crops
-df_cs <- df_cs %>% rowwise(grid_id) %>% dplyr::mutate(max_eaearbis = max(c_across(cols = any_of(eaear2std_bis)))) %>% as.data.frame()
-
-## N = 1
-# if N = 1, this procedure is equivalent to sj = 1[Sj = max(Si)]
-df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(eaear2std),
-                                     .fns = ~if_else(.==max_eaear, true = 1, false = 0), 
-                                     .names = paste0("{.col}", "_ismax")))
-
-# and then standardize by the number of different crops being the highest
-all_crops_ismax <- paste0(eaear2std,"_ismax")
-df_cs <- dplyr::mutate(df_cs, n_max = rowSums(across(.cols = (any_of(all_crops_ismax)))))
-
-unique(df_cs$n_max) # 16 is when GAEZ is NA
-# df_cs[df_cs$n_max==16,]
-
-df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops_ismax)),
-                                     .fns = ~./n_max, 
-                                     .names = paste0("{.col}", "_std1")))
-
-# remove those columns
-df_cs <- dplyr::select(df_cs, !ends_with("_ismax"))  
-
-# rename new ones 
-names(df_cs)[grepl("_std1", names(df_cs))] <- paste0(eaear2std, "_std1")
-
-# _std do sum up to 1. 
-# df_cs[87687,paste0(eaear2std, "_std2")]%>%sum()
-
-## N = 2: 2nd highest:
-# helper function to apply within dplyr rowwise framework
-max2nd <- function(x){max(x[x!=max(x)])}
-
-df_cs <- df_cs %>% rowwise() %>% mutate(max_eaear_2nd = max2nd(c_across(cols = (any_of(eaear2std))))) %>% as.data.frame()
-# this returns a warning about aucun argument pour max ; -Inf est renvoyé" when there are only zero values for every crop in the grid cell
-# not a problem
-
-# new column for each crop, telling whether it's in the top 2 or not
-df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(eaear2std),
-                                     .fns = ~if_else(.>=max_eaear_2nd, true = 1, false = 0), 
-                                     .names = paste0("{.col}", "_istop2")))
-
-all_crops_istop2 <- paste0(eaear2std,"_istop2")
-
-df_cs <- dplyr::mutate(df_cs, n_top2 = rowSums(across(.cols = (any_of(all_crops_istop2)))))
-unique(df_cs$n_top2) # 16 is when GAEZ is NA
-# df_cs[df_cs$n_max==16,]
-# in other words there is always only 2 crops in the top 2     
-
-# multiply istop2 columns with their corresponding EAEAR columns
-for(crop in eaear2std){
-  df_cs <- mutate(df_cs, !!as.symbol(paste0(crop, "_istop2")) := !!as.symbol(paste0(crop, "_istop2")) * !!as.symbol(crop) )
-}
-
-# sum them, and standardize with this sum
-df_cs <- dplyr::mutate(df_cs, sum_top2 = rowSums(across(.cols = (any_of(all_crops_istop2)))))
-
-df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops_istop2)),
-                                     .fns = ~./sum_top2, 
-                                     .names = paste0("{.col}", "_std2")))
-
-# remove those columns
-df_cs <- dplyr::select(df_cs, !ends_with("_istop2"))  
-# rename columns
-names(df_cs)[grepl("_istop2_std2", names(df_cs))] <- paste0(eaear2std, "_std2")  
-
-
-### ### ### 
-## Repeat std2 for the broader set of crops 
-df_cs <- df_cs %>% rowwise() %>% mutate(max_eaear_2nd_bis = max2nd(c_across(cols = (any_of(eaear2std_bis))))) %>% as.data.frame()
-
-# new column for each crop, telling whether it's in the top 2 or not
-df_cs <- dplyr::mutate(df_cs, across(.cols = any_of(eaear2std_bis),
-                                     .fns = ~if_else(.>=max_eaear_2nd_bis, true = 1, false = 0), 
-                                     .names = paste0("{.col}", "_istop2")))
-
-all_crops_istop2_bis <- paste0(eaear2std_bis,"_istop2")
-
-# multiply istop2 columns with their corresponding EAEAR columns
-for(crop in eaear2std_bis){
-  df_cs <- mutate(df_cs, !!as.symbol(paste0(crop, "_istop2")) := !!as.symbol(paste0(crop, "_istop2")) * !!as.symbol(crop) )
-}
-
-# sum them, and standardize with this sum
-df_cs <- dplyr::mutate(df_cs, sum_top2_bis = rowSums(across(.cols = (any_of(all_crops_istop2_bis)))))
-
-df_cs <- dplyr::mutate(df_cs, across(.cols = (any_of(all_crops_istop2_bis)),
-                                     .fns = ~./sum_top2_bis, 
-                                     .names = paste0("{.col}", "_std2bis")))
-
-# remove those columns
-df_cs <- dplyr::select(df_cs, !ends_with("_istop2"))  
-# rename columns
-names(df_cs)[grepl("_istop2_std2bis", names(df_cs))] <- paste0(eaear2std_bis, "_std2bis")  
-
-### ### ### ### ### 
 
 # Select variables to save: all the eaear variables, standardized or not
-df_cs <- dplyr::select(df_cs, -max_eaear_2nd, - max_eaear_2nd_bis)
 var_names <- grep(pattern = "eaear_", names(df_cs), value = TRUE) 
 df_cs <- df_cs[,c("grid_id", var_names)]
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "SEAsia_aoi",  "driverloss_all_aeay_cs_stdeaear.Rdata"))
+saveRDS(df_cs, here("temp_data", "merged_datasets", "SEAsia_aoi",  "loss_commodity_aeay_cs_stdeaear.Rdata"))
 
 rm(df_cs)
 
 #### MERGE ADDITIONAL VARIABLES ####  
 # Base dataset (including outcome variable(s))
-df_base <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_long.Rdata"))
+df_base <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long.Rdata"))
 
 # just compute country and continent variables, even if invariant, so they can be called in generic function
 df_base$country_name <- "SEAsia"
@@ -1059,31 +931,31 @@ df_base <- mutate(df_base, country_year = paste0(country_name, "_", year))
 
 
 ## EAEAR
-df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi",  "driverloss_all_aeay_cs_stdeaear.Rdata"))  
+df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi",  "loss_commodity_aeay_cs_stdeaear.Rdata"))  
 
 final <- left_join(df_base, df_stdeaear, by = "grid_id") # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
 rm(df_base, df_stdeaear)
 
 ## BIGGER CELLS
-df_biggercells <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_cs_biggercells.Rdata"))
+df_biggercells <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_cs_biggercells.Rdata"))
 
 final <- left_join(final, df_biggercells, by = "grid_id")
 rm(df_biggercells)
 
 # Create bigger cell-year identifier
-final <- mutate(final, grid_id_50km_year = paste0(grid_id_50km, "_", year))
-final <- mutate(final, grid_id_100km_year = paste0(grid_id_100km, "_", year))
-final <- mutate(final, grid_id_500km_year = paste0(grid_id_500km, "_", year))
+final <- mutate(final, grid_id_5_year = paste0(grid_id_5, "_", year))
+final <- mutate(final, grid_id_10_year = paste0(grid_id_10, "_", year))
+final <- mutate(final, grid_id_20_year = paste0(grid_id_20, "_", year))
 # length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
 
 
 ## REMAINING
-df_remain <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_long_remaining.Rdata"))
+# df_remain <- readRDS(here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long_remaining.Rdata"))
+# 
+# final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
+# rm(df_remain)
 
-final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
-rm(df_remain)
-
-saveRDS(final, here("temp_data", "merged_datasets", "SEAsia_aoi", "driverloss_all_aeay_long_final.Rdata"))
+saveRDS(final, here("temp_data", "merged_datasets", "SEAsia_aoi", "loss_commodity_aeay_long_final.Rdata"))
 
 rm(final)
 
