@@ -619,7 +619,7 @@ make_main_reg <- function(pre_process = FALSE,
                                           "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                                           outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
                                           "pasture_share_2000",
-                                          eaear_mapmat[,"Crops"], exposure_rfs )))) #sj, 
+                                          eaear_mapmat[,"Crops"], all_exposures_rfs )))) #sj, 
     
     # Merge only the prices needed, not the whole price dataframe
     d <- left_join(d, prices[,c("year", unique(c(rfs_treatments, all_rfs_treatments)))], by = c("year"))#, all_treatments
