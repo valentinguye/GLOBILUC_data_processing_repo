@@ -16,7 +16,7 @@ neededPackages = c("Matrix",
                    "raster", "rgdal",  "sp", "sf", # "spdep",
                    "DataCombine",
                    "knitr", "kableExtra",
-                   "fixest", "boot", "urca", "plm",   #"msm", "car",  "sandwich", "lmtest",  "multcomp",
+                   "fixest", "boot", "MASS", # "urca", "plm",   #"msm", "car",  "sandwich", "lmtest",  "multcomp",
                    "ggplot2", "dotwhisker", "viridis", "hrbrthemes", #"tmap",# "leaflet", "htmltools"
                    "foreach", "parallel"
 )
@@ -92,6 +92,7 @@ eaear_mapmat_data <- c(
   "Rubber", "eaear_Rubber",
   #"Sorghum", "eaear_Sorghum2", 
   "Soy_index", "eaear_Soy_compo",
+  # "Sugar", "eaear_Sugar", 
   "Sugar", "eaear_Sugarcane", 
   #"Sunflower_oil", "eaear_Sunflower",
   "Tea", "eaear_Tea",
@@ -110,7 +111,8 @@ agri_crops <- eaear_mapmat[,"Crops"][!(eaear_mapmat[,"Crops"] %in% c("eaear_Oilp
 plantation_crops <- c("eaear_Oilpalm", "eaear_Rubber")
 
 limited_crops1 <- c("eaear_Maizegrain", "eaear_Fodder", "eaear_Cereals", "eaear_Soy_compo", 
-                    "eaear_Oilfeed_crops", "eaear_Sugarcane", "eaear_Oilpalm", "eaear_Tobacco",
+                    "eaear_Oilfeed_crops", "eaear_Sugarcane", # OR eaear_Sugar",
+                    "eaear_Oilpalm", "eaear_Tobacco",
                     "eaear_Cocoa_Coffee")
 
 ### MAIN DATA SETS #### 
@@ -434,7 +436,7 @@ gaez_as <- crop(gaez, continents[continents$continent_name=="Asia",])
 
 ### TEMPORARY OBJECTS 
 outcome_variable = "loss_commodity" 
-start_year = 2010
+start_year = 2009
 end_year = 2019
 continent = "all"
 
@@ -443,17 +445,20 @@ pre_processed_data <- pre_d_clean_agri
 
 rfs_rando <- ""
 original_rfs_treatments <- c("statute_conv")
-rfs_lag <- 2
+rfs_lag <- 1
 rfs_lead <- 3
 rfs_fya <-  0
 rfs_pya <- 0
 lag_controls = NULL
 aggr_dyn <- TRUE
 exposure_rfs <- eaear_mapmat[,"Crops"]#"eaear_Oilpalm"
+all_exposures_rfs = eaear_mapmat[,"Crops"]
+
 group_exposure_rfs <- FALSE
 control_all_absolute_rfs <- FALSE
 most_correlated_only = FALSE
 annual_rfs_controls <- FALSE
+exposure_pasture <- FALSE 
 
 control_pasture <- FALSE
 pasture_trend <- FALSE
@@ -506,6 +511,7 @@ make_main_reg <- function(pre_process = FALSE,
                           control_all_absolute_rfs = TRUE, # there is not really an alternative where this could be FALSE and have sense. 
                           most_correlated_only = FALSE, # but this restricts the controls to only interactions with the most correlated crop. 
                           annual_rfs_controls = FALSE,
+                          # exposure_pasture = FALSE, # whether the exposure to pasture should be the default AEAY of fodder crops (FALSE) or the share of pastures in 2000 (TRUE) # but we don't do it anymore because it dwarfs all the other estimates, and is not more precise
                           
                           control_pasture = FALSE,
                           pasture_trend = FALSE,
@@ -634,6 +640,10 @@ make_main_reg <- function(pre_process = FALSE,
   ### SPECIFICATION #### 
   
   ### Regressors 
+  # if(any(grepl("Fodder", exposure_rfs)) & exposure_pasture){
+  #   exposure_rfs[grepl("Fodder", exposure_rfs)] <- "pasture_share_2000"
+  # }
+  
   regressors <- c()
   for(rfs_var in rfs_treatments){
     if(group_exposure_rfs){
@@ -3147,7 +3157,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
                                                                    control_all_absolute_rfs = FALSE, # AND THIS
                                                                    most_correlated_only = est_parameters[["most_correlated_only"]],
                                                                    annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
-                                                                   
+
                                                                    s_trend = est_parameters[["s_trend"]],
                                                                    s_trend_loga = est_parameters[["s_trend_loga"]],
                                                                    fe = est_parameters[["fe"]], 
@@ -3476,6 +3486,235 @@ df_lmt <- df[df$term %in% limited_crops1,]
           legend.justification = c(0, 0), 
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank()) }
+
+
+#### MAGNITUDES BY COUNTERFACTUAL DIFFERENCING #### 
+# Here, it's important that coefficients are estimated jointly, as we will add them up 
+
+effects_list <- list(all = list(), 
+                      America = list(), 
+                      Africa = list(), 
+                      Asia = list())
+
+# prepare data set in advance, to repeat in all regressions
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # this is for later convenience
+  eaear_names <- est_parameters[["all_exposures_rfs"]]
+  
+  d <- main_data
+  
+  # Keep only in data the useful variables 
+  d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                        # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                        # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
+                                        "loss_commodity",
+                                        "pasture_share_2000",
+                                        eaear_mapmat[,"Crops"] ))))
+  
+  # Merge only the prices needed, not the whole price dataframe
+  d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
+  
+  # - are suitable to crop j 
+  if(est_parameters[["sjpos"]]){
+    d <- dplyr::filter(d, !!as.symbol(exposure_rfs) > 0)
+  }
+  
+  # - are in study period
+  # if(start_year != 2011 | end_year != 2019){
+  d <- dplyr::filter(d, year >= est_parameters[["start_year"]])
+  d <- dplyr::filter(d, year <= est_parameters[["end_year"]])
+  # }
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d, continent_name == est_parameters[["continent"]])
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    d_clean <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    d_clean <- d
+  }
+  
+  # # Have some tmf deforestation to plantation at least once
+  # temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+  #                   data = d,
+  #                   family = "poisson")
+  # # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  # if(length(temp_est$obs_selection)>0){
+  #   pre_d_clean_plantation <- d[unlist(temp_est$obs_selection),]
+  # }  else { 
+  #   pre_d_clean_plantation <- d
+  # }
+  
+  rm(d)
+  
+  sim_mod <- make_main_reg(pre_process = TRUE, # NOTICE THIS
+                                                                   pre_processed_data = d_clean, # NOTICE THIS
+                                                                   output = "est_object",
+                                                                   
+                                                                   outcome_variable = "loss_commodity", 
+                                                                   continent = est_parameters[["continent"]], # AND THIS
+                                                                   start_year = est_parameters[["start_year"]],
+                                                                   end_year = est_parameters[["end_year"]],
+                                                                   
+                                                                   aggr_dyn = TRUE,
+                                                                   exposure_rfs = eaear_names, # AND THIS
+                                                                   all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                                   
+                                                                   original_rfs_treatments = c("statute_conv"),
+                                                                   rfs_lead = est_parameters[["leads"]], 
+                                                                   rfs_lag = est_parameters[["lags"]],
+                                                                   rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                   rfs_pya = est_parameters[["pya"]], #ya,
+                                                                   
+                                                                   control_all_absolute_rfs = FALSE, # AND THIS
+                                                                   most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                   annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                   
+                                                                   s_trend = est_parameters[["s_trend"]],
+                                                                   s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                   fe = est_parameters[["fe"]], 
+                                                                   cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                   
+                                                                   rfs_rando = ""
+  )
+
+  beta <- sim_mod$coefficients
+  beta_cov <- vcov(sim_mod)
+  # compute the quantity of interest based on point estimates
+  # 3 steps, for each obs.: 
+  # 1. Sum dynamic coefficients for each crop  
+  # 2. Multiply these crop sums by the corresponding crop exposures 
+  # 3. Sum up across crops
+  
+  # use matrix algebra for that 
+  
+  # Step 1. 
+  # vector of cumulative coefficients for every crop
+  # regressors of interest
+  cum_beta <- c()
+  beta_names <- names(beta)
+  for(EOI in eaear_names){
+    base_reg_name <- paste0(EOI,"_X_statute_conv")
+    # Contemporaneous, lead, and lag values
+    all_roi <- c(base_reg_name, 
+                 grep(pattern = paste0(base_reg_name,"_lead"), 
+                      beta_names, value = TRUE),
+                 grep(pattern = paste0(base_reg_name,"_lag"), 
+                      beta_names, value = TRUE))
+    
+    cum_beta[EOI] <- beta[all_roi] %>% sum()
+  }
+  
+  # Step 2. 
+  # unique grid cells in rows, and their AEAY for every crop in columns 
+  d_clean_cs <- d_clean[!duplicated(d_clean$grid_id), c("grid_id", eaear_mapmat[,"Crops"]) ] 
+  
+  nrow(d_clean_cs) == length(unique(d_clean$grid_id))
+  
+  cs_effect_mat <- d_clean_cs 
+  for(EOI in eaear_names){
+    cs_effect_mat[,EOI] <- d_clean_cs[,EOI] * cum_beta[EOI]
+  }
+
+  crop_effects <- colSums(cs_effect_mat)
+  total_effect <- sum(crop_effects)
+  
+  # total effect corresponds to Y - Ycf where Ycf is the counterfactual deforestation, had mandates been 1bgal *lower* every year. 
+  # --> so effects are to be interpreted as the deforestation that has been caused by *not* having lowered the mandates by 1bgal. 
+  
+  
+  ## INFERENCE 
+  n <- 10
+  # store in rows all crops effects PLUS the total effect
+  rep_effects <- data.frame(matrix(ncol = n, nrow = length(crop_effects) + 1)) 
+  
+  row.names(rep_effects) <- c("total", eaear_names)
+  
+  # mod_adj <- sim_mod
+  # each column is one replication. Each row is one beta (coefficient). 
+  beta_draw <- t(mvrnorm(n, mu = beta, Sigma = beta_cov))
+  
+  for(i in 1:n){
+    
+    beta <- beta_draw[,i]
+    
+    cum_beta <- c()
+    beta_names <- names(beta)
+    for(EOI in eaear_names){
+      base_reg_name <- paste0(EOI,"_X_statute_conv")
+      # Contemporaneous, lead, and lag values
+      all_roi <- c(base_reg_name, 
+                   grep(pattern = paste0(base_reg_name,"_lead"), 
+                        beta_names, value = TRUE),
+                   grep(pattern = paste0(base_reg_name,"_lag"), 
+                        beta_names, value = TRUE))
+      
+      cum_beta[EOI] <- beta[all_roi] %>% sum()
+    }
+    
+    # Step 2.
+    # important that the effect matrix be "reinitialized" at each replication 
+    # the cross-section of AEAY data does not change with every replication
+    cs_effect_mat_i <- d_clean_cs
+    
+    for(EOI in eaear_names){
+      cs_effect_mat_i[,EOI] <- d_clean_cs[,EOI] * cum_beta[EOI]
+    }
+    
+    crop_effects <- colSums(cs_effect_mat_i)
+    total_effect <- sum(crop_effects)
+    
+    # return 
+    for(EOI in eaear_names){
+      rep_effects[EOI, i] <- crop_effects[EOI]
+    }
+    rep_effects["total", i] <- total_effect
+    
+  }
+  
+  # make statistics for every effect
+  effects_stats <- cbind(rep_effects %>% rowwise() %>% dplyr::transmute(avg = mean(c_across())) %>% as.data.frame(),
+                         rep_effects %>% rowwise() %>% dplyr::transmute(std_dev = sd(c_across())) %>% as.data.frame()
+                        )
+  effects_stats <- dplyr::mutate(effects_stats, ci95lb = (avg - qt(0.975, df = n-1)*std_dev/sqrt(n)))
+  effects_stats <- dplyr::mutate(effects_stats, ci95hb = (avg + qt(0.975, df = n-1)*std_dev/sqrt(n)))
+  
+  row.names(effects_stats) <- row.names(rep_effects)
+  
+  # return 
+  effects_list[[CNT]][["crop_effects"]] <- crop_effects
+  effects_list[[CNT]][["total_effect"]] <- total_effect
+  
+}    
+
+
+## Draw parameters for simulation
+mod_adj <- sim_mod
+beta <- sim_mod$coefficients
+beta_cov <- vcov(sim_mod)
+n <- 1000
+ptm <- proc.time()
+beta_draw <- t(mvrnorm(n, mu = beta, Sigma = beta_cov))
+
+## Run simulations
+simulated.bl <- data.frame(matrix(ncol = n, nrow = dim(sample)[1]))
+simulated.cf <- data.frame(matrix(ncol = n, nrow = dim(sample)[1]))
+for (i in 1:n) {
+  mod_adj$coefficients <- matrix(beta_draw[,i])
+  simulated.bl[,i] <- predict(mod_adj, X_new = X.bl, alpha_new = sample$alpha, type = "response")
+  simulated.cf[,i] <- predict(mod_adj, X_new = X.cf, alpha_new = sample$alpha, type = "response")
+}
 
 #### DYNAMICS DESCRIPTIVES #### 
 ## RFS time series (un-interacted instrument) ##
