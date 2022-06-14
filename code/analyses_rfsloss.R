@@ -310,10 +310,9 @@ ggplot(w_rfs, aes(x=year, y=`Billions of gallons (ethanol-equivalent)`/coeff, fi
         panel.grid = element_line(inherit.blank = TRUE))
 
 
-#### DES STATS EAEAR #### 
 
 
-### MAP OF TROPICAL COMMODITY DRIVEN DEFORESTATION ### 
+### MAP CUMULATIVE DEFORESTATION FOR COMMODITIES #### 
 cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_commo_resampledgaez_0119.tif")) 
 
 cdl_accu <- sum(cdl[[09:19]], na.rm = TRUE)
@@ -432,6 +431,39 @@ gaez_as <- crop(gaez, continents[continents$continent_name=="Asia",])
 
 
 
+
+#### MAP EAEARs #### 
+gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
+gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+
+## THIS IS GAEZ IN FULL TROPICAL AOI 
+# a priori no issue if it's gaez in global aoi, i.e. not croped in prepare_gaez.R, it only needs to be a larger aoi than continental ones given above. 
+# besides, note that we brick the file that was already saved as a single brick of raster layers. 
+# Otherwise, calling brick on multiple layers takes some time, and calling stack on multiple layers implies that the object is kept in R memory, and it's ~.06Gb
+gaez <- brick(here(gaez_dir, "high_input_all.tif"))
+
+# restore gaez crop names 
+names(gaez) <- gaez_crops
+
+cs_eaear <- main_data[!duplicated(main_data$grid_id), c("grid_id", "lon", "lat", eaear_mapmat[,"Crops"])]
+
+cs_eaear <- st_as_sf(cs_eaear, coords = c("lon", "lat"), crs = 4326)
+cs_eaear <- as(cs_eaear, "Spatial")
+
+cs_eaear_r <- rasterize(cs_eaear, y = gaez)
+
+plot(cs_eaear_r[["eaear_Biomass"]])
+cs_eaear <- st_as_stars(cs_eaear)
+
+plot(gaez$Miscanthus)
+
+
+plot(cs_eaear[,"eaear_Maizegrain"])
+
+
 #### REGRESSION FUNCTION #### 
 
 ### TEMPORARY OBJECTS 
@@ -508,7 +540,7 @@ make_main_reg <- function(pre_process = FALSE,
                           exposure_rfs = "eaear_Soy_compo",
                           all_exposures_rfs = eaear_mapmat[,"Crops"],
                           group_exposure_rfs = FALSE, # This is deprecated, as it was relevant only when rfs exposures where standardized and could thus be added. If exposure_rfs is length 1, it does not matter whether this option is TRUE or FALSE.
-                          control_all_absolute_rfs = TRUE, # there is not really an alternative where this could be FALSE and have sense. 
+                          control_all_absolute_rfs = TRUE, # this is to be set to FALSE when doing joint estimation
                           most_correlated_only = FALSE, # but this restricts the controls to only interactions with the most correlated crop. 
                           annual_rfs_controls = FALSE,
                           # exposure_pasture = FALSE, # whether the exposure to pasture should be the default AEAY of fodder crops (FALSE) or the share of pastures in 2000 (TRUE) # but we don't do it anymore because it dwarfs all the other estimates, and is not more precise
@@ -544,9 +576,9 @@ make_main_reg <- function(pre_process = FALSE,
 ){
   
   # Define the outcome_variable based on the crop under study (if we are not in the placebo case)
-  if(outcome_variable == "tmf_agri" & ("eaear_Oilpalm" %in% exposure_rfs | "eaear_Rubber" %in% exposure_rfs)){
-    outcome_variable <- "tmf_plantation"
-  }
+  # if(outcome_variable == "tmf_agri" & ("eaear_Oilpalm" %in% exposure_rfs | "eaear_Rubber" %in% exposure_rfs)){
+  #   outcome_variable <- "tmf_plantation"
+  # }
   
   #### PREPARE NEEDED VARIABLE NAMES
   # this does not involve data, just arguments of the make_reg function
@@ -1559,10 +1591,12 @@ make_main_reg <- function(pre_process = FALSE,
 }
 
 ### MAIN SPECIFICATION ### 
+# (edited in single robustness checks)
 est_parameters <- list(outcome_variable  = "loss_commodity",
                        continent = NULL, # this is filled within the loop 
                        start_year = 2009, 
                        end_year = 2019, 
+                       grid_event_threshold = 0,
                        most_correlated_only = FALSE,
                        annual_rfs_controls = FALSE,
                        all_exposures_rfs = eaear_mapmat[,"Crops"],
@@ -1624,6 +1658,8 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
   if(est_parameters[["continent"]] != "all"){
     d <- dplyr::filter(d, continent_name == est_parameters[["continent"]])
   }
+  
+  d[d[,est_parameters[["outcome_variable"]]] < est_parameters[["grid_event_threshold"]], est_parameters[["outcome_variable"]]] <- 0
   
   # Have tmf deforestation to agriculture at least once
   temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
@@ -1773,28 +1809,6 @@ crop_groups <- list(c("Group 1", "Cereals", "Rice"),
 
 
 #### ROBUSTNESS CHECKS #### 
-# parameters (edited in single robustness checks)
-est_parameters <- list(outcome_variable  = "loss_commodity",
-                       continent = NULL, # this is filled within the loop 
-                       start_year = 2009, 
-                       end_year = 2019, 
-                       most_correlated_only = FALSE,
-                       annual_rfs_controls = FALSE,
-                       all_exposures_rfs = eaear_mapmat[,"Crops"],
-                       sjpos = FALSE,
-                       lags = 1,
-                       leads = 3,
-                       fya = 0, 
-                       pya = 0,
-                       lag_controls = NULL,
-                       control_pasture = FALSE,
-                       s_trend = FALSE, 
-                       s_trend_loga = FALSE,
-                       fe = "grid_id + country_year",
-                       clustering = "oneway",
-                       cluster_var1 = "grid_id_10",
-                       cluster_var2 = "grid_id_10",
-                       distribution = "quasipoisson")
 
 # prepare data common to all robustness checks 
 d_all <- main_data
@@ -1820,6 +1834,9 @@ if(est_parameters[["sjpos"]]){
 # if(start_year != 2011 | end_year != 2019){
 d_all <- dplyr::filter(d_all, year >= est_parameters[["start_year"]])
 d_all <- dplyr::filter(d_all, year <= est_parameters[["end_year"]])
+
+d_all[d_all[,est_parameters[["outcome_variable"]]] < est_parameters[["grid_event_threshold"]], est_parameters[["outcome_variable"]]] <- 0
+
 # }
 
 #### Dynamics #### 
@@ -1842,7 +1859,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
     d <- d_all
   }
   
-  # Have tmf deforestation to agriculture at least once
+  # Have deforestation at least once
   temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
                     data = d,
                     family = "poisson")
@@ -1855,7 +1872,6 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
   
   rm(d)
   
-  # Regressions of tmf_agri
   elm <- 1
   for(rfs_exp in est_parameters[["all_exposures_rfs"]]){#agri_crops eaear_mapmat[,"Crops"]
     rfs_1lag1lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
@@ -2722,6 +2738,75 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
 est_parameters[["control_pasture"]] <- FALSE
 
 
+#### Counting only industrial scale deforestation #### 
+# just add this line. It sets deforestation events smaller than 10 hectares to 0. 
+# It does not remove those observations, because they are possibly useful control-like observations. 
+# But it prevents the effect identification to rely on many comparisons between small scale events that are not driven by commodity production
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  d[d[,est_parameters[["outcome_variable"]]] < 10, est_parameters[["outcome_variable"]]] <- 0
+  
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  for(rfs_exp in est_parameters[["all_exposures_rfs"]]){#agri_crops eaear_mapmat[,"Crops"]
+    rfs_1lag3lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                               pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                               
+                                                               outcome_variable = "loss_commodity", # AND THIS
+                                                               continent = est_parameters[["continent"]],
+                                                               start_year = est_parameters[["start_year"]],
+                                                               end_year = est_parameters[["end_year"]],
+                                                               
+                                                               aggr_dyn = TRUE,
+                                                               exposure_rfs = rfs_exp,
+                                                               all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                               
+                                                               original_rfs_treatments = c("statute_conv"),
+                                                               rfs_lead = est_parameters[["leads"]], 
+                                                               rfs_lag = est_parameters[["lags"]],
+                                                               rfs_fya = est_parameters[["fya"]],  #ya,
+                                                               rfs_pya = est_parameters[["pya"]], #ya,
+                                                               
+                                                               most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                               annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                               
+                                                               s_trend = est_parameters[["s_trend"]],
+                                                               s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                               fe = est_parameters[["fe"]], 
+                                                               cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                               
+                                                               rfs_rando = ""
+    )
+    
+    names(rfs_1lag3lead_notrend_clt10[[CNT]])[elm] <- rfs_exp
+    elm <- elm + 1
+  }
+}
+
 saveRDS(rfs_1lag1lead_notrend_clt10, here("temp_data", "reg_results", "rfs", "result_lists", 
                                           "rfs_1lag1lead_notrend_clt10.Rdata"))
 saveRDS(rfs_1lag2lead_notrend_clt10, here("temp_data", "reg_results", "rfs", "result_lists", 
@@ -3129,52 +3214,112 @@ dyn_df_lmt <- dplyr::filter(dyn_df_lmt, continent != "Africa")
 
 #### JOINT ESTIMATION #### 
 
-rfs_1lag3lead_notrend_clt10_joint <- list(all = list(), 
-                                          America = list(), 
-                                          Africa = list(), 
-                                          Asia = list())
+# prepare data common to all estimations 
+d_all <- main_data
 
-# prepare data set in advance, to repeat in all regressions
+# Keep only in data the useful variables 
+d_all <- dplyr::select(d_all, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                              # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                              "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                              # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
+                                              "loss_commodity",
+                                              "pasture_share_2000",
+                                              eaear_mapmat[,"Crops"] ))))
+
+# Merge only the prices needed, not the whole price dataframe
+d_all <- left_join(d_all, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
+
+# - are suitable to crop j 
+if(est_parameters[["sjpos"]]){
+  d_all <- dplyr::filter(d_all, !!as.symbol(exposure_rfs) > 0)
+}
+
+# - are in study period
+# if(start_year != 2011 | end_year != 2019){
+d_all <- dplyr::filter(d_all, year >= est_parameters[["start_year"]])
+d_all <- dplyr::filter(d_all, year <= est_parameters[["end_year"]])
+
+d_all[d_all[,est_parameters[["outcome_variable"]]] < est_parameters[["grid_event_threshold"]], est_parameters[["outcome_variable"]]] <- 0
+
+
+
+rfs_joint_1lag3lead_notrend_clt10 <- list(all = list(), 
+                                           America = list(), 
+                                           Africa = list(), 
+                                           Asia = list())
+
+CNT <- "America"
 for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # this is for later convenience
+  eaear_names <- est_parameters[["all_exposures_rfs"]]
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have deforestation at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
   elm <- 1
-  rfs_1lag3lead_notrend_clt10_joint[[CNT]][[elm]] <- make_main_reg(pre_process = FALSE, # NOTICE THIS
-                                                                   
-                                                                   outcome_variable = "loss_commodity", 
-                                                                   continent = CNT, # AND THIS
-                                                                   start_year = est_parameters[["start_year"]],
-                                                                   end_year = est_parameters[["end_year"]],
-                                                                   
-                                                                   aggr_dyn = TRUE,
-                                                                   exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS
-                                                                   all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
-                                                                   
-                                                                   original_rfs_treatments = c("statute_conv"),
-                                                                   rfs_lead = est_parameters[["leads"]], 
-                                                                   rfs_lag = est_parameters[["lags"]],
-                                                                   rfs_fya = est_parameters[["fya"]],  #ya,
-                                                                   rfs_pya = est_parameters[["pya"]], #ya,
-                                                                   
-                                                                   control_all_absolute_rfs = FALSE, # AND THIS
-                                                                   most_correlated_only = est_parameters[["most_correlated_only"]],
-                                                                   annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
-
-                                                                   s_trend = est_parameters[["s_trend"]],
-                                                                   s_trend_loga = est_parameters[["s_trend_loga"]],
-                                                                   fe = est_parameters[["fe"]], 
-                                                                   cluster_var1 = est_parameters[["cluster_var1"]], 
-                                                                   
-                                                                   rfs_rando = ""
+  rfs_joint_1lag3lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE, # NOTICE THIS
+                                                                 pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                                 output = "coef_table", 
+                                                                 
+                                                                 outcome_variable = est_parameters[["outcome_variable"]], 
+                                                                 continent = est_parameters[["continent"]], # AND THIS
+                                                                 start_year = est_parameters[["start_year"]],
+                                                                 end_year = est_parameters[["end_year"]],
+                                                                 
+                                                                 aggr_dyn = TRUE,
+                                                                 exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS
+                                                                 all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                                 
+                                                                 original_rfs_treatments = c("statute_conv"),
+                                                                 rfs_lead = est_parameters[["leads"]], 
+                                                                 rfs_lag = est_parameters[["lags"]],
+                                                                 rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                 rfs_pya = est_parameters[["pya"]], #ya,
+                                                                 
+                                                                 control_all_absolute_rfs = FALSE, # AND THIS
+                                                                 most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                 annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                 
+                                                                 s_trend = est_parameters[["s_trend"]],
+                                                                 s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                 fe = est_parameters[["fe"]], 
+                                                                 cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                 
+                                                                 rfs_rando = ""
   )
+  
 }    
+
 
 ### PLOT COEFFICIENTS ### 
 # prepare regression outputs in a tidy data frame readable by dwplot
-
 rm(df)
 dyn_df_list <- list()
 
 for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
-  dyn_df <- lapply(rfs_1lag3lead_notrend_clt10_joint[[CNT]], FUN = function(x){x <- as.data.frame(x) 
+  dyn_df <- lapply(rfs_joint_1lag3lead_notrend_clt10[[CNT]], FUN = function(x){x <- as.data.frame(x) 
   return(x[grepl("_aggrall", row.names(x)),])}) %>% bind_rows()
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
   dyn_df$model <- CNT # dyn_des[dyn]
@@ -3240,7 +3385,776 @@ df_lmt <- df[df$term %in% limited_crops1,]
           legend.background = element_rect(colour="grey80"),
           legend.title = element_blank()) }
 
+#### ROBUSTNESS CHECKS ON JOINT SPECIFICATION ####
+#### Dynamics #### 
+## 1 LEAD
+est_parameters[["leads"]] <- 1
+rfs_joint_1lag1lead_notrend_clt10 <- list(all = list(), 
+                                    America = list(), 
+                                    Africa = list(), 
+                                    Asia = list())
 
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have deforestation at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  elm <- 1
+  rfs_joint_1lag1lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                             pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                             
+                                                             outcome_variable = "loss_commodity", # AND THIS
+                                                             continent = est_parameters[["continent"]],
+                                                             start_year = est_parameters[["start_year"]],
+                                                             end_year = est_parameters[["end_year"]],
+                                                             
+                                                             aggr_dyn = TRUE,
+                                                             exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                             all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                             
+                                                             original_rfs_treatments = c("statute_conv"),
+                                                             rfs_lead = est_parameters[["leads"]], 
+                                                             rfs_lag = est_parameters[["lags"]],
+                                                             rfs_fya = est_parameters[["fya"]],  #ya,
+                                                             rfs_pya = est_parameters[["pya"]], #ya,
+                                                             control_all_absolute_rfs = FALSE,
+                                                             most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                             
+                                                             s_trend = est_parameters[["s_trend"]],
+                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                             fe = est_parameters[["fe"]], 
+                                                             cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                             
+                                                             rfs_rando = ""
+  )
+  
+}
+
+## 2 LEADS
+est_parameters[["leads"]] <- 2
+rfs_joint_1lag2lead_notrend_clt10 <- list(all = list(), 
+                                    America = list(), 
+                                    Africa = list(), 
+                                    Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag2lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                             pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                             
+                                                             outcome_variable = "loss_commodity", # AND THIS
+                                                             continent = est_parameters[["continent"]],
+                                                             start_year = est_parameters[["start_year"]],
+                                                             end_year = est_parameters[["end_year"]],
+                                                             
+                                                             aggr_dyn = TRUE,
+                                                             exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                             all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                             
+                                                             original_rfs_treatments = c("statute_conv"),
+                                                             rfs_lead = est_parameters[["leads"]], 
+                                                             rfs_lag = est_parameters[["lags"]],
+                                                             rfs_fya = est_parameters[["fya"]],  #ya,
+                                                             rfs_pya = est_parameters[["pya"]], #ya,
+                                                             control_all_absolute_rfs = FALSE,
+                                                             most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                             
+                                                             s_trend = est_parameters[["s_trend"]],
+                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                             fe = est_parameters[["fe"]], 
+                                                             cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                             
+                                                             rfs_rando = ""
+  )
+
+}
+
+
+
+
+## 4 LEADS
+est_parameters[["leads"]] <- 4
+rfs_joint_1lag4lead_notrend_clt10 <- list(all = list(), 
+                                    America = list(), 
+                                    Africa = list(), 
+                                    Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag4lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                             pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                             
+                                                             outcome_variable = "loss_commodity", # AND THIS
+                                                             continent = est_parameters[["continent"]],
+                                                             start_year = est_parameters[["start_year"]],
+                                                             end_year = est_parameters[["end_year"]],
+                                                             
+                                                             aggr_dyn = TRUE,
+                                                             exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                             all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                             
+                                                             original_rfs_treatments = c("statute_conv"),
+                                                             rfs_lead = est_parameters[["leads"]], 
+                                                             rfs_lag = est_parameters[["lags"]],
+                                                             rfs_fya = est_parameters[["fya"]],  #ya,
+                                                             rfs_pya = est_parameters[["pya"]], #ya,
+                                                             control_all_absolute_rfs = FALSE,
+                                                             most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                             
+                                                             s_trend = est_parameters[["s_trend"]],
+                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                             fe = est_parameters[["fe"]], 
+                                                             cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                             
+                                                             rfs_rando = ""
+  )
+
+}
+
+
+
+
+
+## 5 LEADS
+est_parameters[["leads"]] <- 5
+rfs_joint_1lag5lead_notrend_clt10 <- list(all = list(), 
+                                    America = list(), 
+                                    Africa = list(), 
+                                    Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag5lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                               pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                               
+                                                               outcome_variable = "loss_commodity", # AND THIS
+                                                               continent = est_parameters[["continent"]],
+                                                               start_year = est_parameters[["start_year"]],
+                                                               end_year = est_parameters[["end_year"]],
+                                                               
+                                                               aggr_dyn = TRUE,
+                                                               exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                               all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                               
+                                                               original_rfs_treatments = c("statute_conv"),
+                                                               rfs_lead = est_parameters[["leads"]], 
+                                                               rfs_lag = est_parameters[["lags"]],
+                                                               rfs_fya = est_parameters[["fya"]],  #ya,
+                                                               rfs_pya = est_parameters[["pya"]], #ya,
+                                                               control_all_absolute_rfs = FALSE,
+                                                               most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                               annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                               
+                                                               s_trend = est_parameters[["s_trend"]],
+                                                               s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                               fe = est_parameters[["fe"]], 
+                                                               cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                               
+                                                               rfs_rando = ""
+    )
+
+}
+
+## because it's the end of the series of robustness checks on leads, set the parameter to default
+est_parameters[["leads"]] <- 3
+
+## CONTROL FOR 1 MORE LAG ## 
+est_parameters[["lags"]] <- 2
+est_parameters[["lag_controls"]] <- 2
+rfs_joint_1lag3lead_lag2ctrl_notrend_clt10 <- list(all = list(), 
+                                             America = list(), 
+                                             Africa = list(), 
+                                             Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # keep only exogenous RFS years (the longer lags may take earlier values)
+  d <- dplyr::filter(d, year >= 2008+est_parameters[["lags"]])
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag3lead_lag2ctrl_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                                      pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                                      
+                                                                      outcome_variable = "loss_commodity", # AND THIS
+                                                                      continent = est_parameters[["continent"]],
+                                                                      start_year = est_parameters[["start_year"]],
+                                                                      end_year = est_parameters[["end_year"]],
+                                                                      
+                                                                      aggr_dyn = TRUE,
+                                                                      exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                                      all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                                      
+                                                                      original_rfs_treatments = c("statute_conv"),
+                                                                      rfs_lead = est_parameters[["leads"]], 
+                                                                      rfs_lag = est_parameters[["lags"]],
+                                                                      rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                      rfs_pya = est_parameters[["pya"]], #ya,
+                                                                      lag_controls = est_parameters[["lag_controls"]],
+                                                                      control_all_absolute_rfs = FALSE,
+                                                                      most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                      annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                      
+                                                                      control_pasture = est_parameters[["control_pasture"]],
+                                                                      
+                                                                      s_trend = est_parameters[["s_trend"]],
+                                                                      s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                      fe = est_parameters[["fe"]], 
+                                                                      cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                      
+                                                                      rfs_rando = ""
+  )
+
+}
+
+est_parameters[["lag_controls"]] <- NULL
+est_parameters[["lags"]] <- 1
+
+## ADD t-2 IN CUMULATIVE EFFECTS OF ALL CROPS ## 
+est_parameters[["lags"]] <- 2
+rfs_joint_2lag3lead_notrend_clt10 <- list(all = list(), 
+                                    America = list(), 
+                                    Africa = list(), 
+                                    Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # keep only exogenous RFS years (the longer lags may take earlier values)
+  d <- dplyr::filter(d, year >= 2008+est_parameters[["lags"]])
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_2lag3lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                             pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                             
+                                                             outcome_variable = "loss_commodity", # AND THIS
+                                                             continent = est_parameters[["continent"]],
+                                                             start_year = est_parameters[["start_year"]],
+                                                             end_year = est_parameters[["end_year"]],
+                                                             
+                                                             aggr_dyn = TRUE,
+                                                             exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                             all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                             
+                                                             original_rfs_treatments = c("statute_conv"),
+                                                             rfs_lead = est_parameters[["leads"]], 
+                                                             rfs_lag = est_parameters[["lags"]],
+                                                             rfs_fya = est_parameters[["fya"]],  #ya,
+                                                             rfs_pya = est_parameters[["pya"]], #ya,
+                                                             lag_controls = est_parameters[["lag_controls"]],
+                                                             control_all_absolute_rfs = FALSE,
+                                                             most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                             
+                                                             control_pasture = est_parameters[["control_pasture"]],
+                                                             
+                                                             s_trend = est_parameters[["s_trend"]],
+                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                             fe = est_parameters[["fe"]], 
+                                                             cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                             
+                                                             rfs_rando = ""
+  )
+
+}
+
+est_parameters[["lags"]] <- 1
+
+
+
+#### Clustering #### 
+## CLUSTER 5 
+est_parameters[["cluster_var1"]] <- "grid_id_5"
+rfs_joint_1lag3lead_notrend_clt5 <- list(all = list(), 
+                                   America = list(), 
+                                   Africa = list(), 
+                                   Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag3lead_notrend_clt5[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                            pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                            
+                                                            outcome_variable = "loss_commodity", # AND THIS
+                                                            continent = est_parameters[["continent"]],
+                                                            start_year = est_parameters[["start_year"]],
+                                                            end_year = est_parameters[["end_year"]],
+                                                            
+                                                            aggr_dyn = TRUE,
+                                                            exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                            all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                            
+                                                            original_rfs_treatments = c("statute_conv"),
+                                                            rfs_lead = est_parameters[["leads"]], 
+                                                            rfs_lag = est_parameters[["lags"]],
+                                                            rfs_fya = est_parameters[["fya"]],  #ya,
+                                                            rfs_pya = est_parameters[["pya"]], #ya,
+                                                            control_all_absolute_rfs = FALSE,
+                                                            most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                            annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                            
+                                                            s_trend = est_parameters[["s_trend"]],
+                                                            s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                            fe = est_parameters[["fe"]], 
+                                                            cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                            
+                                                            rfs_rando = ""
+  )
+
+}
+
+
+## CLUSTER 20 
+est_parameters[["cluster_var1"]] <- "grid_id_20"
+rfs_joint_1lag3lead_notrend_clt20 <- list(all = list(), 
+                                    America = list(), 
+                                    Africa = list(), 
+                                    Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag3lead_notrend_clt20[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                             pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                             
+                                                             outcome_variable = "loss_commodity", # AND THIS
+                                                             continent = est_parameters[["continent"]],
+                                                             start_year = est_parameters[["start_year"]],
+                                                             end_year = est_parameters[["end_year"]],
+                                                             
+                                                             aggr_dyn = TRUE,
+                                                             exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                             all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                             
+                                                             original_rfs_treatments = c("statute_conv"),
+                                                             rfs_lead = est_parameters[["leads"]], 
+                                                             rfs_lag = est_parameters[["lags"]],
+                                                             rfs_fya = est_parameters[["fya"]],  #ya,
+                                                             rfs_pya = est_parameters[["pya"]], #ya,
+                                                             control_all_absolute_rfs = FALSE,
+                                                             most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                             
+                                                             s_trend = est_parameters[["s_trend"]],
+                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                             fe = est_parameters[["fe"]], 
+                                                             cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                             
+                                                             rfs_rando = ""
+  )
+
+}
+
+## TWO WAYS CLUSTERING (EXPOSURE LEVEL & GRID_10-YEAR)
+est_parameters[["clustering"]] <- "exposure2ways"
+est_parameters[["cluster_var2"]] <- "grid_id_10_year"
+
+rfs_joint_1lag3lead_notrend_clt2way <- list(all = list(), 
+                                      America = list(), 
+                                      Africa = list(), 
+                                      Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag3lead_notrend_clt2way[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                               pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                               
+                                                               outcome_variable = "loss_commodity", # AND THIS
+                                                               continent = est_parameters[["continent"]],
+                                                               start_year = est_parameters[["start_year"]],
+                                                               end_year = est_parameters[["end_year"]],
+                                                               
+                                                               aggr_dyn = TRUE,
+                                                               exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                               all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                               
+                                                               original_rfs_treatments = c("statute_conv"),
+                                                               rfs_lead = est_parameters[["leads"]], 
+                                                               rfs_lag = est_parameters[["lags"]],
+                                                               rfs_fya = est_parameters[["fya"]],  #ya,
+                                                               rfs_pya = est_parameters[["pya"]], #ya,
+                                                               control_all_absolute_rfs = FALSE,
+                                                               most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                               annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                               
+                                                               s_trend = est_parameters[["s_trend"]],
+                                                               s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                               fe = est_parameters[["fe"]], 
+                                                               
+                                                               clustering = est_parameters[["clustering"]], 
+                                                               cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                               cluster_var2 = est_parameters[["cluster_var2"]], 
+                                                               
+                                                               rfs_rando = ""
+  )
+
+}
+
+
+
+## because it's the end of the series of robustness checks on leads, set the parameter to default
+est_parameters[["clustering"]] <- "oneway"
+est_parameters[["cluster_var1"]] <- "grid_id_10" 
+est_parameters[["cluster_var2"]] <- "grid_id_10"
+
+
+
+#### Pasture control #### 
+est_parameters[["control_pasture"]] <- TRUE
+rfs_joint_1lag3lead_notrend_clt10_pstctrl <- list(all = list(), 
+                                            America = list(), 
+                                            Africa = list(), 
+                                            Asia = list())
+
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag3lead_notrend_clt10_pstctrl[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                                     pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                                     
+                                                                     outcome_variable = "loss_commodity", # AND THIS
+                                                                     continent = est_parameters[["continent"]],
+                                                                     start_year = est_parameters[["start_year"]],
+                                                                     end_year = est_parameters[["end_year"]],
+                                                                     
+                                                                     aggr_dyn = TRUE,
+                                                                     exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS,
+                                                                     all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                                     
+                                                                     original_rfs_treatments = c("statute_conv"),
+                                                                     rfs_lead = est_parameters[["leads"]], 
+                                                                     rfs_lag = est_parameters[["lags"]],
+                                                                     rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                     rfs_pya = est_parameters[["pya"]], #ya,
+                                                                     control_all_absolute_rfs = FALSE,
+                                                                     most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                     annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                     
+                                                                     control_pasture = est_parameters[["control_pasture"]],
+                                                                     
+                                                                     s_trend = est_parameters[["s_trend"]],
+                                                                     s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                     fe = est_parameters[["fe"]], 
+                                                                     cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                     
+                                                                     rfs_rando = ""
+  )
+
+}
+est_parameters[["control_pasture"]] <- FALSE
+
+
+
+#### Counting only industrial scale deforestation #### 
+rfs_joint_1lag3lead_notrend_clt10_10hamin <- list(all = list(), 
+                                                  America = list(), 
+                                                  Africa = list(), 
+                                                  Asia = list())
+
+for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  # just add this line. It sets deforestation events smaller than 10 hectares to 0. 
+  # It does not remove those observations, because they are possibly useful control-like observations. 
+  # But it prevents the effect identification to rely on many comparisons between small scale events that are not driven by commodity production
+  d[d[,est_parameters[["outcome_variable"]]] < 10, est_parameters[["outcome_variable"]]] <- 0
+  
+
+  # Have tmf deforestation to agriculture at least once
+  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                    data = d,
+                    family = "poisson")
+  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+  if(length(temp_est$obs_selection)>0){
+    pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+  }  else { 
+    pre_d_clean_agri <- d
+  }
+  
+  rm(d)
+  
+  # Regressions of tmf_agri
+  elm <- 1
+  rfs_joint_1lag3lead_notrend_clt10_10hamin[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
+                                                             pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                             
+                                                             outcome_variable = "loss_commodity", # AND THIS
+                                                             continent = est_parameters[["continent"]],
+                                                             start_year = est_parameters[["start_year"]],
+                                                             end_year = est_parameters[["end_year"]],
+                                                             
+                                                             aggr_dyn = TRUE,
+                                                             exposure_rfs = est_parameters[["all_exposures_rfs"]],
+                                                             all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                             
+                                                             original_rfs_treatments = c("statute_conv"),
+                                                             rfs_lead = est_parameters[["leads"]], 
+                                                             rfs_lag = est_parameters[["lags"]],
+                                                             rfs_fya = est_parameters[["fya"]],  #ya,
+                                                             rfs_pya = est_parameters[["pya"]], #ya,
+                                                             control_all_absolute_rfs = FALSE,
+                                                             most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                             
+                                                             s_trend = est_parameters[["s_trend"]],
+                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                             fe = est_parameters[["fe"]], 
+                                                             cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                             
+                                                             rfs_rando = ""
+  )
+  
+}
 
 
 #### GAUSSIAN #### 
@@ -3491,10 +4405,21 @@ df_lmt <- df[df$term %in% limited_crops1,]
 #### MAGNITUDES BY COUNTERFACTUAL DIFFERENCING #### 
 # Here, it's important that coefficients are estimated jointly, as we will add them up 
 
+### MAIN DATA SET ### 
+tmf_data <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", "tmf_aeay_pantrop_long_final_1990_2020.Rdata"))
+# release some memory upfront
+tmf_data <- dplyr::filter(tmf_data, year >= 2008, year <= 2019)
+
+tmf_data <- dplyr::mutate(tmf_data, tmf_deforestation = tmf_agri + tmf_plantation)
+
+est_parameters[["outcome_variable"]] <- "tmf_agri"
+
 effects_list <- list(all = list(), 
                       America = list(), 
                       Africa = list(), 
                       Asia = list())
+
+CNT <- "America"
 
 # prepare data set in advance, to repeat in all regressions
 for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
@@ -3504,65 +4429,120 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
   # this is for later convenience
   eaear_names <- est_parameters[["all_exposures_rfs"]]
   
-  d <- main_data
+  if(est_parameters[["outcome_variable"]] == "loss_commodity"){
+    d <- main_data
+    
+    # Keep only in data the useful variables 
+    d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                          # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                          "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                          # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
+                                          "loss_commodity",
+                                          "pasture_share_2000",
+                                          eaear_mapmat[,"Crops"] ))))
+    
+    # Merge only the prices needed, not the whole price dataframe
+    d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
+    
+    # - are suitable to crop j 
+    if(est_parameters[["sjpos"]]){
+      d <- dplyr::filter(d, !!as.symbol(exposure_rfs) > 0)
+    }
+    
+    # - are in study period
+    # if(start_year != 2011 | end_year != 2019){
+    d <- dplyr::filter(d, year >= est_parameters[["start_year"]])
+    d <- dplyr::filter(d, year <= est_parameters[["end_year"]])
+    # }
+    
+    # - are in study area
+    if(est_parameters[["continent"]] != "all"){
+      d <- dplyr::filter(d, continent_name == est_parameters[["continent"]])
+    }
+    
+    # are not small forest loss events, but actual commodity driven operations
+    d[d[,est_parameters[["outcome_variable"]]] < est_parameters[["grid_event_threshold"]], est_parameters[["outcome_variable"]]] <- 0
+    
+    # Have deforestation to agriculture at least once
+    temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+                      data = d,
+                      family = "poisson")
+    # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+    if(length(temp_est$obs_selection)>0){
+      d_clean <- d[unlist(temp_est$obs_selection),]
+    }  else { 
+      d_clean <- d
+    }
+    
+    # # Have some tmf deforestation to plantation at least once
+    # temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
+    #                   data = d,
+    #                   family = "poisson")
+    # # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+    # if(length(temp_est$obs_selection)>0){
+    #   pre_d_clean_plantation <- d[unlist(temp_est$obs_selection),]
+    # }  else { 
+    #   pre_d_clean_plantation <- d
+    # }
+    
+    rm(d)
+    ## TEMP NOTE ##
   
-  # Keep only in data the useful variables 
-  d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
-                                        # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
-                                        "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
-                                        # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
-                                        "loss_commodity",
-                                        "pasture_share_2000",
-                                        eaear_mapmat[,"Crops"] ))))
-  
-  # Merge only the prices needed, not the whole price dataframe
-  d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
-  
-  # - are suitable to crop j 
-  if(est_parameters[["sjpos"]]){
-    d <- dplyr::filter(d, !!as.symbol(exposure_rfs) > 0)
+    # at this stage, d_clean has 731522 rows (America), but still the row names from d, going to 734943, which is the number of 
+    # rows in d 
+    # the last grid_id is 107286
   }
   
-  # - are in study period
-  # if(start_year != 2011 | end_year != 2019){
-  d <- dplyr::filter(d, year >= est_parameters[["start_year"]])
-  d <- dplyr::filter(d, year <= est_parameters[["end_year"]])
-  # }
+  if(grepl("tmf_", est_parameters[["outcome_variable"]]) ){
+    d <- tmf_data
+    
+    # Keep only in data the useful variables 
+    d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                          # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                          "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                          "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
+                                          # "loss_commodity",
+                                          "pasture_share_2000",
+                                          eaear_mapmat[,"Crops"] ))))
+    
+    # Merge only the prices needed, not the whole price dataframe
+    d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
+    
+    # - are suitable to crop j 
+    if(est_parameters[["sjpos"]]){
+      d <- dplyr::filter(d, !!as.symbol(exposure_rfs) > 0)
+    }
+    
+    # - are in study period
+    # if(start_year != 2011 | end_year != 2019){
+    d <- dplyr::filter(d, year >= est_parameters[["start_year"]])
+    d <- dplyr::filter(d, year <= est_parameters[["end_year"]])
+    # }
+    
+    # - are in study area
+    if(est_parameters[["continent"]] != "all"){
+      d <- dplyr::filter(d, continent_name == est_parameters[["continent"]])
+    }
+    
+    # Have tmf deforestation to agriculture at least once
+    temp_est <- feglm(fml = as.formula(paste0(est_parameters[["outcome_variable"]], " ~ 1 | ", est_parameters[["fe"]])),
+                      data = d,
+                      family = "poisson")
+    # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+    if(length(temp_est$obs_selection)>0){
+      d_clean <- d[unlist(temp_est$obs_selection),]
+    }  else { 
+      d_clean <- d
+    }
   
-  # - are in study area
-  if(est_parameters[["continent"]] != "all"){
-    d <- dplyr::filter(d, continent_name == est_parameters[["continent"]])
+    
   }
-  
-  # Have tmf deforestation to agriculture at least once
-  temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
-                    data = d,
-                    family = "poisson")
-  # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
-  if(length(temp_est$obs_selection)>0){
-    d_clean <- d[unlist(temp_est$obs_selection),]
-  }  else { 
-    d_clean <- d
-  }
-  
-  # # Have some tmf deforestation to plantation at least once
-  # temp_est <- feglm(fml = as.formula(paste0("loss_commodity", " ~ 1 | ", est_parameters[["fe"]])),
-  #                   data = d,
-  #                   family = "poisson")
-  # # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
-  # if(length(temp_est$obs_selection)>0){
-  #   pre_d_clean_plantation <- d[unlist(temp_est$obs_selection),]
-  # }  else { 
-  #   pre_d_clean_plantation <- d
-  # }
-  
-  rm(d)
   
   sim_mod <- make_main_reg(pre_process = TRUE, # NOTICE THIS
                                                                    pre_processed_data = d_clean, # NOTICE THIS
-                                                                   output = "est_object",
+                                                                   output = "est_object", # "coef_table",# 
                                                                    
-                                                                   outcome_variable = "loss_commodity", 
+                                                                   outcome_variable = est_parameters[["outcome_variable"]], 
                                                                    continent = est_parameters[["continent"]], # AND THIS
                                                                    start_year = est_parameters[["start_year"]],
                                                                    end_year = est_parameters[["end_year"]],
@@ -3588,10 +4568,23 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
                                                                    
                                                                    rfs_rando = ""
   )
-
+  
+  # extract from model: 
+  
+  # coefficients and vcov matrix
   beta <- sim_mod$coefficients
   beta_cov <- vcov(sim_mod)
-  # compute the quantity of interest based on point estimates
+  
+  # fitted values
+  nrow(d_clean) == length(sim_mod$fitted.values)
+  all(sim_mod$fitted.values == fitted(sim_mod))
+  
+  d_clean$fv <- sim_mod$fitted.values  
+  d_clean$lp <- sim_mod$linear.predictors
+  summary(d_clean$fv)
+  summary(d_clean[,est_parameters[["outcome_variable"]]])
+  
+  # First, compute the quantity of interest based on point estimates
   # 3 steps, for each obs.: 
   # 1. Sum dynamic coefficients for each crop  
   # 2. Multiply these crop sums by the corresponding crop exposures 
@@ -3622,19 +4615,111 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
   
   nrow(d_clean_cs) == length(unique(d_clean$grid_id))
   
-  cs_effect_mat <- d_clean_cs 
+  cs_scaled_cum_beta <- d_clean_cs 
   for(EOI in eaear_names){
-    cs_effect_mat[,EOI] <- d_clean_cs[,EOI] * cum_beta[EOI]
+    cs_scaled_cum_beta[,EOI] <- d_clean_cs[,EOI] * cum_beta[EOI]
   }
-
-  crop_effects <- colSums(cs_effect_mat)
-  total_effect <- sum(crop_effects)
   
-  # total effect corresponds to Y - Ycf where Ycf is the counterfactual deforestation, had mandates been 1bgal *lower* every year. 
+  # the sum_ is not very meaningful (it's in linear scale, not in outcome - exponential - scale)
+  cs_scaled_cum_beta <- dplyr::mutate(cs_scaled_cum_beta, sum_ = rowSums(across(.cols = (any_of(eaear_names)))))
+  summary(cs_scaled_cum_beta$sum_)
+  # this starts to be interpretable. 
+  cs_scaled_cum_beta <- dplyr::mutate(cs_scaled_cum_beta, x_i = exp( - sum_)) # NOTE THE MINUS 
+  
+  head(cs_scaled_cum_beta)
+  summary(cs_scaled_cum_beta$x_i)
+  # but do not over interpret the distribution here, because it's not scaled by actual deforestation occurring on each grid cell
+  # extreme values are obs. specific 
+  
+  d_clean <- left_join(d_clean, cs_scaled_cum_beta[,c("grid_id", "x_i")], by = "grid_id")
+  # note that the join resets the row names. The last one is now equal to the number of rows. 
+  
+  
+  # d_clean$fvbar <- mean(d_clean$fv)
+  # counterfactual effects correspond to Y - Ycf where Ycf is the counterfactual deforestation, had mandates been 1bgal *lower* every year. 
   # --> so effects are to be interpreted as the deforestation that has been caused by *not* having lowered the mandates by 1bgal. 
+  d_clean <- dplyr::mutate(d_clean, cf_effect_it = (1 - x_i)*fv)
+  
+  summary(sim_mod$fitted.values)
+  head(d_clean)
+  summary(d_clean$x_i)
+  summary(d_clean$cf_effect_it)
+  sum(d_clean$cf_effect_it)
+  length(unique(d_clean$year))
+  
+  # the number of hectares that would not have been deforested annually in continent, 
+  # had the RFS been 1bgal lower every year - all effects through all crops included 
+  sum(d_clean$cf_effect_it)/length(unique(d_clean$year))
+  
+  ## Compute a grid cell specific quantity, to be mapped to see where effects occur mostly (not aggregated in regions, but at grid cell continuous level)
+  cs_i <- ddply(d_clean, "grid_id", summarise, 
+                          cs_sumfv_i = sum(fv), 
+                          cs_sumeffect_i = sum(cf_effect_it))    
+  
+  d_clean <- left_join(d_clean, cs_i, by = "grid_id")
+  
+  rm(cs_i)
+  d_clean <- dplyr::mutate(d_clean, cs_sumeffect_i2 = (1-x_i) * cs_sumfv_i)
+  
+  head(d_clean)
+  
+  d_clean_cs <- d_clean[!duplicated(d_clean$grid_id),]
+  
+  plot(x = d_clean_cs$cs_sumfv_i, y = d_clean_cs$cs_sumeffect_i)
+
+  plot(x = d_clean_cs$cs_sumfv_i, y = d_clean_cs$x_i)
+  
+  d_clean %>% 
+      dplyr::filter(tmf_agri > 100) %>% 
+      dplyr::select(cf_effect_it) %>% sum()
+  
+  # st_d_clean <- st_as_sf(d_clean[!duplicated(d_clean$grid_id), c("grid_id", "lon", "lat", "cs_sumeffect_i")], 
+  #                        coords = c("lon", "lat"), crs = 4326)
+  #   plot(st_d_clean[,"cs_sumeffect_i"])
   
   
-  ## INFERENCE 
+  
+  ### CROP SPECIFIC EFFECTS
+  
+  # compute them by forcing betas of other crops to be null. 
+  
+  for(EOI in eaear_names){
+    # at this stage, EOI in cs_scaled_cum_beta refer to A*cumulative_beta for a given crop, and the sum_ refers to the sum of all those EOI variables
+    cs_scaled_cum_beta <- dplyr::mutate(cs_scaled_cum_beta, !!as.symbol(paste0("x_i_bar_",EOI)) := exp( - (sum_ - !!as.symbol(EOI))))
+     
+    d_clean <- left_join(d_clean, cs_scaled_cum_beta[,c("grid_id", paste0("x_i_bar_",EOI))], by = "grid_id")
+    
+    # select crop-specific dynamic betas
+    beta_jtau <- grep(pattern = EOI, names(sim_mod$coefficients), value = TRUE)
+    
+    for(dyn in beta_jtau){
+      
+      rfs_tau <- gsub(pattern = paste0(EOI,"_X_"), replacement = "", x = dyn)
+      
+      coeff <- sim_mod$coefficients[dyn] 
+      
+      d_clean <- dplyr::mutate(d_clean, !!as.symbol(paste0("linpred_",EOI,"_",rfs_tau)) := coeff * !!as.symbol(EOI) * !!as.symbol(rfs_tau)) 
+      
+      
+    }
+    d_clean <- dplyr::mutate(d_clean, !!as.symbol(paste0("linpred_",EOI)) := rowSums(across(.cols = (contains(paste0("linpred_",EOI))))))
+    
+    d_clean <- dplyr::mutate(d_clean, !!as.symbol(paste0("linpred_bar_",EOI)) := lp - !!as.symbol(paste0("linpred_",EOI)) )
+    
+    d_clean <- dplyr::mutate(d_clean, !!as.symbol(paste0("fv_bar_",EOI)) := exp(!!as.symbol(paste0("linpred_bar_",EOI))))
+    
+    d_clean <- dplyr::mutate(d_clean, 
+                             !!as.symbol(paste0("cf_effect_",EOI)) := 
+                               
+                                  cf_effect_it - (1 - !!as.symbol(paste0("x_i_bar_",EOI))) * !!as.symbol(paste0("fv_bar_",EOI)) )
+                               
+    
+
+  }
+    
+  tail(d_clean[,grepl(x = colnames(d_clean), pattern = "eaear_Biomass")])
+  
+  ### INFERENCE  ###
   n <- 10
   # store in rows all crops effects PLUS the total effect
   rep_effects <- data.frame(matrix(ncol = n, nrow = length(crop_effects) + 1)) 

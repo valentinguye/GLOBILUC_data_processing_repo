@@ -653,12 +653,13 @@ price_avg <- prices %>%
   summarise(across(.cols = any_of(mapmat[,"Prices"]), 
                    .fns = mean, na.rm = TRUE))
 
-
+# , Miscanthus, Sorghumbiomass*10
+# summary(df_cs$eaear_Fodder)
 ## Aggregate suitability indexes to match price data
 # makes sense for SUgar fodder and rice subcrops because yields expressed in comaprable units  
-df_cs <- df_cs %>% rowwise() %>% mutate(Biomass = max(c(Miscanthus, Reedcanarygrass, Sorghumbiomass*10, Switchgrass)), # sorghum biomass is expressed in kg/ha, and not 10kg/ha as it is the case for the three other crops
+df_cs <- df_cs %>% rowwise() %>% mutate(Biomass = max(c(Sorghumbiomass/10, Miscanthus, Reedcanarygrass, Switchgrass)), # sorghum biomass is expressed in kg/ha, and not 10kg/ha as it is the case for the three other crops
                                         #  don't include Jatropha because it is expressed in seeds and not above ground biomass in GAEZ. 
-                                        Fodder = max(c(Alfalfa, Napiergrass)),   
+                                        Fodder = max(c(Alfalfa, Napiergrass)),   #,  # it's almost only napiergrass that varies (indeed, some say that it's the highest yielding tropical forage crop https://www.sciencedirect.com/science/article/pii/S2468227619307756#bib0001
                                         Rice = max(c(Drylandrice, Wetlandrice)),
                                         Sugar = max(c(Sugarbeet, Sugarcane)) # Especially necessary to match the international price of sugar
                                         # We surely wont need these in the AEAY workflow, as we need to interact these variables with a price and there is no price for those. 
@@ -1030,10 +1031,10 @@ rm(df_stdeaear)
 
 
 ## REMAINING
-df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeay_long_remaining.Rdata"))
+#df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeay_long_remaining.Rdata"))
 
-final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
-rm(df_remain)
+# final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
+# rm(df_remain)
 
 
 saveRDS(final, here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeay_long_final.Rdata"))
