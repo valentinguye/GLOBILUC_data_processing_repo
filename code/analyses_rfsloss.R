@@ -4412,14 +4412,14 @@ tmf_data <- dplyr::filter(tmf_data, year >= 2008, year <= 2019)
 
 tmf_data <- dplyr::mutate(tmf_data, tmf_deforestation = tmf_agri + tmf_plantation)
 
-est_parameters[["outcome_variable"]] <- "tmf_agri"
+est_parameters[["outcome_variable"]] <- "tmf_plantation"
 
 effects_list <- list(all = list(), 
                       America = list(), 
                       Africa = list(), 
                       Asia = list())
 
-CNT <- "America"
+CNT <- "Asia"
 
 # prepare data set in advance, to repeat in all regressions
 for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" "all", "America", "Africa", 
@@ -4535,12 +4535,15 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
       d_clean <- d
     }
   
-    
+    if(est_parameters[["outcome_variable"]] == "tmf_plantation"){
+      eaear_names <- c("eaear_Banana", "eaear_Citrus", "eaear_Cocoa_Coffee", "eaear_Coconut", 
+                       "eaear_Oilpalm", "eaear_Rubber", "eaear_Tea")
+    }
   }
   
   sim_mod <- make_main_reg(pre_process = TRUE, # NOTICE THIS
                                                                    pre_processed_data = d_clean, # NOTICE THIS
-                                                                   output = "est_object", # "coef_table",# 
+                                                                   output = "est_object", # coef_table"",# 
                                                                    
                                                                    outcome_variable = est_parameters[["outcome_variable"]], 
                                                                    continent = est_parameters[["continent"]], # AND THIS
@@ -4569,6 +4572,9 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
                                                                    rfs_rando = ""
   )
   
+  sim_mod[grepl("_aggrall", row.names(sim_mod)),]
+  
+  summary(sim_mod)
   # extract from model: 
   
   # coefficients and vcov matrix
