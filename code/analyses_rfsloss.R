@@ -116,7 +116,9 @@ limited_crops1 <- c("eaear_Maizegrain", "eaear_Fodder", "eaear_Cereals", "eaear_
                     "eaear_Cocoa_Coffee")
 
 ### MAIN DATA SETS #### 
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeay_long_final.Rdata"))
+#main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeay_long_final.Rdata"))
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long_final.Rdata"))
+
 # release some memory upfront
 main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
 
@@ -313,7 +315,11 @@ ggplot(w_rfs, aes(x=year, y=`Billions of gallons (ethanol-equivalent)`/coeff, fi
 
 
 ### MAP CUMULATIVE DEFORESTATION FOR COMMODITIES #### 
-cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_commo_resampledgaez_0119.tif")) 
+#cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_commo_resampledgaez_0119.tif")) 
+cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_cropland_resampledgaez_0119.tif")) 
+cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_oilpalmboth_resampledgaez_0119.tif")) 
+cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_pasture_resampledgaez_0119.tif")) 
+
 
 cdl_accu <- sum(cdl[[09:19]], na.rm = TRUE)
 vcdl <- values(cdl_accu)

@@ -8,7 +8,8 @@
 ### PACKAGES ###
 
 # These are the packages needed in this particular script. 
-neededPackages <- c("data.table", "plyr", "tidyr", "dplyr", "writexl",
+neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",
+                    "foreign", "readxl","writexl",
                     "here",
                     "raster", "rgdal", "sp", "sf")
 
@@ -223,16 +224,78 @@ country_tmf_final <- dplyr::select(country_tmf_final, -empty)
 # check it's still a balanced panel 
 length(unique(country_tmf_final$country_name))*length(unique(country_tmf_final$year)) == nrow(country_tmf_final)
 
+
+### SAVE 
 saveRDS(country_tmf_final, here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata")))
 
 write_xlsx(country_tmf_final, here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".xlsx")))
 
+#### Handle country names ####
+# Work not finished. 
+# df_cs <- readRDS(here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata")))
+# 
+# df_cs$country_name[df_cs$country_name=="Aruba (Neth)"] <- "Aruba"
+# df_cs$country_name[df_cs$country_name=="United States"] <- "United States"
+# df_cs$country_name[df_cs$country_name=="Iran"] <- "Iran (Islamic Republic of)"
+# df_cs$country_name[df_cs$country_name=="Spain [Canary Is]"] <- "Spain"
+# df_cs$country_name[df_cs$country_name=="Burma"] <- "Myanmar"
+# df_cs$country_name[df_cs$country_name=="Bahamas, The"] <- "Bahamas"
+# # df_cs$country_name[df_cs$country_name=="Taiwan"] 
+# df_cs$country_name[df_cs$country_name=="Vietnam"] <- "Viet Nam"
+# df_cs$country_name[df_cs$country_name=="Hong Kong (Ch)"] <- "China, Hong Kong SAR"
+# df_cs$country_name[df_cs$country_name=="Macau (Ch)"] <- "China, Macao SAR"
+# df_cs$country_name[df_cs$country_name=="Turks & Caicos Is (UK)"] <- "United Kingdom"
+# df_cs$country_name[df_cs$country_name=="Anguilla (UK)"] <- "United Kingdom"
+# df_cs$country_name[df_cs$country_name=="Laos"] <- "Lao People's Democratic Republic"
+# df_cs$country_name[df_cs$country_name=="Cayman Is (UK)"] <- "United Kingdom"
+# df_cs$country_name[df_cs$country_name=="Northern Mariana Is (US)"] <- "United States"
+# df_cs$country_name[df_cs$country_name=="Puerto Rico (US)"] <- "United States"
+# df_cs$country_name[df_cs$country_name=="Br Virgin Is (UK)"] <- "United Kingdom"
+# df_cs$country_name[df_cs$country_name=="US Virgin Is (US)"] <- "United States"
+# df_cs$country_name[df_cs$country_name=="Antigua & Barbuda"] <- "Antigua and Barbuda"
+# df_cs$country_name[df_cs$country_name=="St Kitts & Nevis"] <- "Saint Kitts and Nevis"
+# df_cs$country_name[df_cs$country_name=="Montserrat (UK)"] <- "United Kingdom"
+# df_cs$country_name[df_cs$country_name=="Guadeloupe (Fr)"] <- "France"
+# df_cs$country_name[df_cs$country_name=="Martinique (Fr)"] <- "France"
+# df_cs$country_name[df_cs$country_name=="St Lucia"] <- "Saint Lucia"
+# df_cs$country_name[df_cs$country_name=="Guam (US)"] <- "United States"
+# df_cs$country_name[df_cs$country_name=="St Vincent & the Grenadines"] <- "Saint Vincent and the Grenadines"
+# df_cs$country_name[df_cs$country_name=="Venezuela"] <- "Venezuela (Bolivarian Republic of)"
+# df_cs$country_name[df_cs$country_name=="Trinidad & Tobago"] <- "Trinidad and Tobago"
+# df_cs$country_name[df_cs$country_name=="Cote d'Ivoire"] <- "Côte d'Ivoire"
+# df_cs$country_name[df_cs$country_name=="Central African Rep"] <- "Central African Republic"
+# # df_cs$country_name[df_cs$country_name=="Micronesia, Fed States of"]
+# df_cs$country_name[df_cs$country_name=="French Guiana (Fr)"] <- "France"
+# df_cs$country_name[df_cs$country_name=="Congo, Dem Rep of the"] <- "Democratic Republic of the Congo"
+# df_cs$country_name[df_cs$country_name=="Brunei"] <- "Brunei Darussalam"
+# df_cs$country_name[df_cs$country_name=="Congo, Rep of the"] <- "Congo"
+# df_cs$country_name[df_cs$country_name=="Sao Tome & Principe"] <- "Sao Tome and Principe"
+# df_cs$country_name[df_cs$country_name=="Tanzania"] <- "United Republic of Tanzania"
+# df_cs$country_name[df_cs$country_name=="Solomon Is"] <- "Solomon Islands"
+# df_cs$country_name[df_cs$country_name=="French Polynesia (Fr)"] <- "France"
+# df_cs$country_name[df_cs$country_name=="Bolivia"] <- "Bolivia (Plurinational State of)"
+# df_cs$country_name[df_cs$country_name=="Christmas I (Aus)"] <- "Australia"
+# df_cs$country_name[df_cs$country_name=="Mayotte (Fr)"] <- "France"
+# df_cs$country_name[df_cs$country_name=="Wallis & Futuna (Fr)"] <- "France"
+# df_cs$country_name[df_cs$country_name=="American Samoa (US)"] <- "United States"
+# df_cs$country_name[df_cs$country_name=="Niue (NZ)"] <- "New Zealand"
+# df_cs$country_name[df_cs$country_name=="New Caledonia (Fr)"] <- "France"
+# df_cs$country_name[df_cs$country_name=="Reunion (Fr)"] <- "France"
+# df_cs$country_name[df_cs$country_name=="Pitcairn Is (UK)"] <- "United Kingdom"
+# df_cs$country_name[df_cs$country_name=="Swaziland"] <- "Eswatini"
+# 
+# tmf_countries <- unique(df_cs$country_name)
+# 
+# iso3 <- read_xlsx(here("input_data", "ISO3_countries.xlsx")) %>% as.data.frame()
+# 
+# iso3_common <- tmf_countries[tmf_countries %in% iso3$country_name]
+# iso3_diff <- tmf_countries[!(tmf_countries %in% iso3$country_name)]
 
-country_tmf_final <- readRDS(here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata")))
 
 
 
 ### Some checks against statistics in Vancutsem Science article, at continental level #### 
+country_tmf_final <- readRDS(here("temp_data", paste0("tmf_countries_pantrop_nomask_",t0,"_",tT,".Rdata")))
 
 # Deforestation, including after degradation, but excluding followed by regrowth
 
