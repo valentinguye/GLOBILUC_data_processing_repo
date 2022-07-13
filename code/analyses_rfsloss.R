@@ -136,9 +136,11 @@ limited_crops1 <- c("eaear_Maizegrain", "eaear_Fodder", "eaear_Cereals", "eaear_
 
 ### MAIN DATA SETS #### 
 #main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeay_long_final.Rdata"))
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeaybestirr_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeaybestirr_long_final.Rdata"))
 
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeayirr_long_final.Rdata"))
+
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeayirr_long_final.Rdata"))
 main_data <- dplyr::mutate(main_data, loss_commodity = loss_cropland + loss_oilpalm + loss_pasture)
 
 # release some memory upfront
@@ -4443,7 +4445,7 @@ df_lmt <- df[df$term %in% limited_crops1,]
           legend.title = element_blank()) }
 
 
-#### JOINT, BY LOSS CATEGORY #### 
+#### DISJOINT, BY LOSS CATEGORY #### 
 est_parameters[["end_year"]] <- 2016
 
 # prepare data common to all estimations 
@@ -4476,7 +4478,7 @@ d_all <- dplyr::filter(d_all, year <= est_parameters[["end_year"]])
 
 
 
-rfs_joint_1lag3lead_notrend_clt10 <- list(all = list(), 
+rfs_losscat_1lag3lead_notrend_clt10 <- list(all = list(), 
                                           America = list(), 
                                           Africa = list(), 
                                           Asia = list())
@@ -4514,8 +4516,203 @@ for(CNT in c("all", "America", "Africa", "Asia")){ #, , "all",  "Africa", "Asia"
       pre_d_clean_agri <- d
     }
     
+    elm <- 1
+    for(rfs_exp in focal_crops){#agri_crops eaear_mapmat[,"Crops"]
+      
+      rfs_losscat_1lag3lead_notrend_clt10[[CNT]][[loss_type]][[elm]] <- make_main_reg(pre_process = TRUE, # NOTICE THIS
+                                                                             pre_processed_data = pre_d_clean_agri, # NOTICE THIS
+                                                                             output = "coef_table", 
+                                                                             
+                                                                             outcome_variable = est_parameters[["outcome_variable"]], 
+                                                                             continent = est_parameters[["continent"]], # AND THIS
+                                                                             start_year = est_parameters[["start_year"]],
+                                                                             end_year = est_parameters[["end_year"]],
+                                                                             
+                                                                             aggr_dyn = TRUE,
+                                                                             exposure_rfs = rfs_exp, # focal_crops, # NOTE THIS
+                                                                             all_exposures_rfs = focal_crops, # est_parameters[["all_exposures_rfs"]], # focal_crops, # NOTE THIS
+                                                                             
+                                                                             original_rfs_treatments = c("statute_conv"),
+                                                                             rfs_lead = est_parameters[["leads"]], 
+                                                                             rfs_lag = est_parameters[["lags"]],
+                                                                             rfs_fya = est_parameters[["fya"]],  #ya,
+                                                                             rfs_pya = est_parameters[["pya"]], #ya,
+                                                                             
+                                                                             # control_all_absolute_rfs = FALSE, THIS IS COMMENTED OUT BC DISJOINT
+                                                                             most_correlated_only = est_parameters[["most_correlated_only"]],
+                                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                                             
+                                                                             s_trend = est_parameters[["s_trend"]],
+                                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                             fe = est_parameters[["fe"]], 
+                                                                             cluster_var1 = est_parameters[["cluster_var1"]], 
+                                                                             
+                                                                             rfs_rando = ""
+      )
+      
+      elm <- elm + 1
+    }
+  }  
+  
+}    
+
+
+### PLOT COEFFICIENTS ### 
+# prepare regression outputs in a tidy data frame readable by dwplot
+rm(df)
+dyn_df_list <- list()
+res_loss_list <- list()
+for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
+  # this is still a list, with elements for loss types
+  # res_loss_list <- rfs_losscat_1lag3lead_notrend_clt10[[CNT]]
+  
+  for(loss_type in c("loss_cropland", "loss_oilpalm", "loss_pasture")){
+    x <- lapply(rfs_losscat_1lag3lead_notrend_clt10[[CNT]][[loss_type]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
+    x$loss_type <- loss_type
+    res_loss_list[[CNT]][[loss_type]] <- x
+  }
+  dyn_df <- res_loss_list[[CNT]] %>% bind_rows()
+  
+  dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  dyn_df$model <- CNT # dyn_des[dyn]
+  dyn_df_list[[CNT]] <- dyn_df
+}  
+df <- bind_rows(dyn_df_list)
+df[df$model == "all", "model"] <- "Global"
+#df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
+df$significant01 <- ""
+df[df[,"Pr(>|t|)"] < 0.1, "significant01"] <- "p-value < .1"
+
+names(df)[names(df)=="Estimate"] <- "estimate"
+names(df)[names(df)=="Std. Error"] <- "std.error"
+row.names(df) <- NULL
+
+df_lmt <- df[df$term %in% limited_crops1,]
+{dwplot(df,
+        dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),#, alpha = significant01
+        whisker_args = list(size = 1, aes(alpha = significant01)),#alpha = significant01
+        vline = geom_vline(xintercept = 0, colour = "grey60", linetype = 2)) %>% # plot line at zero _behind_ coefs
+    relabel_predictors(c(#eaear_Barley = "Barley",
+      #eaear_Groundnut = "Groundnut", 
+      eaear_Maizegrain = "Maize",
+      
+      eaear_Fodder = "Pasture",
+      
+      eaear_Cereals = "Cereals",
+      eaear_Rice = "Rice",
+      
+      eaear_Soy_compo = "Soy", 
+      
+      eaear_Cotton = "Cotton",
+      eaear_Oilfeed_crops = "Oil crops",
+      
+      #eaear_Rapeseed = "Rapeseed", 
+      # eaear_Sorghum2 = "Sorghum", 
+      eaear_Biomass = "Biomass crops",
+      eaear_Sugarcane = "Sugar crops", 
+      #eaear_Sunflower = "Sunflower",
+      #eaear_Wheat = "Wheat",
+      
+      eaear_Coconut = "Coconut", 
+      eaear_Oilpalm = "Oil palm",
+      
+      eaear_Tobacco = "Tobacco", 
+      eaear_Citrus = "Citrus",
+      
+      eaear_Banana = "Banana", 
+      eaear_Cocoa_Coffee = "Cocoa or Coffee",
+      #eaear_Cocoa  = "Cocoa", 
+      #eaear_Coffee = "Coffee", 
+      eaear_Rubber = "Rubber", 
+      eaear_Tea = "Tea"
+    )) +
+    #scale_color_manual(values=wes_palette(n=4, name="Darjeeling1", type = "discrete")) +
+    scale_color_brewer(type = "qual", palette="Set1") +
+    theme_bw() + xlab("Coefficient Estimate") + ylab("") +
+    geom_vline(xintercept = 0, colour = "grey60", linetype = 2) +
+    #ggtitle(title) +
+    theme(plot.title = element_text(face="bold", size=c(10)),
+          legend.position = c(0.8, 0.05),
+          legend.justification = c(0, 0), 
+          legend.background = element_rect(colour="grey80"),
+          legend.title = element_blank()) }
+
+
+
+
+#### JOINT, BY LOSS CATEGORY #### 
+est_parameters[["end_year"]] <- 2016
+
+# prepare data common to all estimations 
+d_all <- main_data
+
+# Keep only in data the useful variables 
+d_all <- dplyr::select(d_all, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+                                              # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
+                                              "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
+                                              # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
+                                              # "loss_commodity",
+                                              "loss_cropland", "loss_oilpalm", "loss_pasture",
+                                              "pasture_share_2000",
+                                              eaear_mapmat[,"Crops"] ))))
+
+# Merge only the prices needed, not the whole price dataframe
+d_all <- left_join(d_all, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
+
+# - are suitable to crop j 
+if(est_parameters[["sjpos"]]){
+  d_all <- dplyr::filter(d_all, !!as.symbol(exposure_rfs) > 0)
+}
+
+# - are in study period
+# if(start_year != 2011 | end_year != 2019){
+d_all <- dplyr::filter(d_all, year >= est_parameters[["start_year"]])
+d_all <- dplyr::filter(d_all, year <= est_parameters[["end_year"]])
+
+# d_all[d_all[,est_parameters[["outcome_variable"]]] < est_parameters[["grid_event_threshold"]], est_parameters[["outcome_variable"]]] <- 0
+
+
+
+rfs_losscat_joint_1lag3lead_notrend_clt10 <- list(all = list(), 
+                                                  America = list(), 
+                                                  Africa = list(), 
+                                                  Asia = list())
+
+CNT <- "America"
+for(CNT in c("all", "America", "Africa", "Asia")){ #, , "all",  "Africa", "Asia" "all", "America", "Africa", 
+  
+  est_parameters[["continent"]] <- CNT
+  
+  # this is for later convenience
+  eaear_names <- est_parameters[["all_exposures_rfs"]]
+  
+  # - are in study area
+  if(est_parameters[["continent"]] != "all"){
+    d <- dplyr::filter(d_all, continent_name == est_parameters[["continent"]])
+  } else {
+    d <- d_all
+  }
+  
+  
+  for(loss_type in c("loss_cropland", "loss_oilpalm", "loss_pasture")){
     
-    rfs_joint_1lag3lead_notrend_clt10[[CNT]][[loss_type]] <- make_main_reg(pre_process = TRUE, # NOTICE THIS
+    est_parameters[["outcome_variable"]] <- loss_type
+    
+    focal_crops <- loss_cat_map[[loss_type]]
+    
+    # Have deforestation at least once
+    temp_est <- feglm(fml = as.formula(paste0(est_parameters[["outcome_variable"]], " ~ 1 | ", est_parameters[["fe"]])),
+                      data = d,
+                      family = "poisson")
+    # it's possible that the removal of always zero dep.var in some FE dimensions above is equal to with the FE currently implemented
+    if(length(temp_est$obs_selection)>0){
+      pre_d_clean_agri <- d[unlist(temp_est$obs_selection),]
+    }  else { 
+      pre_d_clean_agri <- d
+    }
+    
+    
+    rfs_losscat_joint_1lag3lead_notrend_clt10[[CNT]][[loss_type]] <- make_main_reg(pre_process = TRUE, # NOTICE THIS
                                                                      pre_processed_data = pre_d_clean_agri, # NOTICE THIS
                                                                      output = "coef_table", 
                                                                      
@@ -4525,8 +4722,8 @@ for(CNT in c("all", "America", "Africa", "Asia")){ #, , "all",  "Africa", "Asia"
                                                                      end_year = est_parameters[["end_year"]],
                                                                      
                                                                      aggr_dyn = TRUE,
-                                                                     exposure_rfs =focal_crops, # est_parameters[["all_exposures_rfs"]], # focal_crops, # NOTE THIS
-                                                                     all_exposures_rfs =focal_crops, # est_parameters[["all_exposures_rfs"]], # focal_crops, # NOTE THIS
+                                                                     exposure_rfs = focal_crops, # est_parameters[["all_exposures_rfs"]], # focal_crops, # NOTE THIS
+                                                                     all_exposures_rfs = focal_crops, # est_parameters[["all_exposures_rfs"]], # focal_crops, # NOTE THIS
                                                                      
                                                                      original_rfs_treatments = c("statute_conv"),
                                                                      rfs_lead = est_parameters[["leads"]], 
@@ -4557,10 +4754,10 @@ dyn_df_list <- list()
 res_loss_list <- list()
 for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
   # this is still a list, with elements for loss types
-  # res_loss_list <- rfs_joint_1lag3lead_notrend_clt10[[CNT]]
+  # res_loss_list <- rfs_losscat_joint_1lag3lead_notrend_clt10[[CNT]]
   
   for(loss_type in c("loss_cropland", "loss_oilpalm", "loss_pasture")){
-    x <- rfs_joint_1lag3lead_notrend_clt10[[CNT]][[loss_type]] %>% as.data.frame()
+    x <- rfs_losscat_joint_1lag3lead_notrend_clt10[[CNT]][[loss_type]] %>% as.data.frame()
     x$loss_type <- loss_type
     res_loss_list[[CNT]][[loss_type]] <- x[paste0(loss_cat_map[[loss_type]], "_X_aggrall"), ]
   }

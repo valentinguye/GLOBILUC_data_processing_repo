@@ -65,8 +65,10 @@ tropical_aoi <- extent(c(-180, 179.9167, -30, 30))
 
 ### GAEZ OBJECTS
 # in this script, GAEZ is the target raster of all aggregations / resamplings
-# gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
-gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_bestoccuring", "Rain-fed-all-phases")
+gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
+# gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_bestoccuring", "Rain-fed-all-phases")
+# gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed-all-phases")
+
 gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
@@ -92,7 +94,7 @@ names(gaez) <- gaez_crops
 
 #### AGGREGATE AND RESAMPLE LOSS #### 
 
-transition_types <- c("croplandcommo", "oilpalmindus", "pasture")
+transition_types <- c("croplandcommo", "oilpalmboth", "oilpalmindus", "pasture")
 
 for(type in transition_types){
     
@@ -223,7 +225,8 @@ resample(x = pst2k,
 #### STACK AND MASK RASTERS TO MERGE ####
 # Read layers to be stacked
 losscropland <- brick(resampled_ouput_nameS["croplandcommo"])
-lossoilpalm <- brick(resampled_ouput_nameS["oilpalmindus"])
+lossoilpalmboth <- brick(resampled_ouput_nameS["oilpalmboth"])
+lossoilpalmindus <- brick(resampled_ouput_nameS["oilpalmindus"])
 losspasture <- brick(resampled_ouput_nameS["pasture"])
 
 fc2k <- raster(fc2k_resampled_output_name)
@@ -232,7 +235,8 @@ pst2k <- raster(pst2k_resampled_output_name)
 # It is important to explicitly rename layers that are going to be stacked and then called to reshape the data frame 
 # for time varying variables, the dot is important. 
 names(losscropland) <- paste0("loss_cropland.",seq(2001, 2019, 1)) 
-names(lossoilpalm) <- paste0("loss_oilpalm.",seq(2001, 2019, 1)) 
+names(lossoilpalmboth) <- paste0("loss_oilpalm_both.",seq(2001, 2019, 1)) 
+names(lossoilpalmindus) <- paste0("loss_oilpalm_indus.",seq(2001, 2019, 1)) 
 names(losspasture) <- paste0("loss_pasture.",seq(2001, 2019, 1)) 
 
 names(gaez) <- gaez_crops
@@ -242,7 +246,7 @@ names(pst2k) <- "pasture_share_2000"
 
 
 # Stack together the annual layers of drivenloss data and GAEZ crop cross sections 
-tropical_stack <- stack(losscropland, lossoilpalm, losspasture,
+tropical_stack <- stack(losscropland, lossoilpalmboth, lossoilpalmindus, losspasture,
                         gaez, 
                         fc2k, 
                         pst2k)
@@ -295,14 +299,15 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
 varying_vars <- list(names(losscropland), 
-                     names(lossoilpalm), 
+                     names(lossoilpalmboth),
+                     names(lossoilpalmindus),
                      names(losspasture))
 #varying_vars <- names(drivenloss_gaez)[grep(".", names(drivenloss_gaez), fixed = TRUE)]
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
-                          v.names = c("loss_cropland", "loss_oilpalm", "loss_pasture"),
+                          v.names = c("loss_cropland", "loss_oilpalm_both", "loss_oilpalm_indus", "loss_pasture"),
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -327,6 +332,7 @@ long_df <- dplyr::arrange(long_df, grid_id, year)
 saveRDS(long_df, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long.Rdata"))
 
 rm(long_df)
+removeTmpFiles(h=0)
 
 #### COUNTRY VARIABLE #### 
 countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
