@@ -14,12 +14,12 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
                     "here", "readstata13", "foreign", "readxl", "writexl",
                     "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
                     "lubridate","exactextractr",
-                    "doParallel", "foreach", "snow", 
+                    "doParallel", "foreach", "snow", "parallel",
                     "knitr", "kableExtra",
                     "DataCombine", 
                     "fixest", 
-                    "boot", "fwildclusterboot", "sandwich",
-                    "ggplot2", "leaflet", "tmap", "dotwhisker")
+                    "boot", "fwildclusterboot", "sandwich", "MASS",
+                    "ggplot2", "leaflet", "tmap",  "dotwhisker", "viridis", "hrbrthemes")
 
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
@@ -65,7 +65,8 @@ tropical_aoi <- extent(c(-180, 179.9167, -30, 30))
 
 ### GAEZ OBJECTS
 # in this script, GAEZ is the target raster of all aggregations / resamplings
-gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
+# gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
+gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_bestoccuring", "Rain-fed-all-phases")
 gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
@@ -91,7 +92,7 @@ names(gaez) <- gaez_crops
 
 #### AGGREGATE AND RESAMPLE LOSS #### 
 
-transition_types <- c("cropland", "oilpalmboth", "pasture")
+transition_types <- c("croplandcommo", "oilpalmindus", "pasture")
 
 for(type in transition_types){
     
@@ -221,8 +222,8 @@ resample(x = pst2k,
 
 #### STACK AND MASK RASTERS TO MERGE ####
 # Read layers to be stacked
-losscropland <- brick(resampled_ouput_nameS["cropland"])
-lossoilpalm <- brick(resampled_ouput_nameS["oilpalmboth"])
+losscropland <- brick(resampled_ouput_nameS["croplandcommo"])
+lossoilpalm <- brick(resampled_ouput_nameS["oilpalmindus"])
 losspasture <- brick(resampled_ouput_nameS["pasture"])
 
 fc2k <- raster(fc2k_resampled_output_name)

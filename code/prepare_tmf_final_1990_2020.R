@@ -14,12 +14,12 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
                     "here", "readstata13", "foreign", "readxl", "writexl",
                     "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
                     "lubridate","exactextractr",
-                    "doParallel", "foreach", "snow", 
+                    "doParallel", "foreach", "snow", "parallel",
                     "knitr", "kableExtra",
                     "DataCombine", 
                     "fixest", 
-                    "boot", "fwildclusterboot", "sandwich",
-                    "ggplot2", "leaflet", "tmap", "dotwhisker")
+                    "boot", "fwildclusterboot", "sandwich", "MASS",
+                    "ggplot2", "leaflet", "tmap",  "dotwhisker", "viridis", "hrbrthemes")
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
 

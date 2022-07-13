@@ -12,16 +12,16 @@
 # see this project's README for a better understanding of how packages are handled in this project. 
 
 # These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
-neededPackages = c("Matrix",
-                   "plyr", "dplyr", "here", #"tibble", "data.table",
-                   "foreign", # "readxl",
-                   "raster", "rgdal",  "sp", "sf", # "spdep",
-                   "DataCombine",
-                   "knitr", "kableExtra",
-                   "fixest", "boot",#,"msm", "car",  "sandwich", "lmtest",  "multcomp",
-                   "ggplot2", "dotwhisker", "viridis", "hrbrthemes", "rasterVis", #"tmap",# "leaflet", "htmltools"
-                   "foreach", "parallel"
-)
+neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
+                    "here", "readstata13", "foreign", "readxl", "writexl",
+                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
+                    "lubridate","exactextractr",
+                    "doParallel", "foreach", "snow", "parallel",
+                    "knitr", "kableExtra",
+                    "DataCombine", 
+                    "fixest", 
+                    "boot", "fwildclusterboot", "sandwich", "MASS",
+                    "ggplot2", "leaflet", "tmap",  "dotwhisker", "viridis", "hrbrthemes")
 # "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
 
 # Install them in their project-specific versions
