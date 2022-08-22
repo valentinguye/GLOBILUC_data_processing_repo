@@ -139,9 +139,9 @@ limited_crops1 <- c("eaear_Maizegrain", "eaear_Fodder", "eaear_Cereals", "eaear_
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeaybestirr_long_final.Rdata"))
 
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeayirr_long_final.Rdata"))
-
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeayirr_long_final.Rdata"))
-main_data <- dplyr::mutate(main_data, loss_commodity = loss_cropland + loss_oilpalm + loss_pasture)
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeayirr_long_final.Rdata"))
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long_final.Rdata"))
+main_data <- dplyr::mutate(main_data, loss_commodity = loss_cropland + loss_oilpalm_both + loss_pasture)
 
 # release some memory upfront
 main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
@@ -194,7 +194,7 @@ prices <- full_join(prices, rfs, by = "year")
 # make lags and leads
 rfs_vars <- c("statute_conv", "statute_conv_earliest")#, "amendments", "blendwall"
 for(voi in rfs_vars){
-  for(lead in c(1:6)){
+  for(lead in c(1:9)){
     prices <- dplyr::arrange(prices, year)
     prices <- DataCombine::slide(prices,
                                  Var = voi, 
@@ -210,7 +210,7 @@ for(voi in rfs_vars){
     prices[prices$year == 2006, paste0(voi,"_lead", lead)] <- prices[prices$year == 2006+lead, "statute_conv_earliest"]
   }  
   
-  for(lag in c(1:6)){
+  for(lag in c(1:9)){
     prices <- dplyr::arrange(prices, year)
     prices <- DataCombine::slide(prices,
                                  Var = voi, 
@@ -518,26 +518,33 @@ continent = "all"
 pre_process <- FALSE
 # pre_processed_data <- pre_d_clean_agri
 
-rfs_rando <- ""
+all_exposures_rfs = eaear_mapmat[,"Crops"]
+
+# THESE GOVERNS WHETHER IT'S A JOINT OR A DISJOINT ESTIMATION 
+# for joint: all crops passed to exposure_rfs, and control_all_absolute_rfs = FALSE
+exposure_rfs <- eaear_mapmat[,"Crops"] # "eaear_Soy_compo" # 
+control_all_absolute_rfs <- FALSE
+
+trade_exposure = "trade_expo_imp"
+trade_exposure_period = "20012007"
+
+# treatment dynamics
 original_rfs_treatments <- c("statute_conv")
-rfs_lag <- 3
+rfs_lag <- 1
 rfs_lead <- 1
 rfs_fya <-  0
 rfs_pya <- 0
 lag_controls = NULL
 aggr_dyn <- TRUE
-exposure_rfs <- eaear_mapmat[,"Crops"]# if several crops here, then it's joint estimation 
-all_exposures_rfs = eaear_mapmat[,"Crops"]
 
+# those are always FALSE 
 group_exposure_rfs <- FALSE
-control_all_absolute_rfs <- FALSE
-most_correlated_only = FALSE
 annual_rfs_controls <- FALSE
+most_correlated_only = FALSE
 exposure_pasture <- FALSE 
+sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
 
-trade_exposure = "trade_expo"
-trade_exposure_period = "20012007"
-
+# control heterogeneity
 control_pasture <- FALSE
 pasture_trend <- FALSE
 
@@ -545,8 +552,6 @@ fc_trend <- FALSE
 s_trend <- FALSE
 s_trend_loga <- FALSE
 fc_s_trend <- FALSE
-
-sjpos <- FALSE # should the sample be restricted to cells where sj is positive? 
 
 fe = "grid_id + country_year" #   
 preclean_level = "FE"
@@ -558,6 +563,7 @@ clustering = "oneway" # either "oneway" or "twoway". If oneway, it clusters on c
 cluster_var1 = "grid_id_10" 
 cluster_var2 = "grid_id_5_year"
 # dyn_tests = TRUE
+rfs_rando <- ""
 output = "est_object"
 glm_iter <- 25 
 
@@ -591,7 +597,7 @@ make_main_reg <- function(pre_process = FALSE,
                           annual_rfs_controls = FALSE,
                           # exposure_pasture = FALSE, # whether the exposure to pasture should be the default AEAY of fodder crops (FALSE) or the share of pastures in 2000 (TRUE) # but we don't do it anymore because it dwarfs all the other estimates, and is not more precise
                           
-                          trade_exposure = "trade_expo", # either NULL, FALSE, or whatever, for no interaction with a trade exposure, or either "trade_expo", "export_expo", for a (X+I)/Y or X/Y additional crop-specific, country-level, time invariant exposure layer (can be "trade_expo_imp", "export_expo_imp" too)  
+                          trade_exposure = "trade_expo_imp", # either NULL, FALSE, or whatever, for no interaction with a trade exposure, or either "trade_expo", "export_expo", for a (X+I)/Y or X/Y additional crop-specific, country-level, time invariant exposure layer (can be "trade_expo_imp", "export_expo_imp" too)  
                           trade_exposure_period = "20012007", # either "20012007" or "20062007". Used only if trade_exposure is activated with the previous argument. 
                           
                           control_pasture = FALSE,
@@ -801,6 +807,10 @@ make_main_reg <- function(pre_process = FALSE,
     #   annual_rfs_controls <- TRUE
     # }
     
+
+    # add the controls for the 
+    all_abs <- c(all_abs, eaear_trade_exposure_rfs)
+    
     if(most_correlated_only){
       all_abs <- all_abs[all_abs %in% corr_mapmat[corr_mapmat[,"Crops"]==exposure_rfs,"fst_corr"]]
     }
@@ -977,7 +987,7 @@ make_main_reg <- function(pre_process = FALSE,
                           "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                           outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
                           regressors, controls, 
-                          exposure_rfs, original_rfs_treatments, rfs_treatments))    # this is necessary to reconstruct variables in randomization inference processes
+                          exposure_rfs, eaear_trade_exposure_rfs, original_rfs_treatments, rfs_treatments))    # this is necessary to reconstruct variables in randomization inference processes
     
     
     
@@ -1055,8 +1065,6 @@ make_main_reg <- function(pre_process = FALSE,
   }
   
   
-  
-  
   reg_res <- fixest::feglm(alpha_model,
                            data = d_clean, 
                            family = distribution,# "gaussian",#  # "poisson" ,
@@ -1075,6 +1083,7 @@ make_main_reg <- function(pre_process = FALSE,
   df_res <- summary(reg_res)$coeftable#[paste0(original_sj, "_X_", original_Pk), ]
   
   fixest_df <- degrees_freedom(reg_res, type = "t")
+  
   ## MAKE AGGREGATE RESULTS 
   # In this case, we are interested in LEADS only
   if(aggr_dyn == "leads"){ 
@@ -1134,79 +1143,85 @@ make_main_reg <- function(pre_process = FALSE,
                                                df = fixest_df)) 
   }
   
-  
-  if(aggr_dyn & control_all_absolute_rfs & rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0){
-    # In this case, we are interested in LEAD AND LAG effects, aggregated separately, and all together.
-    df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
-    
-    # ORDER MATTERS
-    aggr_names <- paste0(exposure_rfs, c("_X_aggrleads", "_X_aggrlags"))
-    row.names(df_res)[1:2] <- aggr_names
-    # regressors of interest
-    base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
-    # Contemporaneous value is NOT in leads
-    lead_roi <- c(grep(pattern = paste0(base_reg_name,"_lead"), 
-                       regressors, value = TRUE))
-    # Contemporaneous value is in lags
-    lag_roi <- c(base_reg_name, 
-                 grep(pattern = paste0(base_reg_name,"_lag"), 
-                      regressors, value = TRUE))
-    
-    df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[lead_roi] %>% sum()
-    df_res[aggr_names[2],"Estimate"] <- reg_res$coefficients[lag_roi] %>% sum()
-    
-    # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
-    # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
-    df_res[aggr_names[1],"Std. Error"] <- reg_res$cov.scaled[lead_roi, lead_roi] %>% as.matrix() %>% sum() %>% sqrt()
-    df_res[aggr_names[2],"Std. Error"] <- reg_res$cov.scaled[lag_roi, lag_roi] %>% as.matrix() %>% sum() %>% sqrt()
-    
-    df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
-    df_res[aggr_names[2],"t value"]  <- (df_res[aggr_names[2],"Estimate"] - 0)/(df_res[aggr_names[2],"Std. Error"])
-    
-    # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
-    # does not make a significant difference given sample size
-    df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
-                                               lower.tail = FALSE, 
-                                               df = fixest_df)) 
-    df_res[aggr_names[2],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[2],"t value"]), 
-                                               lower.tail = FALSE, 
-                                               df = fixest_df)) 
-    
-    
-    ## Then (on top of dataframe), aggregate all leads and lags together
-    # it's important that overall aggregate comes after, for at least two reasons in current code:
-    # 1. because selection of estimate to plot is based on order: it takes the first row of df_res 
-    # 2. so that aggr_names corresponds to *_X_aggrall in randomization inference below
-    
-    df_res <- rbind(rep(NA, ncol(df_res)), df_res)
-    
-    # ORDER MATTERS
-    aggr_names <- paste0(exposure_rfs, c("_X_aggrall"))
-    row.names(df_res)[1] <- aggr_names
-    # regressors of interest
-    base_reg_name <- paste0(exposure_rfs,"_X_",original_rfs_treatments)
-    
-    # Contemporaneous, lead, and lag values
-    all_roi <- c(base_reg_name, 
-                 grep(pattern = paste0(base_reg_name,"_lead"), 
-                      regressors, value = TRUE),
-                 grep(pattern = paste0(base_reg_name,"_lag"), 
-                      regressors, value = TRUE))
-    
-    df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[all_roi] %>% sum()
-    
-    # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
-    # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
-    df_res[aggr_names[1],"Std. Error"] <- reg_res$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
-    
-    df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
-    
-    # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
-    # does not make a significant difference given sample size
-    df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
-                                               lower.tail = FALSE, 
-                                               df = fixest_df)) 
+  ## Annual mandates
+  # joint OR DISJOINT estimation
+  if(aggr_dyn & rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0 ){
+    for(EOI in c(exposure_rfs, eaear_trade_exposure_rfs)){
+      # In this case, we are interested in LEAD AND LAG effects, aggregated separately, and all together.
+      df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
+      
+      # ORDER MATTERS
+      aggr_names <- paste0(EOI, c("_X_aggrleads", "_X_aggrlags"))
+      row.names(df_res)[1:2] <- aggr_names
+      # regressors of interest
+      base_reg_name <- paste0(EOI,"_X_",original_rfs_treatments)
+      # Contemporaneous value is NOT in leads
+      lead_roi <- c(grep(pattern = paste0(base_reg_name,"_lead"), 
+                         regressors, value = TRUE))
+      # Contemporaneous value is in lags
+      lag_roi <- c(base_reg_name, 
+                   grep(pattern = paste0(base_reg_name,"_lag"), 
+                        regressors, value = TRUE))
+      
+      df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[lead_roi] %>% sum()
+      df_res[aggr_names[2],"Estimate"] <- reg_res$coefficients[lag_roi] %>% sum()
+      
+      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+      df_res[aggr_names[1],"Std. Error"] <- reg_res$cov.scaled[lead_roi, lead_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      df_res[aggr_names[2],"Std. Error"] <- reg_res$cov.scaled[lag_roi, lag_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      
+      df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
+      df_res[aggr_names[2],"t value"]  <- (df_res[aggr_names[2],"Estimate"] - 0)/(df_res[aggr_names[2],"Std. Error"])
+      
+      # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+      # does not make a significant difference given sample size
+      df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
+                                                 lower.tail = FALSE, 
+                                                 df = fixest_df)) 
+      df_res[aggr_names[2],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[2],"t value"]), 
+                                                 lower.tail = FALSE, 
+                                                 df = fixest_df)) 
+      
+      
+      ## Then (on top of dataframe), aggregate all leads and lags together
+      # it's important that overall aggregate comes after, for at least two reasons in current code:
+      # 1. because selection of estimate to plot is based on order: it takes the first row of df_res 
+      # 2. so that aggr_names corresponds to *_X_aggrall in randomization inference below
+      
+      df_res <- rbind(rep(NA, ncol(df_res)), df_res)
+      
+      # ORDER MATTERS
+      aggr_names <- paste0(EOI, c("_X_aggrall"))
+      row.names(df_res)[1] <- aggr_names
+      # regressors of interest
+      base_reg_name <- paste0(EOI,"_X_",original_rfs_treatments)
+      
+      # Contemporaneous, lead, and lag values
+      all_roi <- c(base_reg_name, 
+                   grep(pattern = paste0(base_reg_name,"_lead"), 
+                        regressors, value = TRUE),
+                   grep(pattern = paste0(base_reg_name,"_lag"), 
+                        regressors, value = TRUE))
+      
+      df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[all_roi] %>% sum()
+      
+      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
+      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
+      df_res[aggr_names[1],"Std. Error"] <- reg_res$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
+      
+      df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
+      
+      # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
+      # does not make a significant difference given sample size
+      df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
+                                                 lower.tail = FALSE, 
+                                                 df = fixest_df)) 
+    }
   }
+ 
+  
+  ## Averaged mandates
   if(aggr_dyn & control_all_absolute_rfs & rfs_lead == 0 & rfs_lag == 0 & rfs_fya > 0 & rfs_pya > 0){
     # In this case, we are interested in AVERAGE LEAD AND LAG effects, separately and aggregated
     df_res <- rbind(rep(NA, ncol(df_res)), df_res)
@@ -1300,82 +1315,10 @@ make_main_reg <- function(pre_process = FALSE,
                                                df = fixest_df)) 
   }
   
-  if(aggr_dyn & rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0 & 
-     length(controls) == 0 # this is the case when there is no trend AND control_all_absolute_rfs is FALSE 
-  ){
-    for(EOI in exposure_rfs){
-      # In this case, we are interested in LEAD AND LAG effects, aggregated separately, and all together.
-      df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
-      
-      # ORDER MATTERS
-      aggr_names <- paste0(EOI, c("_X_aggrleads", "_X_aggrlags"))
-      row.names(df_res)[1:2] <- aggr_names
-      # regressors of interest
-      base_reg_name <- paste0(EOI,"_X_",original_rfs_treatments)
-      # Contemporaneous value is NOT in leads
-      lead_roi <- c(grep(pattern = paste0(base_reg_name,"_lead"), 
-                         regressors, value = TRUE))
-      # Contemporaneous value is in lags
-      lag_roi <- c(base_reg_name, 
-                   grep(pattern = paste0(base_reg_name,"_lag"), 
-                        regressors, value = TRUE))
-      
-      df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[lead_roi] %>% sum()
-      df_res[aggr_names[2],"Estimate"] <- reg_res$coefficients[lag_roi] %>% sum()
-      
-      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
-      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
-      df_res[aggr_names[1],"Std. Error"] <- reg_res$cov.scaled[lead_roi, lead_roi] %>% as.matrix() %>% sum() %>% sqrt()
-      df_res[aggr_names[2],"Std. Error"] <- reg_res$cov.scaled[lag_roi, lag_roi] %>% as.matrix() %>% sum() %>% sqrt()
-      
-      df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
-      df_res[aggr_names[2],"t value"]  <- (df_res[aggr_names[2],"Estimate"] - 0)/(df_res[aggr_names[2],"Std. Error"])
-      
-      # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
-      # does not make a significant difference given sample size
-      df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
-                                                 lower.tail = FALSE, 
-                                                 df = fixest_df)) 
-      df_res[aggr_names[2],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[2],"t value"]), 
-                                                 lower.tail = FALSE, 
-                                                 df = fixest_df)) 
-      
-      
-      ## Then (on top of dataframe), aggregate all leads and lags together
-      # it's important that overall aggregate comes after, for at least two reasons in current code:
-      # 1. because selection of estimate to plot is based on order: it takes the first row of df_res 
-      # 2. so that aggr_names corresponds to *_X_aggrall in randomization inference below
-      
-      df_res <- rbind(rep(NA, ncol(df_res)), df_res)
-      
-      # ORDER MATTERS
-      aggr_names <- paste0(EOI, c("_X_aggrall"))
-      row.names(df_res)[1] <- aggr_names
-      # regressors of interest
-      base_reg_name <- paste0(EOI,"_X_",original_rfs_treatments)
-      
-      # Contemporaneous, lead, and lag values
-      all_roi <- c(base_reg_name, 
-                   grep(pattern = paste0(base_reg_name,"_lead"), 
-                        regressors, value = TRUE),
-                   grep(pattern = paste0(base_reg_name,"_lag"), 
-                        regressors, value = TRUE))
-      
-      df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[all_roi] %>% sum()
-      
-      # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
-      # use formula for variance of sum of random variables : https://en.wikipedia.org/wiki/Variance#Sum_of_correlated_variables
-      df_res[aggr_names[1],"Std. Error"] <- reg_res$cov.scaled[all_roi, all_roi] %>% as.matrix() %>% sum() %>% sqrt()
-      
-      df_res[aggr_names[1],"t value"]  <- (df_res[aggr_names[1],"Estimate"] - 0)/(df_res[aggr_names[1],"Std. Error"])
-      
-      # use t distribution with degrees of freedom equal to that used by fixest, i.e. after two way cluster adjustment.
-      # does not make a significant difference given sample size
-      df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
-                                                 lower.tail = FALSE, 
-                                                 df = fixest_df)) 
-    }
-  }
+  # eyeball results
+  # df_res[sort(row.names(df_res)), ]
+  # df_res[grepl("aggrall", row.names(df_res)),]
+  
   # take data set as exactly used in estimation - NOT NECESSARY anymore, given the precleaning
   # if(length(reg_res$obs_selection) > 0){
   #   d_clean <- d_clean[reg_res$obs_selection[[1]], ]
@@ -1660,7 +1603,7 @@ make_main_reg <- function(pre_process = FALSE,
   rm(toreturn)
 }
 
-### MAIN SPECIFICATION ### 
+#### Main specification -----------------------------------------------------------------------
 # (edited in single robustness checks)
 est_parameters <- list(outcome_variable  = "loss_commodity",
                        continent = NULL, # this is filled within the loop 
@@ -1670,6 +1613,8 @@ est_parameters <- list(outcome_variable  = "loss_commodity",
                        most_correlated_only = FALSE,
                        annual_rfs_controls = FALSE,
                        all_exposures_rfs = eaear_mapmat[,"Crops"],
+                       trade_exposure = "trade_expo_imp",
+                       trade_exposure_period = "20012007",
                        sjpos = FALSE,
                        lags = 1,
                        leads = 3,
@@ -1701,6 +1646,27 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
   
   d <- main_data
   
+  eaear_trade_exposure_rfs <- c()
+  if(length(est_parameters[["trade_exposure"]])>0){
+    
+    trade_expo_dat <- readRDS(here("temp_data", "processed_trade_exposures", paste0("trade_exposures_", est_parameters[["trade_exposure_period"]],".Rdata")))
+    # if trade_exposure is not _imp, the following line will keep both expo and expo_imp variables, but it already divides by 2 the number of cols that are joined to the bigger d dataframe
+    trade_expo_dat <- trade_expo_dat[, (grepl(x = names(trade_expo_dat), pattern = est_parameters[["trade_exposure"]]) | names(trade_expo_dat)=="country_name") ]
+    
+    d <- left_join(d, trade_expo_dat, by = "country_name")
+    
+    # make the eaear-trade exposures
+    names(d)
+    for(exp_rfs in exposure_rfs){
+      # identify the corresponding trade_expo 
+      trade_expo_j <- names(d)[names(d) == paste0(est_parameters[["trade_exposure"]],"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) ]
+      eaear_trade_expo_j <- paste0("eaear_",trade_expo_j)
+      d <- mutate(d, !!as.symbol(eaear_trade_expo_j) := !!as.symbol(exp_rfs) * !!as.symbol(trade_expo_j))
+      eaear_trade_exposure_rfs <- c(eaear_trade_exposure_rfs, eaear_trade_expo_j)
+    }
+    rm(trade_expo_dat)
+  }
+  
   # Keep only in data the useful variables 
   d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
                                         # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
@@ -1708,7 +1674,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
                                         # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
                                         "loss_commodity",
                                         "pasture_share_2000",
-                                        eaear_mapmat[,"Crops"] ))))
+                                        eaear_mapmat[,"Crops"], eaear_trade_exposure_rfs ))))
   
   # Merge only the prices needed, not the whole price dataframe
   d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
