@@ -5154,7 +5154,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
   ### INFERENCE  ###
   n <- 10
   # store in rows all crops effects PLUS the total effect
-  rep_effects <- data.frame(matrix(ncol = n, nrow = length(crop_effects) + 1)) 
+  rep_effects <- data.frame(matrix(ncol = n, nrow = length(crop_effects) + 1)) # there is a pb in code here, crop_effects appears for the first time here
   
   row.names(rep_effects) <- c("total", eaear_names)
   
