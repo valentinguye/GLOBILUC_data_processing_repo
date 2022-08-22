@@ -69,36 +69,36 @@ mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datu
 ### OBJECTS USED IN RFS PROCESSES ###
 
 # map crops to a loss category. 
-loss_cat_map <- list(loss_cropland = c("eaear_Biomass",
+loss_cat_map <- list(loss_cropland = c(# "eaear_Biomass",
                                        "eaear_Cereals", 
-                                       "eaear_Cotton", 
+                                       # "eaear_Cotton", 
                                        "eaear_Maizegrain",
                                        "eaear_Oilfeed_crops", 
-                                       "eaear_Rice", 
+                                       # "eaear_Rice", 
                                        "eaear_Soy_compo",
                                        "eaear_Sugarcane", 
-                                       "eaear_Tea", 
+                                       # "eaear_Tea", 
                                        "eaear_Tobacco"), 
                      loss_oilpalm = c("eaear_Oilpalm"), 
-                     loss_pasture = c("eaear_Banana", 
-                                      "eaear_Citrus", 
+                     loss_pasture = c(# "eaear_Banana", 
+                                      # "eaear_Citrus", 
                                       "eaear_Cocoa_Coffee", 
-                                      "eaear_Coconut", 
-                                      "eaear_Fodder", 
-                                      "eaear_Rubber"))
+                                      # "eaear_Coconut", 
+                                      # "eaear_Rubber", 
+                                      "eaear_Fodder"))
 
 # this is mapmat for eaear 
 eaear_mapmat_data <- c(
-  "Banana","eaear_Banana",
-  "Crude_oil", "eaear_Biomass",
+  # "Banana","eaear_Banana",
+  # "Crude_oil", "eaear_Biomass",
   #"Barley", "eaear_Barley",
   "Cereals", "eaear_Cereals",
-  "Orange", "eaear_Citrus",
+  # "Orange", "eaear_Citrus",
   #"Cocoa", "eaear_Cocoa",
   "Cocoa_Coffee", "eaear_Cocoa_Coffee",
-  "Coconut_oil", "eaear_Coconut",
+  # "Coconut_oil", "eaear_Coconut",
   #"Coffee", "eaear_Coffee",
-  "Cotton", "eaear_Cotton",
+  # "Cotton", "eaear_Cotton",
   #"Groundnuts", "eaear_Groundnut",
   "Beef", "eaear_Fodder", 
   "Maize", "eaear_Maizegrain",
@@ -107,14 +107,14 @@ eaear_mapmat_data <- c(
   # "Olive_oil", "eaear_Olive",  
   "Palm_oil", "eaear_Oilpalm",
   #"Rapeseed_oil", "eaear_Rapeseed",
-  "Rice", "eaear_Rice",
-  "Rubber", "eaear_Rubber",
+  # "Rice", "eaear_Rice",
+  # "Rubber", "eaear_Rubber",
   #"Sorghum", "eaear_Sorghum2", 
   "Soy_index", "eaear_Soy_compo",
   # "Sugar", "eaear_Sugar", 
   "Sugar", "eaear_Sugarcane", 
   #"Sunflower_oil", "eaear_Sunflower",
-  "Tea", "eaear_Tea",
+  # "Tea", "eaear_Tea",
   "Tobacco", "eaear_Tobacco" 
   #"Wheat", "eaear_Wheat"
 )
@@ -516,12 +516,12 @@ end_year = 2019
 continent = "all"
 
 pre_process <- FALSE
-pre_processed_data <- pre_d_clean_agri
+# pre_processed_data <- pre_d_clean_agri
 
 rfs_rando <- ""
 original_rfs_treatments <- c("statute_conv")
-rfs_lag <- 1
-rfs_lead <- 3
+rfs_lag <- 3
+rfs_lead <- 1
 rfs_fya <-  0
 rfs_pya <- 0
 lag_controls = NULL
@@ -534,6 +534,9 @@ control_all_absolute_rfs <- FALSE
 most_correlated_only = FALSE
 annual_rfs_controls <- FALSE
 exposure_pasture <- FALSE 
+
+trade_exposure = "trade_expo"
+trade_exposure_period = "20012007"
 
 control_pasture <- FALSE
 pasture_trend <- FALSE
@@ -587,6 +590,9 @@ make_main_reg <- function(pre_process = FALSE,
                           most_correlated_only = FALSE, # but this restricts the controls to only interactions with the most correlated crop. 
                           annual_rfs_controls = FALSE,
                           # exposure_pasture = FALSE, # whether the exposure to pasture should be the default AEAY of fodder crops (FALSE) or the share of pastures in 2000 (TRUE) # but we don't do it anymore because it dwarfs all the other estimates, and is not more precise
+                          
+                          trade_exposure = "trade_expo", # either NULL, FALSE, or whatever, for no interaction with a trade exposure, or either "trade_expo", "export_expo", for a (X+I)/Y or X/Y additional crop-specific, country-level, time invariant exposure layer (can be "trade_expo_imp", "export_expo_imp" too)  
+                          trade_exposure_period = "20012007", # either "20012007" or "20062007". Used only if trade_exposure is activated with the previous argument. 
                           
                           control_pasture = FALSE,
                           pasture_trend = FALSE,
@@ -693,6 +699,27 @@ make_main_reg <- function(pre_process = FALSE,
       d <- dplyr::mutate(d, tmf_deforestation = tmf_agri + tmf_plantation)
     }
     
+    eaear_trade_exposure_rfs <- c()
+    if(length(trade_exposure)>0){
+      
+      trade_expo_dat <- readRDS(here("temp_data", "processed_trade_exposures", paste0("trade_exposures_", trade_exposure_period,".Rdata")))
+      # if trade_exposure is not _imp, the following line will keep both expo and expo_imp variables, but it already divides by 2 the number of cols that are joined to the bigger d dataframe
+      trade_expo_dat <- trade_expo_dat[, (grepl(x = names(trade_expo_dat), pattern = trade_exposure) | names(trade_expo_dat)=="country_name") ]
+      
+      d <- left_join(d, trade_expo_dat, by = "country_name")
+  
+      # make the eaear-trade exposures
+      names(d)
+      for(exp_rfs in exposure_rfs){
+        # identify the corresponding trade_expo 
+        trade_expo_j <- names(d)[names(d) == paste0(trade_exposure,"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) ]
+        eaear_trade_expo_j <- paste0("eaear_",trade_expo_j)
+        d <- mutate(d, !!as.symbol(eaear_trade_expo_j) := !!as.symbol(exp_rfs) * !!as.symbol(trade_expo_j))
+        eaear_trade_exposure_rfs <- c(eaear_trade_exposure_rfs, eaear_trade_expo_j)
+      }
+      rm(trade_expo_dat)
+    }
+    
     # code below should work whether d is from tmf or losscommo 
     # Keep only in data the useful variables 
     d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
@@ -700,7 +727,7 @@ make_main_reg <- function(pre_process = FALSE,
                                           "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                                           outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
                                           "pasture_share_2000",
-                                          eaear_mapmat[,"Crops"], all_exposures_rfs )))) #sj, 
+                                          eaear_mapmat[,"Crops"], eaear_trade_exposure_rfs, all_exposures_rfs )))) #sj, 
     
     # Merge only the prices needed, not the whole price dataframe
     d <- left_join(d, prices[,c("year", unique(c(rfs_treatments, all_rfs_treatments)))], by = c("year"))#, all_treatments
@@ -729,7 +756,7 @@ make_main_reg <- function(pre_process = FALSE,
       regressors <- c(regressors, varname)
       d <- mutate(d, !!as.symbol(varname) := grp_exp * !!as.symbol(rfs_var))
     }else{
-      for(exp_rfs in exposure_rfs){
+      for(exp_rfs in c(exposure_rfs, eaear_trade_exposure_rfs)){
         # make regressors of interest
         varname <- paste0(exp_rfs, "_X_", rfs_var)
         regressors <- c(regressors, varname)
