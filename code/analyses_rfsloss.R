@@ -80,6 +80,8 @@ loss_cat_map <- list(loss_cropland = c(# "eaear_Biomass",
                                        # "eaear_Tea", 
                                        "eaear_Tobacco"), 
                      loss_oilpalm = c("eaear_Oilpalm"), 
+                     loss_oilpalm_both = c("eaear_Oilpalm"), 
+                     loss_oilpalm_indus = c("eaear_Oilpalm"), 
                      loss_pasture = c(# "eaear_Banana", 
                                       # "eaear_Citrus", 
                                       "eaear_Cocoa_Coffee", 
@@ -515,15 +517,15 @@ start_year = 2009
 end_year = 2019
 continent = "all"
 
-pre_process <- FALSE
+pre_process <- TRUE
 # pre_processed_data <- pre_d_clean_agri
 
 all_exposures_rfs = eaear_mapmat[,"Crops"]
 
 # THESE GOVERNS WHETHER IT'S A JOINT OR A DISJOINT ESTIMATION 
 # for joint: all crops passed to exposure_rfs, and control_all_absolute_rfs = FALSE
-exposure_rfs <- eaear_mapmat[,"Crops"] # "eaear_Soy_compo" # 
-control_all_absolute_rfs <- FALSE
+exposure_rfs <- "eaear_Tobacco"# eaear_mapmat[,"Crops"] # "eaear_Soy_compo" # 
+control_all_absolute_rfs <- TRUE
 
 trade_exposure = "trade_expo_imp"
 trade_exposure_period = "20012007"
@@ -581,7 +583,17 @@ make_main_reg <- function(pre_process = FALSE,
                           end_year = 2019, 
                           continent = "all", # one of "Africa", "America", "Asia", or "all"
                           
-                          rfs_rando = "", # either "between", "within", or any other string. If one of the former two, randomization inference of the type is performed
+                          # Joint / dis-joint estimation of crop-specific effects  
+                          exposure_rfs = "eaear_Soy_compo",
+                          control_all_absolute_rfs = TRUE, # this is to be set to FALSE when doing joint estimation (i.e. all crops passed to exposure_rfs)
+                          
+                          all_exposures_rfs = eaear_mapmat[,"Crops"], # necessary in disjoint estimation, to govern which other crops are controlled for. 
+                          
+                          # More exposures
+                          trade_exposure = "trade_expo_imp", # either NULL, FALSE, or whatever, for no interaction with a trade exposure, or either "trade_expo", "export_expo", for a (X+I)/Y or X/Y additional crop-specific, country-level, time invariant exposure layer (can be "trade_expo_imp", "export_expo_imp" too)  
+                          trade_exposure_period = "20012007", # either "20012007" or "20062007". Used only if trade_exposure is activated with the previous argument. 
+                          
+                          # Treatment dynamics                     
                           original_rfs_treatments = c("statute_conv"),
                           rfs_lead = 0,
                           rfs_lag = 0,
@@ -589,17 +601,15 @@ make_main_reg <- function(pre_process = FALSE,
                           rfs_pya = 0,
                           lag_controls = NULL, # which of the lags specified above should be CONTROLLED for rather than counted in the cumulative effect
                           aggr_dyn = TRUE, # whether to report aggregate coefficients of all leads and lags ("all") or leads and lags separately ("leadlag"), or no aggregate (any other string)
-                          exposure_rfs = "eaear_Soy_compo",
-                          all_exposures_rfs = eaear_mapmat[,"Crops"],
-                          group_exposure_rfs = FALSE, # This is deprecated, as it was relevant only when rfs exposures where standardized and could thus be added. If exposure_rfs is length 1, it does not matter whether this option is TRUE or FALSE.
-                          control_all_absolute_rfs = TRUE, # this is to be set to FALSE when doing joint estimation
-                          most_correlated_only = FALSE, # but this restricts the controls to only interactions with the most correlated crop. 
-                          annual_rfs_controls = FALSE,
                           # exposure_pasture = FALSE, # whether the exposure to pasture should be the default AEAY of fodder crops (FALSE) or the share of pastures in 2000 (TRUE) # but we don't do it anymore because it dwarfs all the other estimates, and is not more precise
+                    
+                          # old miscellaneous, not used anymore
+                          annual_rfs_controls = FALSE,
+                          group_exposure_rfs = FALSE, # This is deprecated, as it was relevant only when rfs exposures where standardized and could thus be added. If exposure_rfs is length 1, it does not matter whether this option is TRUE or FALSE.
+                          most_correlated_only = FALSE, # but this restricts the controls to only interactions with the most correlated crop. 
+                          sjpos = FALSE, # should the sample be restricted to cells where sj is positive? 
                           
-                          trade_exposure = "trade_expo_imp", # either NULL, FALSE, or whatever, for no interaction with a trade exposure, or either "trade_expo", "export_expo", for a (X+I)/Y or X/Y additional crop-specific, country-level, time invariant exposure layer (can be "trade_expo_imp", "export_expo_imp" too)  
-                          trade_exposure_period = "20012007", # either "20012007" or "20062007". Used only if trade_exposure is activated with the previous argument. 
-                          
+                          # heterogeneity control
                           control_pasture = FALSE,
                           pasture_trend = FALSE,
                           remaining = FALSE, # should remaining forest be controlled for STOP DOING THIS BECAUSE IT INTRODUCES NICKELL BIAS
@@ -607,11 +617,10 @@ make_main_reg <- function(pre_process = FALSE,
                           s_trend_loga = FALSE,
                           fc_trend = FALSE,
                           fc_s_trend = FALSE,
-                          
-                          sjpos = FALSE, # should the sample be restricted to cells where sj is positive? 
-                          
                           fe = "grid_id + country_year", 
                           preclean_level = "FE", 
+
+                          # estimation - distributional and inferential assumptions
                           distribution = "quasipoisson",#  "quasipoisson", 
                           invhypsin = TRUE, # if distribution is gaussian, should the dep. var. be transformed to inverse hyperbolic sine?
                           
@@ -625,6 +634,7 @@ make_main_reg <- function(pre_process = FALSE,
                           # boot_cluster ="grid_id",
                           # old argument: cluster ="grid_id", # the cluster level if se = "cluster" (i.e. one way)
                           # coefstat = "confint", # one of "se", "tstat", "confint"
+                          rfs_rando = "", # either "between", "within", or any other string. If one of the former two, randomization inference of the type is performed
                           glm_iter = 25,
                           # dyn_tests = FALSE, # should the Fisher-type panel unit root test be returned, instead of the regressions, for the outcome_variable and the first regressor
                           output = "coef_table" # one of "data", est_object, or "coef_table" 
@@ -705,23 +715,22 @@ make_main_reg <- function(pre_process = FALSE,
       d <- dplyr::mutate(d, tmf_deforestation = tmf_agri + tmf_plantation)
     }
     
-    eaear_trade_exposure_rfs <- c()
+    all_eaear_trade_exposure_rfs <- c()
     if(length(trade_exposure)>0){
-      
       trade_expo_dat <- readRDS(here("temp_data", "processed_trade_exposures", paste0("trade_exposures_", trade_exposure_period,".Rdata")))
       # if trade_exposure is not _imp, the following line will keep both expo and expo_imp variables, but it already divides by 2 the number of cols that are joined to the bigger d dataframe
       trade_expo_dat <- trade_expo_dat[, (grepl(x = names(trade_expo_dat), pattern = trade_exposure) | names(trade_expo_dat)=="country_name") ]
       
       d <- left_join(d, trade_expo_dat, by = "country_name")
   
-      # make the eaear-trade exposures
+      # make ALL the eaear-trade exposures
       names(d)
-      for(exp_rfs in exposure_rfs){
+      for(exp_rfs in all_exposures_rfs){
         # identify the corresponding trade_expo 
         trade_expo_j <- names(d)[names(d) == paste0(trade_exposure,"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) ]
         eaear_trade_expo_j <- paste0("eaear_",trade_expo_j)
         d <- mutate(d, !!as.symbol(eaear_trade_expo_j) := !!as.symbol(exp_rfs) * !!as.symbol(trade_expo_j))
-        eaear_trade_exposure_rfs <- c(eaear_trade_exposure_rfs, eaear_trade_expo_j)
+        all_eaear_trade_exposure_rfs <- c(all_eaear_trade_exposure_rfs, eaear_trade_expo_j)
       }
       rm(trade_expo_dat)
     }
@@ -733,7 +742,7 @@ make_main_reg <- function(pre_process = FALSE,
                                           "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                                           outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
                                           "pasture_share_2000",
-                                          eaear_mapmat[,"Crops"], eaear_trade_exposure_rfs, all_exposures_rfs )))) #sj, 
+                                          eaear_mapmat[,"Crops"], all_eaear_trade_exposure_rfs, all_exposures_rfs )))) #sj, 
     
     # Merge only the prices needed, not the whole price dataframe
     d <- left_join(d, prices[,c("year", unique(c(rfs_treatments, all_rfs_treatments)))], by = c("year"))#, all_treatments
@@ -751,6 +760,16 @@ make_main_reg <- function(pre_process = FALSE,
   # if(any(grepl("Fodder", exposure_rfs)) & exposure_pasture){
   #   exposure_rfs[grepl("Fodder", exposure_rfs)] <- "pasture_share_2000"
   # }
+  
+  # Define which are the eaear_trade exposures in the present regression
+  eaear_trade_exposure_rfs <- c()
+  if(length(trade_exposure)>0){
+    for(exp_rfs in exposure_rfs){
+      # identify the corresponding trade_expo 
+      trade_expo_j <- paste0("eaear_",trade_exposure,"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) 
+      eaear_trade_exposure_rfs <- c(eaear_trade_exposure_rfs, trade_expo_j)
+    }
+  }
   
   regressors <- c()
   for(rfs_var in rfs_treatments){
@@ -807,9 +826,8 @@ make_main_reg <- function(pre_process = FALSE,
     #   annual_rfs_controls <- TRUE
     # }
     
-
     # add the controls for the 
-    all_abs <- c(all_abs, eaear_trade_exposure_rfs)
+    # all_abs <- c(all_abs, eaear_trade_exposure_rfs)
     
     if(most_correlated_only){
       all_abs <- all_abs[all_abs %in% corr_mapmat[corr_mapmat[,"Crops"]==exposure_rfs,"fst_corr"]]
@@ -987,7 +1005,7 @@ make_main_reg <- function(pre_process = FALSE,
                           "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                           outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
                           regressors, controls, 
-                          exposure_rfs, eaear_trade_exposure_rfs, original_rfs_treatments, rfs_treatments))    # this is necessary to reconstruct variables in randomization inference processes
+                          exposure_rfs, all_eaear_trade_exposure_rfs, original_rfs_treatments, rfs_treatments))    # this is necessary to reconstruct variables in randomization inference processes
     
     
     
@@ -1609,17 +1627,17 @@ est_parameters <- list(outcome_variable  = "loss_commodity",
                        continent = NULL, # this is filled within the loop 
                        start_year = 2009, 
                        end_year = 2019, 
-                       grid_event_threshold = 0,
-                       most_correlated_only = FALSE,
-                       annual_rfs_controls = FALSE,
                        all_exposures_rfs = eaear_mapmat[,"Crops"],
-                       trade_exposure = "trade_expo_imp",
+                       trade_exposure =  "trade_expo_imp", # NULL, # "trade_expo_imp",
                        trade_exposure_period = "20012007",
                        sjpos = FALSE,
-                       lags = 1,
+                       lags = 3,
                        leads = 3,
                        fya = 0, 
                        pya = 0,
+                       annual_rfs_controls = FALSE,
+                       most_correlated_only = FALSE,
+                       grid_event_threshold = 0,
                        lag_controls = NULL,
                        control_pasture = FALSE,
                        s_trend = FALSE, 
@@ -1646,7 +1664,8 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
   
   d <- main_data
   
-  eaear_trade_exposure_rfs <- c()
+  # Prepare interactions with trade, if specified
+  all_eaear_trade_exposure_rfs <- c()
   if(length(est_parameters[["trade_exposure"]])>0){
     
     trade_expo_dat <- readRDS(here("temp_data", "processed_trade_exposures", paste0("trade_exposures_", est_parameters[["trade_exposure_period"]],".Rdata")))
@@ -1655,14 +1674,13 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
     
     d <- left_join(d, trade_expo_dat, by = "country_name")
     
-    # make the eaear-trade exposures
-    names(d)
-    for(exp_rfs in exposure_rfs){
+    # make ALL eaear-trade exposures
+    for(exp_rfs in est_parameters[["all_exposures_rfs"]]){ 
       # identify the corresponding trade_expo 
       trade_expo_j <- names(d)[names(d) == paste0(est_parameters[["trade_exposure"]],"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) ]
       eaear_trade_expo_j <- paste0("eaear_",trade_expo_j)
       d <- mutate(d, !!as.symbol(eaear_trade_expo_j) := !!as.symbol(exp_rfs) * !!as.symbol(trade_expo_j))
-      eaear_trade_exposure_rfs <- c(eaear_trade_exposure_rfs, eaear_trade_expo_j)
+      all_eaear_trade_exposure_rfs <- c(all_eaear_trade_exposure_rfs, eaear_trade_expo_j)
     }
     rm(trade_expo_dat)
   }
@@ -1674,7 +1692,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
                                         # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
                                         "loss_commodity",
                                         "pasture_share_2000",
-                                        eaear_mapmat[,"Crops"], eaear_trade_exposure_rfs ))))
+                                        eaear_mapmat[,"Crops"], all_eaear_trade_exposure_rfs ))))
   
   # Merge only the prices needed, not the whole price dataframe
   d <- left_join(d, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
@@ -1721,7 +1739,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
   
   rm(d)
   
-  # Regressions of tmf_agri
+  # DISJOINT ESTIMATION, control_all_absolute_rfs has to be set to TRUE as the default in make_main_reg
   elm <- 1
   for(rfs_exp in est_parameters[["all_exposures_rfs"]]){#agri_crops eaear_mapmat[,"Crops"]
     rfs_1lag3lead_notrend_clt10[[CNT]][[elm]] <- make_main_reg(pre_process = TRUE,
@@ -1735,6 +1753,9 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
                                                                aggr_dyn = TRUE,
                                                                exposure_rfs = rfs_exp,
                                                                all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
+                                                               
+                                                               trade_exposure = est_parameters[["trade_exposure"]],
+                                                               trade_exposure_period = est_parameters[["trade_exposure_period"]],
                                                                
                                                                original_rfs_treatments = c("statute_conv"),
                                                                rfs_lead = est_parameters[["leads"]], 
@@ -1764,10 +1785,13 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
 
 rm(df)
 dyn_df_list <- list()
-
+# grepl("_aggrall", row.names(x)) & grepl("_expo", row.names(x))
 for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
   dyn_df <- lapply(rfs_1lag3lead_notrend_clt10[[CNT]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  # decide to remove or not sugarcane 
+ # dyn_df <- dyn_df[!grepl(pattern = "sugarcane", x = dyn_df$term),] # replace everything after and including _X_ with nothing
+  
   dyn_df$model <- CNT # dyn_des[dyn]
   dyn_df_list[[CNT]] <- dyn_df
 }
@@ -1839,7 +1863,7 @@ crop_groups <- list(c("Group 1", "Cereals", "Rice"),
           legend.position = c(0.8, 0.05),
           legend.justification = c(0, 0), 
           legend.background = element_rect(colour="grey80"),
-          legend.title = element_blank()) } %>% 
+          legend.title = element_blank()) }              %>% 
   # don't run this if we used only limited crops
   add_brackets(crop_groups, face = "italic")
 
@@ -3253,6 +3277,27 @@ dyn_df_lmt <- dplyr::filter(dyn_df_lmt, continent != "Africa")
 # prepare data common to all estimations 
 d_all <- main_data
 
+# Prepare interactions with trade, if specified
+all_eaear_trade_exposure_rfs <- c()
+if(length(est_parameters[["trade_exposure"]])>0){
+  
+  trade_expo_dat <- readRDS(here("temp_data", "processed_trade_exposures", paste0("trade_exposures_", est_parameters[["trade_exposure_period"]],".Rdata")))
+  # if trade_exposure is not _imp, the following line will keep both expo and expo_imp variables, but it already divides by 2 the number of cols that are joined to the bigger d_all dataframe
+  trade_expo_dat <- trade_expo_dat[, (grepl(x = names(trade_expo_dat), pattern = est_parameters[["trade_exposure"]]) | names(trade_expo_dat)=="country_name") ]
+  
+  d_all <- left_join(d_all, trade_expo_dat, by = "country_name")
+  
+  # make ALL eaear-trade exposures
+  for(exp_rfs in est_parameters[["all_exposures_rfs"]]){ 
+    # identify the corresponding trade_expo 
+    trade_expo_j <- names(d_all)[names(d_all) == paste0(est_parameters[["trade_exposure"]],"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) ]
+    eaear_trade_expo_j <- paste0("eaear_",trade_expo_j)
+    d_all <- mutate(d_all, !!as.symbol(eaear_trade_expo_j) := !!as.symbol(exp_rfs) * !!as.symbol(trade_expo_j))
+    all_eaear_trade_exposure_rfs <- c(all_eaear_trade_exposure_rfs, eaear_trade_expo_j)
+  }
+  rm(trade_expo_dat)
+}
+
 # Keep only in data the useful variables 
 d_all <- dplyr::select(d_all, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
                                               # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
@@ -3260,7 +3305,7 @@ d_all <- dplyr::select(d_all, all_of(unique(c("grid_id", "year", "lat", "lon", "
                                               # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
                                               "loss_commodity",
                                               "pasture_share_2000",
-                                              eaear_mapmat[,"Crops"] ))))
+                                              eaear_mapmat[,"Crops"], all_eaear_trade_exposure_rfs ))))
 
 # Merge only the prices needed, not the whole price dataframe
 d_all <- left_join(d_all, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
@@ -3328,6 +3373,9 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
                                                                  exposure_rfs = est_parameters[["all_exposures_rfs"]], # AND THIS
                                                                  all_exposures_rfs = est_parameters[["all_exposures_rfs"]],
                                                                  
+                                                                 trade_exposure = est_parameters[["trade_exposure"]],
+                                                                 trade_exposure_period = est_parameters[["trade_exposure_period"]],
+                                                                 
                                                                  original_rfs_treatments = c("statute_conv"),
                                                                  rfs_lead = est_parameters[["leads"]], 
                                                                  rfs_lag = est_parameters[["lags"]],
@@ -3353,11 +3401,15 @@ for(CNT in c("all", "America", "Africa", "Asia")){#, , "all",  "Africa", "Asia" 
 # prepare regression outputs in a tidy data frame readable by dwplot
 rm(df)
 dyn_df_list <- list()
-
+# grepl("_aggrall", row.names(x)) 
 for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respectively to fya and pya, or aggrleads and aggrlags
   dyn_df <- lapply(rfs_joint_1lag3lead_notrend_clt10[[CNT]], FUN = function(x){x <- as.data.frame(x) 
-  return(x[grepl("_aggrall", row.names(x)),])}) %>% bind_rows()
+  return(x[grepl("_aggrall", row.names(x))& grepl("_expo", row.names(x)),])}) %>% bind_rows()
+  
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  # decide to remove or not sugarcane 
+  dyn_df <- dyn_df[!grepl(pattern = "sugarcane", x = dyn_df$term),] # replace everything after and including _X_ with nothing
+  
   dyn_df$model <- CNT # dyn_des[dyn]
   dyn_df_list[[CNT]] <- dyn_df
 }
@@ -4444,15 +4496,36 @@ est_parameters[["end_year"]] <- 2016
 # prepare data common to all estimations 
 d_all <- main_data
 
+# Prepare interactions with trade, if specified
+all_eaear_trade_exposure_rfs <- c()
+if(length(est_parameters[["trade_exposure"]])>0){
+  
+  trade_expo_dat <- readRDS(here("temp_data", "processed_trade_exposures", paste0("trade_exposures_", est_parameters[["trade_exposure_period"]],".Rdata")))
+  # if trade_exposure is not _imp, the following line will keep both expo and expo_imp variables, but it already divides by 2 the number of cols that are joined to the bigger d_all dataframe
+  trade_expo_dat <- trade_expo_dat[, (grepl(x = names(trade_expo_dat), pattern = est_parameters[["trade_exposure"]]) | names(trade_expo_dat)=="country_name") ]
+  
+  d_all <- left_join(d_all, trade_expo_dat, by = "country_name")
+  
+  # make ALL eaear-trade exposures
+  for(exp_rfs in est_parameters[["all_exposures_rfs"]]){ 
+    # identify the corresponding trade_expo 
+    trade_expo_j <- names(d_all)[names(d_all) == paste0(est_parameters[["trade_exposure"]],"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) ]
+    eaear_trade_expo_j <- paste0("eaear_",trade_expo_j)
+    d_all <- mutate(d_all, !!as.symbol(eaear_trade_expo_j) := !!as.symbol(exp_rfs) * !!as.symbol(trade_expo_j))
+    all_eaear_trade_exposure_rfs <- c(all_eaear_trade_exposure_rfs, eaear_trade_expo_j)
+  }
+  rm(trade_expo_dat)
+}
+
 # Keep only in data the useful variables 
 d_all <- dplyr::select(d_all, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
                                               # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
                                               "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                                               # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
                                               # "loss_commodity",
-                                              "loss_cropland", "loss_oilpalm", "loss_pasture",
+                                              "loss_cropland", "loss_oilpalm_both", "loss_pasture",
                                               "pasture_share_2000",
-                                              eaear_mapmat[,"Crops"] ))))
+                                              eaear_mapmat[,"Crops"], all_eaear_trade_exposure_rfs ))))
 
 # Merge only the prices needed, not the whole price dataframe
 d_all <- left_join(d_all, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
@@ -4492,7 +4565,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){ #, , "all",  "Africa", "Asia"
   }
   
   
-  for(loss_type in c("loss_cropland", "loss_oilpalm", "loss_pasture")){
+  for(loss_type in c("loss_cropland", "loss_oilpalm_both", "loss_pasture")){
     
     est_parameters[["outcome_variable"]] <- loss_type
     
@@ -4524,6 +4597,9 @@ for(CNT in c("all", "America", "Africa", "Asia")){ #, , "all",  "Africa", "Asia"
                                                                              aggr_dyn = TRUE,
                                                                              exposure_rfs = rfs_exp, # focal_crops, # NOTE THIS
                                                                              all_exposures_rfs = focal_crops, # est_parameters[["all_exposures_rfs"]], # focal_crops, # NOTE THIS
+                                                                             
+                                                                             trade_exposure = est_parameters[["trade_exposure"]],
+                                                                             trade_exposure_period = est_parameters[["trade_exposure_period"]],
                                                                              
                                                                              original_rfs_treatments = c("statute_conv"),
                                                                              rfs_lead = est_parameters[["leads"]], 
@@ -4559,7 +4635,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respecti
   # this is still a list, with elements for loss types
   # res_loss_list <- rfs_losscat_1lag3lead_notrend_clt10[[CNT]]
   
-  for(loss_type in c("loss_cropland", "loss_oilpalm", "loss_pasture")){
+  for(loss_type in c("loss_cropland", "loss_oilpalm_both", "loss_pasture")){
     x <- lapply(rfs_losscat_1lag3lead_notrend_clt10[[CNT]][[loss_type]], FUN = function(x){as.data.frame(x)[1,] }) %>% bind_rows()
     x$loss_type <- loss_type
     res_loss_list[[CNT]][[loss_type]] <- x
@@ -4567,6 +4643,9 @@ for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respecti
   dyn_df <- res_loss_list[[CNT]] %>% bind_rows()
   
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  # decide to remove or not sugarcane 
+  dyn_df <- dyn_df[!grepl(pattern = "sugarcane", x = dyn_df$term),] # replace everything after and including _X_ with nothing
+  
   dyn_df$model <- CNT # dyn_des[dyn]
   dyn_df_list[[CNT]] <- dyn_df
 }  
@@ -4639,15 +4718,36 @@ est_parameters[["end_year"]] <- 2016
 # prepare data common to all estimations 
 d_all <- main_data
 
+# Prepare interactions with trade, if specified
+all_eaear_trade_exposure_rfs <- c()
+if(length(est_parameters[["trade_exposure"]])>0){
+  
+  trade_expo_dat <- readRDS(here("temp_data", "processed_trade_exposures", paste0("trade_exposures_", est_parameters[["trade_exposure_period"]],".Rdata")))
+  # if trade_exposure is not _imp, the following line will keep both expo and expo_imp variables, but it already divides by 2 the number of cols that are joined to the bigger d_all dataframe
+  trade_expo_dat <- trade_expo_dat[, (grepl(x = names(trade_expo_dat), pattern = est_parameters[["trade_exposure"]]) | names(trade_expo_dat)=="country_name") ]
+  
+  d_all <- left_join(d_all, trade_expo_dat, by = "country_name")
+  
+  # make ALL eaear-trade exposures
+  for(exp_rfs in est_parameters[["all_exposures_rfs"]]){ 
+    # identify the corresponding trade_expo 
+    trade_expo_j <- names(d_all)[names(d_all) == paste0(est_parameters[["trade_exposure"]],"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) ]
+    eaear_trade_expo_j <- paste0("eaear_",trade_expo_j)
+    d_all <- mutate(d_all, !!as.symbol(eaear_trade_expo_j) := !!as.symbol(exp_rfs) * !!as.symbol(trade_expo_j))
+    all_eaear_trade_exposure_rfs <- c(all_eaear_trade_exposure_rfs, eaear_trade_expo_j)
+  }
+  rm(trade_expo_dat)
+}
+
 # Keep only in data the useful variables 
 d_all <- dplyr::select(d_all, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
                                               # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
                                               "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                                               # "tmf_agri", "tmf_flood", "tmf_plantation", "tmf_deforestation",
                                               # "loss_commodity",
-                                              "loss_cropland", "loss_oilpalm", "loss_pasture",
+                                              "loss_cropland", "loss_oilpalm_both", "loss_pasture",
                                               "pasture_share_2000",
-                                              eaear_mapmat[,"Crops"] ))))
+                                              eaear_mapmat[,"Crops"], all_eaear_trade_exposure_rfs ))))
 
 # Merge only the prices needed, not the whole price dataframe
 d_all <- left_join(d_all, prices[,c("year", unique(c(all_rfs_treatments)))], by = c("year"))
@@ -4687,7 +4787,7 @@ for(CNT in c("all", "America", "Africa", "Asia")){ #, , "all",  "Africa", "Asia"
   }
   
   
-  for(loss_type in c("loss_cropland", "loss_oilpalm", "loss_pasture")){
+  for(loss_type in c("loss_cropland", "loss_oilpalm_both", "loss_pasture")){
     
     est_parameters[["outcome_variable"]] <- loss_type
     
@@ -4717,6 +4817,9 @@ for(CNT in c("all", "America", "Africa", "Asia")){ #, , "all",  "Africa", "Asia"
                                                                      aggr_dyn = TRUE,
                                                                      exposure_rfs = focal_crops, # est_parameters[["all_exposures_rfs"]], # focal_crops, # NOTE THIS
                                                                      all_exposures_rfs = focal_crops, # est_parameters[["all_exposures_rfs"]], # focal_crops, # NOTE THIS
+                                                                     
+                                                                     trade_exposure = est_parameters[["trade_exposure"]],
+                                                                     trade_exposure_period = est_parameters[["trade_exposure_period"]],
                                                                      
                                                                      original_rfs_treatments = c("statute_conv"),
                                                                      rfs_lead = est_parameters[["leads"]], 
@@ -4749,14 +4852,18 @@ for(CNT in c("all", "America", "Africa", "Asia")){ # 1 and 2 correspond respecti
   # this is still a list, with elements for loss types
   # res_loss_list <- rfs_losscat_joint_1lag3lead_notrend_clt10[[CNT]]
   
-  for(loss_type in c("loss_cropland", "loss_oilpalm", "loss_pasture")){
+  for(loss_type in c("loss_cropland", "loss_oilpalm_both", "loss_pasture")){
     x <- rfs_losscat_joint_1lag3lead_notrend_clt10[[CNT]][[loss_type]] %>% as.data.frame()
     x$loss_type <- loss_type
-    res_loss_list[[CNT]][[loss_type]] <- x[paste0(loss_cat_map[[loss_type]], "_X_aggrall"), ]
+    # res_loss_list[[CNT]][[loss_type]] <- x[paste0(loss_cat_map[[loss_type]], "_X_aggrall"), ]
+    res_loss_list[[CNT]][[loss_type]] <- x[grepl("_X_aggrall", row.names(x)) & grepl("expo_", row.names(x)), ]
   }
   dyn_df <- res_loss_list[[CNT]] %>% bind_rows()
 
   dyn_df$term <- gsub(pattern = "_X_.*$", x = row.names(dyn_df), replacement = "") # replace everything after and including _X_ with nothing
+  # decide to remove or not sugarcane 
+  dyn_df <- dyn_df[!grepl(pattern = "sugarcane", x = dyn_df$term),]
+  
   dyn_df$model <- CNT # dyn_des[dyn]
   dyn_df_list[[CNT]] <- dyn_df
 }  
