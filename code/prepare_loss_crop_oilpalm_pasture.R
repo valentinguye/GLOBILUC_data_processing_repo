@@ -63,13 +63,20 @@ mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datu
 ### TROPICAL AOI 
 tropical_aoi <- extent(c(-180, 179.9167, -30, 30))
 
-### GAEZ OBJECTS
+### GAEZ OBJECTS #### 
 # in this script, GAEZ is the target raster of all aggregations / resamplings
-gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
 # gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_bestoccuring", "Rain-fed-all-phases")
-# gaez_dir <- here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed-all-phases")
 
-gaez_crops <- list.files(path = here(gaez_dir, "High-input"), 
+# Irrigated
+gaez_dir_irr <- here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed-all-phases")
+gaez_crops <- list.files(path = here(gaez_dir_irr, "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+
+# Rain fed
+gaez_dir_rf <- here("temp_data", "GAEZ", "v4", "AEAY_out_density",  "Rain-fed")
+gaez_crops <- list.files(path = here(gaez_dir_rf, "High-input"), 
                          pattern = "", 
                          full.names = FALSE)
 gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
@@ -78,10 +85,31 @@ gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
 # a priori no issue if it's gaez in global aoi, i.e. not croped in prepare_gaez.R, it only needs to be a larger aoi than continental ones given above. 
 # besides, note that we brick the file that was already saved as a single brick of raster layers. 
 # Otherwise, calling brick on multiple layers takes some time, and calling stack on multiple layers implies that the object is kept in R memory, and it's ~.06Gb
-gaez <- brick(here(gaez_dir, "high_input_all.tif"))
+gaez_irr <- brick(here(gaez_dir_irr, "high_input_all.tif"))
+gaez_rf <- brick(here(gaez_dir_rf, "high_input_all.tif"))
 
-# restore gaez crop names 
-names(gaez) <- gaez_crops
+# Make composite gaez
+names(gaez_irr) <- gaez_crops
+names(gaez_rf) <- gaez_crops
+
+irrigated_crops <- c("Barley", "Buckwheat", "Cabbage", "Carrot", "Cassava", "Chickpea",
+                     "Cotton", "Cowpea", "Drylandrice", "Drypea", "Flax", "Foxtailmillet", "Gram", "Groundnut", 
+                     "Maizegrain", "Oat", "Onion", "Pearlmillet", "Phaseolousbean", "Pigeonpea", "Rapeseed",
+                     "Rye", "Sorghum", "Sorghumbiomass", "Sugarbeet", "Sugarcane",
+                     "Sunflower", "Sweetpotato", "Tobacco", "Tomato", "Wetlandrice", "Wheat", "Whitepotato", "Yam")
+# include both rice types in irrigated... 
+# include oil crops (rapeseed, sunflower and groundnut) in irrigated, although rainfed rapeseed is said to be a common system in Latin America (Waha 2018), the yields are much higher with irrigation, and thus commercial ag. may consider it. 
+# Include wheat in irrigated, although Waha et al. identify rainfed soy-wheat as a common system, for the same reason as for oil crops. 
+rainfed_crops <- gaez_crops[!(gaez_crops%in%irrigated_crops)]
+# so finally, rainfed crops comprise perennials, as well as soybean. 
+# Soybean is taken for its rainfed suitability, to capture that it may be multi-cropped as a crop to grow doing pretty well without irrigation if growing during the wet season
+# and to reflect Byerlee saying it is a mostly rainfed crop. 
+
+gaez <- stack(gaez_irr[[irrigated_crops]], gaez_rf[[rainfed_crops]])
+
+# for safety, get gaez crops in the new order
+gaez_crops <- names(gaez)
+
 
 # --- The workflow in this script is as follows:
 # 1. Input the 10% canopy cover forest loss in commodity driver mask at 3km resolution prepared in GEE. 
@@ -239,7 +267,9 @@ names(lossoilpalmboth) <- paste0("loss_oilpalm_both.",seq(2001, 2019, 1))
 names(lossoilpalmindus) <- paste0("loss_oilpalm_indus.",seq(2001, 2019, 1)) 
 names(losspasture) <- paste0("loss_pasture.",seq(2001, 2019, 1)) 
 
-names(gaez) <- gaez_crops
+# DO NOT RENAME GAEZ, IT IS ALREADY NAMED
+# ( it is irrigated and then rainfed crops)
+# names(gaez) <- gaez_crops
 names(fc2k) <- "fc_2000"
 names(pst2k) <- "pasture_share_2000"
 
@@ -329,7 +359,7 @@ long_df <- dplyr::arrange(long_df, grid_id, year)
 # d[d$diff>0 , c("driven_loss", "driven_loss_cropland")]
 
 
-saveRDS(long_df, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long.Rdata"))
+saveRDS(long_df, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long.Rdata"))
 
 rm(long_df)
 removeTmpFiles(h=0)
@@ -338,7 +368,7 @@ removeTmpFiles(h=0)
 countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
 length(unique(countries$COUNTRY_NA)) == nrow(countries)
 
-path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long.Rdata")
+path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long.Rdata")
 df <- readRDS(path)
 
 # Remove gaez variables
@@ -438,7 +468,7 @@ df_cs$country_name[df_cs$country_name=="Swaziland"] <- "Eswatini"
 
 
 # saveRDS(df_cs, path)
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_cs_country_nf.Rdata"))
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_cs_country_nf.Rdata"))
 rm(df_cs)
 
 #### CONTINENT VARIABLE #### 
@@ -475,7 +505,7 @@ continents <- st_sf(data.frame(continent_name = c("Asia", "America", "Africa"), 
 
 # tm_shape(continents)+tm_borders() +tm_fill(col = "continent_name") + tm_graticules() 
 
-path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long.Rdata")
+path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long.Rdata")
 df <- readRDS(path)
 
 # Remove gaez variables
@@ -504,14 +534,14 @@ df_cs <- st_drop_geometry(df_cs)
 # Keep only new variable and id
 df_cs <- df_cs[,c("grid_id", "continent_name")]
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_cs_continent.Rdata"))
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_cs_continent.Rdata"))
 rm(df_cs)
 
 
 
 #### BIGGER CELL VARIABLES #### 
 ## Prepare base data
-path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long.Rdata")
+path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long.Rdata")
 df <- readRDS(path)
 
 # Remove gaez variables
@@ -586,14 +616,14 @@ df_cs <- st_drop_geometry(df_cs)
 # Keep only new variable and id
 df_cs <- df_cs[,c("grid_id", "grid_id_5", "grid_id_10", "grid_id_20")]
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_cs_biggercells.Rdata"))
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_cs_biggercells.Rdata"))
 
 rm(df_cs)
 
 #### GROUP AND STANDARDIZE AEAY CROPS #### 
 # all groupings in this section are motivated on the GAEZ v4 model documentation, and in particular Table A4-1.3
 
-df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long.Rdata"))
+df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long.Rdata"))
 # Use cross section only
 df_cs <- df[!duplicated(df$grid_id),]
 
@@ -960,7 +990,7 @@ df_cs <- dplyr::select(df_cs, -eaear_Soybean, -eaear_Soybean_meal, -eaear_Soybea
 var_names <- grep(pattern = "eaear_", names(df_cs), value = TRUE) 
 df_cs <- df_cs[,c("grid_id", var_names)]
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_cs_stdeaear.Rdata"))  
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_cs_stdeaear.Rdata"))  
 rm(df_cs)
 
 
@@ -968,7 +998,7 @@ rm(df_cs)
 
 #### REMAINING FOREST ####
 
-df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long.Rdata"))
+df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long.Rdata"))
 
 # Remove gaez variables
 df <- dplyr::select(df,-all_of(gaez_crops))
@@ -1007,7 +1037,7 @@ df <- left_join(df, fc_2008, by = "grid_id")
 # put keep only new variables in remaining
 remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k", "fc_2008")] # fc_2000 is added as a raster layer in merge_* scripts
 
-saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_remaining.Rdata"))
+saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_remaining.Rdata"))
 
 rm(year_list, sub_, accu_defo_df)
 
@@ -1017,18 +1047,18 @@ rm(year_list, sub_, accu_defo_df)
 
 #### MERGE ADDITIONAL VARIABLES ####  
 # Base dataset (including outcome variable(s))
-df_base <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long.Rdata"))
+df_base <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long.Rdata"))
 
 ## COUNTRY
 # just compute country and continent variables, even if invariant, so they can be called in generic function
-df_country <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_cs_country_nf.Rdata"))
+df_country <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_cs_country_nf.Rdata"))
 
 # Merge them and remove to save memory 
 final <- left_join(df_base, df_country, by = "grid_id")
 rm(df_base, df_country)
 
 ## CONTINENT
-df_continent <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_cs_continent.Rdata"))
+df_continent <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_cs_continent.Rdata"))
 
 final <- left_join(final, df_continent, by = "grid_id")
 rm(df_continent)
@@ -1037,7 +1067,7 @@ rm(df_continent)
 final <- mutate(final, country_year = paste0(country_name, "_", year))
 
 ## BIGGER CELLS
-df_biggercells <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_cs_biggercells.Rdata"))
+df_biggercells <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_cs_biggercells.Rdata"))
 
 final <- left_join(final, df_biggercells, by = "grid_id")
 rm(df_biggercells)
@@ -1049,20 +1079,20 @@ final <- mutate(final, grid_id_20_year = paste0(grid_id_20, "_", year))
 # length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
 
 ## EAEAR
-df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi",  "loss_aeay_cs_stdeaear.Rdata"))  
+df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi",  "loss_aeaycompo_cs_stdeaear.Rdata"))  
 
 final <- left_join(final, df_stdeaear, by = "grid_id") # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
 rm(df_stdeaear)
 
 
 ## REMAINING
-#df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long_remaining.Rdata"))
+#df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long_remaining.Rdata"))
 
 # final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
 # rm(df_remain)
 
 
-saveRDS(final, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeay_long_final.Rdata"))
+saveRDS(final, here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long_final.Rdata"))
 
 rm(final)
 
