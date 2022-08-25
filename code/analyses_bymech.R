@@ -7,6 +7,11 @@ mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datu
 main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long_final.Rdata"))
 main_data <- dplyr::mutate(main_data, loss_commodity = loss_cropland + loss_oilpalm_both + loss_pasture)
 
+# loss_commo <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeaycompo_long_final.Rdata"))
+# summary(loss_commo$loss_commodity)
+# summary(main_data$loss_commodity)
+# rm(loss_commo)
+
 # release some memory upfront
 main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
 
@@ -16,22 +21,24 @@ prices <- readRDS(here("temp_data", "prepared_international_prices.Rdata"))
 # renewable fuel standards, as from https://www.epa.gov/renewable-fuel-standard-program/renewable-fuel-annual-standards
 # remember: biodiesel are nested within advanced biofuels, which are themeselves nested within total
 # conventional biofuels are the part of the total that is not "advanced"
-rfs <- data.frame(year = min(prices$year):2022, 
+rfs <- data.frame(year = 1994:2022, # taking from 1994 just so that even with 6-year lag there is no NA removing year 2000, which may be used as the first year with undernourishment outcome for the pre-treatment period. 
                   statute_total = 0, final_total = 0, 
                   statute_advanced = 0, final_advanced = 0, 
                   statute_biodiesel = 0, final_biodiesel = 0, 
                   statute_conv_earliest = 0)
 
 rfs <- dplyr::arrange(rfs, year)
-# this is if RFS2 takes over as soon as 2008 (9bgal)
-rfs[rfs$year >= 2006 & rfs$year <= 2022, c("statute_total")] <- c(4, 4.7, 9, 11.1, 12.95,	13.95,	15.2,	16.55,	18.15,	20.5,	22.25,	24.0,	26.0,	28.0, 30.0, 33.0, 36.0)
-rfs[rfs$year >= 2006 & rfs$year <= 2022, c("final_total")] <- c(4, 4, 9, 11.1, 12.95,	13.95,	15.2,	16.55,	16.28,	16.93,	18.11,	19.28,	19.29,	19.92, 20.09, NA, NA)
+# this is if RFS2 takes over as soon as 2008 (9bgal). 
+# The two first years of NAs represent the fact that these mandates are endogenous and should thus not be used 
+# /!\ THIS IS DIFFERENT FROM THE ILUC PROJECT /!\
+rfs[rfs$year >= 2006 & rfs$year <= 2022, c("statute_total")] <- c(NA, NA, 9, 11.1, 12.95,	13.95,	15.2,	16.55,	18.15,	20.5,	22.25,	24.0,	26.0,	28.0, 30.0, 33.0, 36.0)
+rfs[rfs$year >= 2006 & rfs$year <= 2022, c("final_total")] <- c(NA, NA, 9, 11.1, 12.95,	13.95,	15.2,	16.55,	16.28,	16.93,	18.11,	19.28,	19.29,	19.92, 20.09, NA, NA)
 
-rfs[rfs$year >= 2006 & rfs$year <= 2022, c("statute_advanced")] <- c(0, 0, 0, 0.6, 0.95,	1.35,	2.0,	2.75,	3.75,	5.5,	7.25,	9.0,	11.0,	13.0, 15.0, 18.0, 21.0)
-rfs[rfs$year >= 2006 & rfs$year <= 2022, c("final_advanced")] <- c(0, 0, 0, 0.6, 0.95,	1.35,	2.0,	2.75,	2.67,	2.88,	3.61,	4.28,	4.29,	4.92, 5.09, NA, NA)
+rfs[rfs$year >= 2006 & rfs$year <= 2022, c("statute_advanced")] <- c(NA, NA, 0, 0.6, 0.95,	1.35,	2.0,	2.75,	3.75,	5.5,	7.25,	9.0,	11.0,	13.0, 15.0, 18.0, 21.0)
+rfs[rfs$year >= 2006 & rfs$year <= 2022, c("final_advanced")] <- c(NA, NA, 0, 0.6, 0.95,	1.35,	2.0,	2.75,	2.67,	2.88,	3.61,	4.28,	4.29,	4.92, 5.09, NA, NA)
 
-rfs[rfs$year >= 2009 & rfs$year <= 2022, c("final_biodiesel")] <- c(0.5, 1.15, 0.8, 1.0, 1.28, 1.63, 1.73, 1.9, 2.0, 2.1, 2.1, 2.43, 2.43, NA)
 rfs[rfs$year >= 2009 & rfs$year <= 2022, c("statute_biodiesel")] <- c(0.5, 0.65, 0.8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+rfs[rfs$year >= 2009 & rfs$year <= 2022, c("final_biodiesel")] <- c(0.5, 1.15, 0.8, 1.0, 1.28, 1.63, 1.73, 1.9, 2.0, 2.1, 2.1, 2.43, 2.43, NA)
 
 rfs <- mutate(rfs, statute_conv = statute_total - statute_advanced)
 rfs <- mutate(rfs, final_conv = final_total - final_advanced)
@@ -113,22 +120,26 @@ pre_process <- FALSE
 
 # THESE GOVERNS WHETHER IT'S A JOINT OR A DISJOINT ESTIMATION 
 # for joint: all crops passed to exposure_rfs, and control_all_absolute_rfs = FALSE
-exposure_rfs <- "eaear_Maizegrain"
+exposure_rfs <- "eaear_Cereals"
 control_all_absolute_rfs <- TRUE # whether to control for other crops
 annual_rfs_controls <- TRUE # on annual or year averaged dynamics
 all_exposures_rfs = cash_crops_ctrl # which crops
 
-trade_exposure = NULL
+trade_exposure = "trade_expo_imp"
 trade_exposure_period = "20012007"
 
 # treatment dynamics
 original_rfs_treatments <- c("statute_conv")
-rfs_lag <- 1
-rfs_lead <- 1
-rfs_fya <-  0
-rfs_pya <- 0
-lag_controls = NULL
-aggr_dyn <- TRUE
+# These 4 arg. below determine the mandates that are interacted with the exposure(s) of the crop(s) of interest.
+# Not the dynamics wpecified for control crops (this is done by annual_rfs_controls), 
+# nor the dynamic effects that are to be aggregated eventually. 
+rfs_lead = 0
+rfs_lag = 0
+rfs_fya = 0 
+rfs_pya = 0
+# These, below, determine the dynamic effects to aggregate
+aggr_lead = rfs_lead
+aggr_lag = rfs_lag
 
 # those are always FALSE 
 group_exposure_rfs <- FALSE
@@ -198,14 +209,17 @@ make_main_reg <- function(pre_process = FALSE,
                           
                           # Treatment dynamics                     
                           original_rfs_treatments = c("statute_conv"),
+                          # These 4 arg. below determine the mandates that are interacted with the exposure(s) of the crop(s) of interest.
+                          # Not the dynamics wpecified for control crops (this is done by annual_rfs_controls), 
+                          # nor the dynamic effects that are to be aggregated eventually. 
                           rfs_lead = 0,
                           rfs_lag = 0,
                           rfs_fya = 0, 
                           rfs_pya = 0,
-                          lag_controls = NULL, # which of the lags specified above should be CONTROLLED for rather than counted in the cumulative effect
-                          aggr_dyn = TRUE, # whether to report aggregate coefficients of all leads and lags ("all") or leads and lags separately ("leadlag"), or no aggregate (any other string)
-                          # exposure_pasture = FALSE, # whether the exposure to pasture should be the default AEAY of fodder crops (FALSE) or the share of pastures in 2000 (TRUE) # but we don't do it anymore because it dwarfs all the other estimates, and is not more precise
-                          
+                          # These, below, determine the dynamic effects to aggregate
+                          aggr_lead = rfs_lead,
+                          aggr_lag = rfs_lag,
+
                           # old miscellaneous, not used anymore
                           group_exposure_rfs = FALSE, # This is deprecated, as it was relevant only when rfs exposures where standardized and could thus be added. If exposure_rfs is length 1, it does not matter whether this option is TRUE or FALSE.
                           most_correlated_only = FALSE, # but this restricts the controls to only interactions with the most correlated crop. 
@@ -217,6 +231,7 @@ make_main_reg <- function(pre_process = FALSE,
                           remaining = FALSE, # should remaining forest be controlled for STOP DOING THIS BECAUSE IT INTRODUCES NICKELL BIAS
                           s_trend = FALSE,
                           s_trend_loga = FALSE,
+                          s_trend_sq = FALSE,
                           fc_trend = FALSE,
                           fc_s_trend = FALSE,
                           fe = "grid_id + country_year", 
@@ -296,8 +311,7 @@ make_main_reg <- function(pre_process = FALSE,
       rfs_treatments <- c(paste0(rfs_var, "_lead", 1:rfs_lead), paste0(rfs_var, "_", rfs_pya, "pya") )
     }
   }
-  
-  
+
   #### MAKE THE VARIABLES NEEDED IN THE DATA
   
   # this options is to gain some time, when the data is always the same across crop exposure/regressions
@@ -308,6 +322,10 @@ make_main_reg <- function(pre_process = FALSE,
   } else {
     # manipulate a different data set so that original one can be provided to all functions and not read again every time. 
     d <- main_data
+    
+    # this is just useful if we introduce non-linear trends
+    d <- dplyr::mutate(d, year_ln = log(year - min(year) + 1))
+    d <- dplyr::mutate(d, year_sq = (year - min(year))^2)
     
     if(grepl("tmf_", outcome_variable)){
       d  <- readRDS(here("temp_data", "merged_datasets", "tmf_aoi", "tmf_aeay_pantrop_long_final_1990_2020.Rdata"))
@@ -327,7 +345,7 @@ make_main_reg <- function(pre_process = FALSE,
       
       # make ALL the eaear-trade exposures
       names(d)
-      for(exp_rfs in all_exposures_rfs){
+      for(exp_rfs in unique(c(exposure_rfs, all_exposures_rfs))){
         # identify the corresponding trade_expo 
         trade_expo_j <- names(d)[names(d) == paste0(trade_exposure,"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = exp_rfs) ) ) ]
         eaear_trade_expo_j <- paste0("eaear_",trade_expo_j)
@@ -339,7 +357,7 @@ make_main_reg <- function(pre_process = FALSE,
     
     # code below should work whether d is from tmf or losscommo 
     # Keep only in data the useful variables 
-    d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "lat", "lon", "continent_name", "country_name", "country_year",
+    d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "year_ln", "year_sq", "lat", "lon", "continent_name", "country_name", "country_year",
                                           # "fc_2000", "fc_2009", "remaining_fc", # "accu_defo_since2k",
                                           "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                                           outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
@@ -395,25 +413,6 @@ make_main_reg <- function(pre_process = FALSE,
   ### Controls
   # it's important that this is not conditioned on anything so these objects exist
   controls <- c()
-  
-  # transfer lags of the treatment of interest from regressors to controls
-  if(length(lag_controls)>0){
-    lags_to_transfer <- c()
-    for(rfs_var in original_rfs_treatments){
-      lags_to_transfer <- c(lags_to_transfer, paste0(exposure_rfs, "_X_", rfs_var, "_lag", lag_controls))
-    }
-    
-    regressors <- regressors[regressors != lags_to_transfer]
-    controls <- c(controls, lags_to_transfer)
-    # no need to change their names, they are not captured by cumulative effects as long as they are in controls. 
-    
-    # old_controls <- c()
-    # for(old_rc in lags_to_transfer){
-    #   varname <- paste0("jexp_X_", old_rc)
-    #   controls <- c(controls, varname)
-    #   d <- mutate(d, !!as.symbol(varname) := !!as.symbol(exposure_rfs) * !!as.symbol(old_rc))
-    # }
-  }
   
   # IT IS NORMAL THAT ABS. EXPOSURE CONTROLS ARE INTERACTED WITH 2fya AND 1pya: BOTH ARE AVERAGES OF TWO YEARS. 
   # 1pya is the avg of current and lag1 values, which are grouped together because they reflect the same kind of mechanism. 
@@ -495,6 +494,32 @@ make_main_reg <- function(pre_process = FALSE,
     sj <- "grp_exp"
   }
   
+
+  # VARYING SLOPES makes computations much longer (and may not converge)
+  # We specify heterogeneous trends using fixest. 
+  # as inspired by the answer from Laurent Bergé here https://stackoverflow.com/questions/34232834/fixed-effects-regression-with-state-specific-trends
+  # and by the vignettes https://cran.r-project.org/web/packages/fixest/vignettes/fixest_walkthrough.html#41_Interactions_involving_fixed-effects
+  # and documentation of fixest https://lrberge.github.io/fixest/reference/feglm.html#varying-slopes-1
+  # the point is: we want to allow the year variable to have a different slope (coefficient) for every level of exposure variable
+  
+  # if(s_trend){
+  #   for(eaear_exp_rfs in exposure_rfs){
+  #     fe <- paste0(fe, paste0(" + ",eaear_exp_rfs,"[[year]]")) 
+  #   }
+  # }
+  # 
+  # if(s_trend_loga){
+  #   for(eaear_exp_rfs in exposure_rfs){
+  #     fe <- paste0(fe, paste0(" + ",eaear_exp_rfs,"[[year_ln]]")) 
+  #   }
+  # }
+  # if(s_trend_sq){
+  #   for(eaear_exp_rfs in exposure_rfs){
+  #     fe <- paste0(fe, paste0(" + ",eaear_exp_rfs,"[[year_sq]]")) 
+  #   }
+  # }
+  
+  
   # add pasture share trend
   if(pasture_trend){
     d <- mutate(d, pasture_share_trend = pasture_share_2000 * year)
@@ -523,17 +548,6 @@ make_main_reg <- function(pre_process = FALSE,
     
     controls <- c(controls, "forest_cover_trend")
   }
-  
-  if(s_trend_loga){
-    for(eaear_exp_rfs in exposure_rfs){
-      varname <- paste0(eaear_exp_rfs, "_trend_expo")
-      controls <- c(controls, varname)
-      #make the logarithmic trend start when RFS actually starts, such that it fits best 
-      # so it should be log(1) in 2005 (although never occurring in the data used for analysis but the log trend starts from there) 
-      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * log((year-2004))) 
-    }    
-  }
-  
   if(s_trend){
     # Suitability time trend
     # d <- mutate(d, suitability_trend := !!as.symbol(sj)*(year))#-2000 # doesn't change anything that it's multiplied by 1...19 or 2001...2019
@@ -541,11 +555,29 @@ make_main_reg <- function(pre_process = FALSE,
     for(eaear_exp_rfs in exposure_rfs){
       varname <- paste0(eaear_exp_rfs, "_trend")
       controls <- c(controls, varname)
-      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * (year-2005)) # for the linear trend it does not matter
-    }    
+      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * year) # for the linear trend it does not matter
+    }
   }
-  
-  
+  if(s_trend_loga){
+    for(eaear_exp_rfs in exposure_rfs){
+      varname <- paste0(eaear_exp_rfs, "_trend_loga")
+      controls <- c(controls, varname)
+      #make the logarithmic trend start when RFS actually starts, such that it fits best
+      # so it should be log(1) in 2005 (although never occurring in the data used for analysis but the log trend starts from there)
+      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * year_ln)
+    }
+  }
+  if(s_trend_sq){
+    for(eaear_exp_rfs in exposure_rfs){
+      varname <- paste0(eaear_exp_rfs, "_trend_sq")
+      controls <- c(controls, varname)
+      d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * year_sq)
+    }
+  }
+
+ 
+
+
   if(fc_s_trend){
     # d <- mutate(d, forest_cover_suitability_trend := !!as.symbol(sj)*fc_2000*(year))#-2000 # doesn't change anything that it's multiplied by 1...19 or 2001...2019
     # controls <- c(controls, "forest_cover_suitability_trend")
@@ -553,7 +585,7 @@ make_main_reg <- function(pre_process = FALSE,
       varname <- paste0(eaear_exp_rfs, "_fc_trend")
       controls <- c(controls, varname)
       d <- mutate(d, !!as.symbol(varname) := !!as.symbol(eaear_exp_rfs) * fc_2000 * (year-2000))
-    }  
+    }
   }
   
   
@@ -603,12 +635,14 @@ make_main_reg <- function(pre_process = FALSE,
     # remove units with no country name (in the case of all_drivers data set currently, because nearest_feature function has not been used in this case, see add_variables.R)
     # d <- dplyr::filter(d, !is.na(country_name))
     
-    used_vars <- unique(c("grid_id", "year", "lat", "lon","continent_name",  "country_year",  #"country_name",  "remaining_fc", "accu_defo_since2k", # "sj_year",
+    used_vars <- unique(c("grid_id", "year", "year_ln", "year_sq", "lat", "lon","continent_name",  "country_year",  #"country_name",  "remaining_fc", "accu_defo_since2k", # "sj_year",
                           "grid_id_5", "grid_id_10", "grid_id_20", "grid_id_5_year", "grid_id_10_year", "grid_id_20_year",
                           outcome_variable,# "tmf_agri", "tmf_flood", "tmf_plantation",
                           regressors, controls, 
-                          exposure_rfs, all_eaear_trade_exposure_rfs, original_rfs_treatments, rfs_treatments))    # this is necessary to reconstruct variables in randomization inference processes
+                          exposure_rfs, original_rfs_treatments, rfs_treatments))    # this is necessary to reconstruct variables in randomization inference processes
     
+    # DO NOT INCLUDE all_eaear_trade_exposure_rfs IN used_vars BECAUSE IT MAY HAVE MANY MISSINGS, 
+    # and we won't actually need all its elements
     
     
     # - have no NA nor INF on any of the variables used (otherwise they get removed by {fixest})
@@ -708,7 +742,7 @@ make_main_reg <- function(pre_process = FALSE,
   
   ## Annual mandates
   # joint OR DISJOINT estimation
-  if(aggr_dyn & rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0 ){
+  if(rfs_lead > 0 & rfs_lag > 0 & rfs_fya == 0 & rfs_pya == 0 ){
     for(EOI in c(exposure_rfs, eaear_trade_exposure_rfs)){
       # In this case, we are interested in LEAD AND LAG effects, aggregated separately, and all together.
       df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
@@ -760,13 +794,15 @@ make_main_reg <- function(pre_process = FALSE,
       # regressors of interest
       base_reg_name <- paste0(EOI,"_X_",original_rfs_treatments)
       
-      # Contemporaneous, lead, and lag values
+      # Contemporaneous, lead, and lag values, up to those we want to account for 
       all_roi <- c(base_reg_name, 
-                   grep(pattern = paste0(base_reg_name,"_lead"), 
-                        regressors, value = TRUE),
-                   grep(pattern = paste0(base_reg_name,"_lag"), 
-                        regressors, value = TRUE))
+                   paste0(base_reg_name,"_lead",0:aggr_lead),
+                   paste0(base_reg_name,"_lag",0:aggr_lag))
       
+      # Check that they were in the estimation 
+      all_roi <- all_roi[sapply(all_roi, function(roi){(roi %in% regressors)})]
+      
+      # Keep only 
       df_res[aggr_names[1],"Estimate"] <- reg_res$coefficients[all_roi] %>% sum()
       
       # select the part of the VCOV matrix that is to be used to compute the standard error of the sum
@@ -785,7 +821,7 @@ make_main_reg <- function(pre_process = FALSE,
   
   
   ## Averaged mandates
-  if(aggr_dyn & control_all_absolute_rfs & rfs_lead == 0 & rfs_lag == 0 & rfs_fya > 0 & rfs_pya > 0){
+  if(control_all_absolute_rfs & rfs_lead == 0 & rfs_lag == 0 & rfs_fya > 0 & rfs_pya > 0){
     # In this case, we are interested in AVERAGE LEAD AND LAG effects, separately and aggregated
     df_res <- rbind(rep(NA, ncol(df_res)), df_res)
     
@@ -815,7 +851,7 @@ make_main_reg <- function(pre_process = FALSE,
                                                lower.tail = FALSE, 
                                                df = fixest_df)) 
   }
-  if(aggr_dyn & control_all_absolute_rfs & rfs_lead > 0 & rfs_lag == 0 & rfs_fya == 0 & rfs_pya > 0){
+  if(control_all_absolute_rfs & rfs_lead > 0 & rfs_lag == 0 & rfs_fya == 0 & rfs_pya > 0){
     # In this case, we are interested in aggregated LEAD effects, and all together.
     
     # first aggregate leads
@@ -905,8 +941,8 @@ make_main_reg <- function(pre_process = FALSE,
   
   
   # output wanted
-  if(output == "est_object"){
-    toreturn <- reg_res
+  if(output == "everything"){
+    toreturn <- list(reg_res, d_clean, df_res) 
   }
   
   if(output == "data"){
@@ -933,40 +969,46 @@ make_main_reg <- function(pre_process = FALSE,
 }
 
 #### Main specification -----------------------------------------------------------------------
-est_parameters <- list(start_year = 2009, 
-                       end_year = 2019, 
-                       trade_exposure = NULL, #  "trade_expo_imp", # NULL, # "trade_expo_imp",
+est_parameters <- list(start_year = 2008, 
+                       end_year = 2022, 
+                       trade_exposure = NULL, # "trade_expo", # "trade_expo_imp", #  "trade_expo_imp", # NULL, # "trade_expo_imp",
                        trade_exposure_period = "20012007",
-                       lags = 1,
-                       leads = 1,
+                       lags = 3,
+                       leads = 3,
                        fya = 0, 
                        pya = 0,
+                       aggr_lag = 1, 
+                       aggr_lead = 2,
                        s_trend = FALSE, 
                        s_trend_loga = FALSE,
+                       s_trend_sq = FALSE,
                        clustering = "oneway",
                        cluster_var1 = "grid_id_10")
 
 #### CASH CROPS ------------------------------------------
-# The set of crops which effects are to be estimated jointly
+# All crops, by common set of mechanisms predicted to apply on them
+crops <- list(maize = "eaear_Maizegrain",
+              group1 = c("eaear_Fodder", "eaear_Cereals", "eaear_Rice"), 
+              group2 = c("eaear_Soy_compo", "eaear_Cotton",  "eaear_Oilfeed_crops"), 
+              group4 = c("eaear_Biomass", "eaear_Sugarcane"), 
+              group5 = c("eaear_Tobacco", "eaear_Citrus"), 
+              group3 = c("eaear_Coconut", "eaear_Oilpalm"), 
+              group6 = c("eaear_Banana", "eaear_Cocoa_Coffee", "eaear_Tea", "eaear_Rubber"))
+
+woody_perrenials <- c("eaear_Citrus", "eaear_Coconut", "eaear_Oilpalm", 
+                      "eaear_Banana", "eaear_Cocoa_Coffee", "eaear_Rubber")
+
+
+# The set of crops which share the same dynamics 
 cash_crops <- c("eaear_Maizegrain", 
-                "eaear_Cereals", "eaear_Rice",
-                "eaear_Soy_compo",
-                "eaear_Cotton",  "eaear_Oilfeed_crops")
-
-cash_crops_ctrl <-  c("eaear_Banana", 
-                     "eaear_Biomass", 
-                     "eaear_Citrus",
-                     "eaear_Cocoa_Coffee",
-                     "eaear_Coconut",
-                     "eaear_Maizegrain",
-                     "eaear_Oilpalm",
-                     "eaear_Rubber",
-                     "eaear_Sugarcane", 
-                     "eaear_Tea",
-                     "eaear_Tobacco" )
+                "eaear_Fodder", "eaear_Cereals", "eaear_Rice",
+                "eaear_Soy_compo", "eaear_Cotton",  "eaear_Oilfeed_crops", 
+                "eaear_Sugarcane",
+                "eaear_Tobacco")
 
 
-cash_crops_outcomes <- c("loss_cropland", "loss_commodity")
+
+cash_crops_outcomes <- c("loss_commodity")# "loss_cropland", 
 
 # cash_crops_est <- list(all = list(), 
 #                         America = list(), 
@@ -974,10 +1016,19 @@ cash_crops_outcomes <- c("loss_cropland", "loss_commodity")
 #                         Asia = list())
 cash_crops_est <- list()
 
+loss_type <- "loss_commodity"
 CNT <- "America"
+CROP <- "eaear_Soy_compo"
+
 for(loss_type in cash_crops_outcomes){
-  for(CNT in c("all", "America")){# , "Africa", "Asia"
+  for(CNT in c("all", "America", "Africa", "Asia")){# 
     for(CROP in cash_crops){
+      # determine the crops to control for 
+      crops_ctrl <- crops[sapply(crops, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()
+      if(loss_type =="loss_cropland"){
+        crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials, "eaear_Fodder"))})]
+        est_parameters[["end_year"]] <- 2016
+      }
       # the order of the strata in the list are determiend by how we want to plot results
       cash_crops_est[[loss_type]][[CNT]][[CROP]] <- make_main_reg(continent = CNT, 
                                                      outcome_variable = loss_type, 
@@ -985,11 +1036,11 @@ for(loss_type in cash_crops_outcomes){
                                                      start_year = est_parameters[["start_year"]],
                                                      end_year = est_parameters[["end_year"]],
                                                      
-                                                     # regress on crop at a time, but control for annual interactions with other crops
+                                                     # regress on one crop at a time, and control for other crops
                                                      exposure_rfs = CROP,
                                                      control_all_absolute_rfs = TRUE,
-                                                     annual_rfs_controls = TRUE,
-                                                     all_exposures_rfs = cash_crops_ctrl,
+                                                     annual_rfs_controls = FALSE,
+                                                     all_exposures_rfs = crops_ctrl,
   
                                                      trade_exposure = est_parameters[["trade_exposure"]],
                                                      trade_exposure_period = est_parameters[["trade_exposure_period"]],
@@ -998,12 +1049,21 @@ for(loss_type in cash_crops_outcomes){
                                                      rfs_lag = est_parameters[["lags"]],
                                                      rfs_fya = est_parameters[["fya"]], 
                                                      rfs_pya = est_parameters[["pya"]], 
+                                                     aggr_lead = est_parameters[["aggr_lead"]],
+                                                     aggr_lag = est_parameters[["aggr_lag"]],
+                                                     s_trend = est_parameters[["s_trend"]],
+                                                     s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                     s_trend_sq = est_parameters[["s_trend_sq"]],
                                                      
-                                                     output = "coef_table"  )
+                                                     output = "everything"  )
     }
   }    
 }
 
+est_obj <- cash_crops_est[[loss_type]][[CNT]][[CROP]][[1]]
+est_dat <- cash_crops_est[[loss_type]][[CNT]][[CROP]][[2]]
+est_df <- cash_crops_est[[loss_type]][[CNT]][[CROP]][[3]]
+unique(est_dat$year)
 ### PLOT COEFFICIENTS ### 
 # prepare regression outputs in a tidy data frame readable by dwplot
 rm(df)
@@ -1011,24 +1071,22 @@ loss_cnt_crop_list <- list()
 loss_cnt_list <- list()
 loss_list <- list()
 for(loss_type in cash_crops_outcomes){
-  for(CNT in c("all", "America")){# , "Africa", "Asia"
+  for(CNT in c("America", "Africa", "Asia")){# "all", , "Africa", "Asia"
     for(CROP in cash_crops){
       x <- cash_crops_est[[loss_type]][[CNT]][[CROP]]%>% as.data.frame()
       x$term <- CROP
       x$model <- CNT
       x$loss_type <- loss_type
-      # decide to remove or not sugarcane 
-      x <- x[!grepl(pattern = "expo_X_sugarcane", x = x$term),]
-      
-      loss_cnt_crop_list[[loss_type]][[CNT]][[CROP]] <- x[grepl("_X_aggrall", row.names(x)), ]
+      x <- x[grepl("_X_aggrall", row.names(x)), ]
+      x$via_trade <- grepl("_expo_", row.names(x))
+      loss_cnt_crop_list[[loss_type]][[CNT]][[CROP]] <- x
     }
     loss_cnt_list[[loss_type]][[CNT]] <- loss_cnt_crop_list[[loss_type]][[CNT]] %>% bind_rows()
   }
   loss_list[[loss_type]] <- loss_cnt_list[[loss_type]] %>% bind_rows()
 }
-
 # Choose one outcome type here 
-df <- loss_list[["loss_cropland"]] # "loss_commodity"
+df <- loss_list %>% bind_rows() # "loss_cropland"
 df[df$model == "all", "model"] <- "Global"
 #df$term <- rep(eaear_mapmat[,"Crops"], length(dyn_df_list))
 df$significant01 <- ""
@@ -1036,9 +1094,11 @@ df[df[,"Pr(>|t|)"] < 0.1, "significant01"] <- "p-value < .1"
 
 names(df)[names(df)=="Estimate"] <- "estimate"
 names(df)[names(df)=="Std. Error"] <- "std.error"
+# decide to remove or not sugarcane 
+# x <- x[!grepl(pattern = "expo_X_sugarcane", x = x$term),]
 row.names(df) <- NULL
+df
 
-df_lmt <- df[df$term %in% limited_crops1,]
 {dwplot(df,
         dot_args = list(size = 2.5,aes(shape = model, alpha = significant01)),#, alpha = significant01
         whisker_args = list(size = 1, aes(alpha = significant01)),#alpha = significant01
@@ -1055,12 +1115,12 @@ df_lmt <- df[df$term %in% limited_crops1,]
       eaear_Soy_compo = "Soy", 
       
       eaear_Cotton = "Cotton",
-      eaear_Oilfeed_crops = "Oil crops",
+      eaear_Oilfeed_crops = "Other oil crops",
       
       #eaear_Rapeseed = "Rapeseed", 
       # eaear_Sorghum2 = "Sorghum", 
       eaear_Biomass = "Biomass crops",
-      eaear_Sugarcane = "Sugar crops", 
+      eaear_Sugarcane = "Sugarcane", 
       #eaear_Sunflower = "Sunflower",
       #eaear_Wheat = "Wheat",
       
@@ -1091,7 +1151,44 @@ df_lmt <- df[df$term %in% limited_crops1,]
 
 
 
-
+#### PERRENIALS #### 
+for(loss_type in cash_crops_outcomes){
+  for(CNT in c("all", "America", "Africa", "Asia")){# 
+    for(CROP in cash_crops){
+      # determine the crops to control for 
+      crops_ctrl <- crops[sapply(crops, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()
+      if(loss_type =="loss_cropland"){
+        crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials, "eaear_Fodder"))})]
+        est_parameters[["end_year"]] <- 2016
+      }
+      # the order of the strata in the list are determiend by how we want to plot results
+      cash_crops_est[[loss_type]][[CNT]][[CROP]] <- make_main_reg(continent = CNT, 
+                                                                  outcome_variable = loss_type, 
+                                                                  
+                                                                  start_year = est_parameters[["start_year"]],
+                                                                  end_year = est_parameters[["end_year"]],
+                                                                  
+                                                                  # regress on crop at a time, but control for annual interactions with other crops
+                                                                  exposure_rfs = CROP,
+                                                                  control_all_absolute_rfs = TRUE,
+                                                                  annual_rfs_controls = FALSE,
+                                                                  all_exposures_rfs = crops_ctrl,
+                                                                  
+                                                                  trade_exposure = est_parameters[["trade_exposure"]],
+                                                                  trade_exposure_period = est_parameters[["trade_exposure_period"]],
+                                                                  
+                                                                  rfs_lead = est_parameters[["leads"]], 
+                                                                  rfs_lag = est_parameters[["lags"]],
+                                                                  rfs_fya = est_parameters[["fya"]], 
+                                                                  rfs_pya = est_parameters[["pya"]], 
+                                                                  s_trend = est_parameters[["s_trend"]],
+                                                                  s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                                  s_trend_sq = est_parameters[["s_trend_sq"]],
+                                                                  
+                                                                  output = "coef_table"  )
+    }
+  }    
+}
 
 
 
