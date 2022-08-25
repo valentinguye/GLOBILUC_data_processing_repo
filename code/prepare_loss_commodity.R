@@ -975,48 +975,48 @@ rm(df_cs)
 
 #### REMAINING FOREST ####
 
-df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeaycompo_long.Rdata"))
-
-# Remove gaez variables
-df <- dplyr::select(df,-all_of(gaez_crops))
-
-year_list <- list()
-
-# in the first year (2001), the past year accumulated deforestation is null. 
-year_list[["2001"]] <- df[df$year == 2001, c("grid_id", "year")] 
-year_list[["2001"]][,"accu_defo_since2k"] <- 0
-
-# then, each year's deforestation accumulated in the past is the sum of *past years'* deforestation
-years <- 2002:max(df$year)
-for(y in years){
-  sub_ <- df[df$year < y,]
-  year_list[[as.character(y)]] <- ddply(sub_, "grid_id", summarise,
-                                        accu_defo_since2k = sum(loss_commodity, na.rm = TRUE))
-  year_list[[as.character(y)]][,"year"] <- y
-}
-
-accu_defo_df <- bind_rows(year_list)
-
-df <- inner_join(df, accu_defo_df, by = c("grid_id", "year"))
-
-
-# summary(df$accu_lucpfp_since2k)
-df <- dplyr::mutate(df, 
-                    remaining_fc = fc_2000 - accu_defo_since2k)
-
-fc_2008 <- df[df$year == 2008, c("grid_id", "remaining_fc")]
-names(fc_2008) <- c("grid_id", "fc_2008")
-df <- left_join(df, fc_2008, by = "grid_id")
-
-
-# df[df$grid_id == 1267,c("grid_id", "year", "lucpfap_pixelcount", "accu_lucpfp_since2k", "remain_pf_pixelcount")] 
-
-# put keep only new variables in remaining
-remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k", "fc_2008")] # fc_2000 is added as a raster layer in merge_* scripts
-
-saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeaycompo_remaining.Rdata"))
-
-rm(year_list, sub_, accu_defo_df)
+# df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeaycompo_long.Rdata"))
+# 
+# # Remove gaez variables
+# df <- dplyr::select(df,-all_of(gaez_crops))
+# 
+# year_list <- list()
+# 
+# # in the first year (2001), the past year accumulated deforestation is null. 
+# year_list[["2001"]] <- df[df$year == 2001, c("grid_id", "year")] 
+# year_list[["2001"]][,"accu_defo_since2k"] <- 0
+# 
+# # then, each year's deforestation accumulated in the past is the sum of *past years'* deforestation
+# years <- 2002:max(df$year)
+# for(y in years){
+#   sub_ <- df[df$year < y,]
+#   year_list[[as.character(y)]] <- ddply(sub_, "grid_id", summarise,
+#                                         accu_defo_since2k = sum(loss_commodity, na.rm = TRUE))
+#   year_list[[as.character(y)]][,"year"] <- y
+# }
+# 
+# accu_defo_df <- bind_rows(year_list)
+# 
+# df <- inner_join(df, accu_defo_df, by = c("grid_id", "year"))
+# 
+# 
+# # summary(df$accu_lucpfp_since2k)
+# df <- dplyr::mutate(df, 
+#                     remaining_fc = fc_2000 - accu_defo_since2k)
+# 
+# fc_2008 <- df[df$year == 2008, c("grid_id", "remaining_fc")]
+# names(fc_2008) <- c("grid_id", "fc_2008")
+# df <- left_join(df, fc_2008, by = "grid_id")
+# 
+# 
+# # df[df$grid_id == 1267,c("grid_id", "year", "lucpfap_pixelcount", "accu_lucpfp_since2k", "remain_pf_pixelcount")] 
+# 
+# # put keep only new variables in remaining
+# remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k", "fc_2008")] # fc_2000 is added as a raster layer in merge_* scripts
+# 
+# saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "loss_commodity_aeaycompo_remaining.Rdata"))
+# 
+# rm(year_list, sub_, accu_defo_df)
 
 
 
