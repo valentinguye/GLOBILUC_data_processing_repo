@@ -66,7 +66,7 @@ dir.create(here("temp_data","processed_trade_exposures"))
 # adding up nutritional contents of these categories yields the grand total. 
 categories <- c("Cereals - Excluding Beer" = "all_cereals", 
                 "Starchy Roots" = "roots", 
-                "Sugar Crops" = "sugarcane", # NOTE sugarcane here, to match the choice made to study only sugar cane 
+                "Sugar (Raw Equivalent)" = "sugarcane", # NOTE sugarcane here, to match the choice made to study only sugar cane 
                 "Sugar & Sweeteners" = "sweeteners",
                 "Pulses" = "pulses",
                 "Treenuts" = "treenuts",
@@ -196,7 +196,7 @@ selected_items <- c("Meat",
                     "Sunflowerseed Oil", 
                     "Sunflowerseed Cake",
                     
-                    "Sugar Crops",
+                    "Sugar (Raw Equivalent)",
                     
                     "Tobacco", 
                     
@@ -724,7 +724,7 @@ all_items[selected_items]
 # see sources and discussion of oil/cake content in prepare_loss_commodity.R 
 # Remove NAs, implies to assume NAs are ignorable by their small sizes 
 
-for(elmt in c("production_ktonnes_", "export_ktonnes_", "import_ktonnes_", "stock_var_ktonnes_")){
+for(elmt in c("production_ktonnes_", "export_ktonnes_", "import_ktonnes_", "stock_var_ktonnes_", "domestic_supply_ktonnes_")){
   pfb[, paste0(elmt,"seed_eq_soybean_oil")] <-   pfb[, paste0(elmt,"soybean_oil")]*(1/0.18)
   pfb[, paste0(elmt,"seed_eq_soybean_cake")] <-   pfb[, paste0(elmt,"soybean_cake")]*(1/0.82)
   pfb <- mutate(pfb, !!as.symbol(paste0(elmt,"soy_compo")) := rowSums(across(.cols = any_of(paste0(elmt,c("soybeans", 
@@ -771,7 +771,7 @@ for(elmt in c("production_ktonnes_", "export_ktonnes_", "import_ktonnes_", "stoc
                                                                                                       "seed_eq_cotton_lint")))), 
                                                                                 na.rm = TRUE))
   
-  # And for cereals and cocoa and coffee, weadd up directly
+  # And for cereals and cocoa and coffee, we add up directly
   pfb <- mutate(pfb, !!as.symbol(paste0(elmt,"cereals")) := rowSums(across(.cols = any_of(paste0(elmt,c("barley", 
                                                                                                         "sorghum",
                                                                                                         "wheat")))), 
@@ -794,14 +794,23 @@ for(item in final_items){
                        !!as.symbol(paste0("trade_expo_",item)) := ( !!as.symbol(paste0("export_ktonnes_", item)) + !!as.symbol(paste0("import_ktonnes_", item)) ) /
                                                                     !!as.symbol(paste0("production_ktonnes_", item)),  
                                                                       
-                       !!as.symbol(paste0("export_expo_",item)) := ( !!as.symbol(paste0("export_ktonnes_", item)) ) / !!as.symbol(paste0("production_ktonnes_", item)) ) 
+                       !!as.symbol(paste0("export_expo_",item)) := ( !!as.symbol(paste0("export_ktonnes_", item)) ) / !!as.symbol(paste0("production_ktonnes_", item)), 
+                       
+                       !!as.symbol(paste0("import_expo_",item)) := ( !!as.symbol(paste0("import_ktonnes_", item)) ) / !!as.symbol(paste0("domestic_supply_ktonnes_", item))  ) 
   
   # handle cases where production is 0
   pfb[, paste0("trade_expo_",item)][!is.finite(pfb[, paste0("trade_expo_",item)])] <- NA
   pfb[, paste0("export_expo_",item)][!is.finite(pfb[, paste0("export_expo_",item)])] <- NA
-   # this can produce annual NA but not a pb, as na.rm = TRUE handles it in ddply below. 
+  pfb[, paste0("import_expo_",item)][!is.finite(pfb[, paste0("import_expo_",item)])] <- NA
+  # this can produce annual NA but not a pb, as na.rm = TRUE handles it in ddply below. 
 
 }
+
+# pfb[pfb$country_name=="Brazil",grepl("sugar",names(pfb))]
+# pfb[pfb$country_name=="Indonesia",grepl("palm",names(pfb))]
+# pfb[pfb$country_name=="Brazil",grepl("soy",names(pfb))]
+# pfb[pfb$country_name=="Brazil",grepl("fodder",names(pfb))]
+
 
 ### AVERAGE OVER YEARS 
 # We average over different sets of years, as it is not clear in advance what is the most appropriate period (there are trade-offs)
@@ -848,7 +857,24 @@ for(pretreat_period in pretreat_year_sets){
                 !!as.symbol("export_expo_cocoa_coffee") := mean(!!as.symbol("export_expo_cocoa_coffee"), na.rm = TRUE),
                 !!as.symbol("export_expo_tea") := mean(!!as.symbol("export_expo_tea"), na.rm = TRUE), 
                 !!as.symbol("export_expo_banana") := mean(!!as.symbol("export_expo_banana"), na.rm = TRUE), 
-                !!as.symbol("export_expo_rubber") := mean(!!as.symbol("export_expo_rubber"), na.rm = TRUE)
+                !!as.symbol("export_expo_rubber") := mean(!!as.symbol("export_expo_rubber"), na.rm = TRUE),
+                
+                !!as.symbol("import_expo_fodder") := mean(!!as.symbol("import_expo_fodder"), na.rm = TRUE), 
+                !!as.symbol("import_expo_maizegrain") := mean(!!as.symbol("import_expo_maizegrain"), na.rm = TRUE), 
+                !!as.symbol("import_expo_cereals") := mean(!!as.symbol("import_expo_cereals"), na.rm = TRUE), 
+                !!as.symbol("import_expo_rice") := mean(!!as.symbol("import_expo_rice"), na.rm = TRUE), 
+                !!as.symbol("import_expo_soy_compo") := mean(!!as.symbol("import_expo_soy_compo"), na.rm = TRUE), 
+                !!as.symbol("import_expo_cotton") := mean(!!as.symbol("import_expo_cotton"), na.rm = TRUE), 
+                !!as.symbol("import_expo_oilfeed_crops") := mean(!!as.symbol("import_expo_oilfeed_crops"), na.rm = TRUE), 
+                !!as.symbol("import_expo_sugarcane") := mean(!!as.symbol("import_expo_sugarcane"), na.rm = TRUE), 
+                !!as.symbol("import_expo_tobacco") := mean(!!as.symbol("import_expo_tobacco"), na.rm = TRUE), 
+                !!as.symbol("import_expo_citrus") := mean(!!as.symbol("import_expo_citrus"), na.rm = TRUE), 
+                !!as.symbol("import_expo_oilpalm") := mean(!!as.symbol("import_expo_oilpalm"), na.rm = TRUE),
+                !!as.symbol("import_expo_coconut") := mean(!!as.symbol("import_expo_coconut"), na.rm = TRUE),
+                !!as.symbol("import_expo_cocoa_coffee") := mean(!!as.symbol("import_expo_cocoa_coffee"), na.rm = TRUE),
+                !!as.symbol("import_expo_tea") := mean(!!as.symbol("import_expo_tea"), na.rm = TRUE), 
+                !!as.symbol("import_expo_banana") := mean(!!as.symbol("import_expo_banana"), na.rm = TRUE), 
+                !!as.symbol("import_expo_rubber") := mean(!!as.symbol("import_expo_rubber"), na.rm = TRUE)
   )
   
   # make another metric, that imputes the international average to country-crops where all information is missing (i.e. production, export, and import are NA every year)
@@ -860,6 +886,9 @@ for(pretreat_period in pretreat_year_sets){
     csfb[,paste0("export_expo_imp_",item)] <- csfb[,paste0("export_expo_",item)]  
     csfb[is.nan(csfb[,paste0("export_expo_imp_",item)]),paste0("export_expo_imp_",item)] <- mean(csfb[,paste0("export_expo_",item)], na.rm = TRUE)
     
+    csfb[,paste0("import_expo_imp_",item)] <- csfb[,paste0("import_expo_",item)]  
+    csfb[is.nan(csfb[,paste0("import_expo_imp_",item)]),paste0("import_expo_imp_",item)] <- mean(csfb[,paste0("import_expo_",item)], na.rm = TRUE)
+    
   }
   
   # Finally, simply add columns for biomass, just to match main_data without error
@@ -867,6 +896,8 @@ for(pretreat_period in pretreat_year_sets){
   csfb$trade_expo_imp_biomass <- NA
   csfb$export_expo_biomass <- NA
   csfb$export_expo_imp_biomass <- NA
+  csfb$import_expo_biomass <- NA
+  csfb$import_expo_imp_biomass <- NA
   
   saveRDS(csfb, file = here("temp_data", "processed_trade_exposures", paste0("trade_exposures_",
                                                                        min(pretreat_period),
