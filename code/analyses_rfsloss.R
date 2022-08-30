@@ -100,7 +100,7 @@ eaear_mapmat_data <- c(
   "Cocoa_Coffee", "eaear_Cocoa_Coffee",
   # "Coconut_oil", "eaear_Coconut",
   #"Coffee", "eaear_Coffee",
-  # "Cotton", "eaear_Cotton",
+  "Cotton", "eaear_Cotton",
   #"Groundnuts", "eaear_Groundnut",
   "Beef", "eaear_Fodder", 
   "Maize", "eaear_Maizegrain",
@@ -341,39 +341,44 @@ ggplot(w_rfs, aes(x=year, y=`Billions of gallons (ethanol-equivalent)`/coeff, fi
 
 
 ### MAP CUMULATIVE DEFORESTATION FOR COMMODITIES #### 
-cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_commo_resampledgaez_0119.tif")) 
-cdl_crop <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_cropland_resampledgaez_0119.tif")) 
+# cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_commo_resampledgaez_0119.tif")) 
+# cdl_crop <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_cropland_resampledgaez_0119.tif")) 
 cdl_cropcommo <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_croplandcommo_resampledgaez_0119.tif")) 
 cdl_oilpalm <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_oilpalmindus_resampledgaez_0119.tif")) 
-cdl_pasture <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_pasture_resampledgaez_0119.tif")) 
+cdl_residual <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_pasture_resampledgaez_0119.tif")) 
 
-cdl_accu <- sum(cdl[[09:15]], na.rm = TRUE)
-cdl_crop_accu <- sum(cdl_crop[[09:15]], na.rm = TRUE)
-cdl_cropcommo_accu <- sum(cdl_cropcommo[[09:15]], na.rm = TRUE)
-cdl_oilpalm_accu <- sum(cdl_oilpalm[[09:15]], na.rm = TRUE)
-cdl_pasture_accu <- sum(cdl_pasture[[09:15]], na.rm = TRUE)
+## Prepare quantity to map ## 
+# cdl_accu <- sum(cdl[[10:16]], na.rm = TRUE)
+# cdl_crop_accu <- sum(cdl_crop[[10:16]], na.rm = TRUE)
+cdl_cropcommo_accu <- sum(cdl_cropcommo[[10:16]], na.rm = TRUE)
+cdl_oilpalm_accu <- sum(cdl_oilpalm[[10:16]], na.rm = TRUE)
+cdl_residual_accu <- sum(cdl_residual[[10:16]], na.rm = TRUE)
 
-cdl_total_gross <- sum(stack(cdl_cropcommo_accu, cdl_oilpalm_accu, cdl_pasture_accu), na.rm =TRUE)
+# cdl_total_gross <- sum(stack(cdl_cropcommo_accu, cdl_oilpalm_accu, cdl_residual_accu), na.rm =TRUE)
 
-cdl_accu <- cdl_total_gross
-cdl_accu <- cdl_crop_accu
-cdl_accu <- cdl_cropcommo_accu
-cdl_accu <- cdl_pasture_accu
-cdl_accu <- cdl_oilpalm_accu
+stack_cdl_accu <- stack(cdl_cropcommo_accu, cdl_oilpalm_accu, cdl_residual_accu)
 
-vcdl <- values(cdl_accu)
-summary(vcdl)
-rm(vcdl)
-cdl_accu <- reclassify(cdl_accu, cbind(0, NA))
-#plot(cdl_accu)
-a <- raster::area(cdl_accu)
-cdl_accu <- stack(cdl_accu, a)
-accu_pct <- overlay(cdl_accu, fun = function(x, y){pct <- x/(100*y)
-# pct <- if_else(pct>1, 1, pct)
-return(pct)})
-vpct <- values(accu_pct)
-summary(vpct)
+stack_accu_pct <- raster()
+for(i in 1:nlayers(stack_cdl_accu)){
+  cdl_accu <- stack_cdl_accu[[i]]
+  vcdl <- values(cdl_accu)
+  summary(vcdl)
+  rm(vcdl)
+  cdl_accu <- reclassify(cdl_accu, cbind(0, NA))
+  #plot(cdl_accu)
+  a <- raster::area(cdl_accu)
+  cdl_accu <- stack(cdl_accu, a)
+  accu_pct <- overlay(cdl_accu, fun = function(x, y){pct <- x/(100*y)
+  # pct <- if_else(pct>1, 1, pct)
+  return(pct)})
+  vpct <- values(accu_pct)
+  summary(vpct)
+  
+  stack_accu_pct <- stack(stack_accu_pct, accu_pct)
+}
 
+names(stack_accu_pct) <- c("cropland", "oil palm", "residual")
+## Keep only interesting regions 
 america_coords <- matrix(c(-95, 25, -33, 25,
                            -33, -30, -95, -30, 
                            -95, 25), ncol = 2, byrow = TRUE)
@@ -397,6 +402,20 @@ asia_ext <- st_polygon(list(asia_coords)) %>% st_sfc(crs = 4326)
 sfc <- c(asia_ext, america_ext, africa_ext)
 continents <- st_sf(data.frame(continent_name = c("Asia", "America", "Africa"), geom = sfc))
 
+am <- crop(stack_accu_pct, continents[continents$continent_name=="America",])
+af <- crop(stack_accu_pct, continents[continents$continent_name=="Africa",])
+as <- crop(stack_accu_pct, continents[continents$continent_name=="Asia",])
+
+amdf <- raster::as.data.frame(am, xy = TRUE, na.rm = FALSE, long = TRUE)
+afdf <- raster::as.data.frame(af, xy = TRUE, na.rm = FALSE, long = TRUE)
+asdf <- raster::as.data.frame(as, xy = TRUE, na.rm = FALSE, long = TRUE)
+
+amdf$continent <- "South America"
+afdf$continent <- "Africa"
+asdf$continent <- "South East Asia"
+
+facet_df <- rbind(amdf, afdf, asdf)
+
 
 land <- st_read(here("input_data", "ne_50m_land"))
 unique(land$scalerank)
@@ -405,9 +424,21 @@ land <- land[land$scalerank==0, c("geometry")]
 spLand <- as(land, "Spatial")
 
 
-am <- crop(accu_pct, continents[continents$continent_name=="America",])
-af <- crop(accu_pct, continents[continents$continent_name=="Africa",])
-as <- crop(accu_pct, continents[continents$continent_name=="Asia",])
+ggplot() +
+  geom_raster(data = facet_df, aes(x = x, y = y, fill = value)) +
+  #geom_sf(data = land) +
+
+  facet_wrap(facets = ~layer+continent) +
+  #coord_equal() +
+  scale_fill_viridis_c() +
+  theme_void() +
+  theme(
+    legend.position = "bottom"
+  )
+
+
+
+
 
 #library(gridExtra)
 library(rasterVis)
@@ -423,7 +454,7 @@ pam <- levelplot(am, margin = FALSE,
 
 paf <-levelplot(af, margin = FALSE,
                 xlab = "", ylab = "",
-                colorkey=FALSE,
+                # colorkey=FALSE,
                 # scales=list(draw = FALSE), x=list(draw=FALSE)           
                 col.regions=magma(n = 10000, direction = -1),                   
                 #at=seq(0, 10000),
