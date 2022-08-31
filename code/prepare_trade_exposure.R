@@ -877,8 +877,8 @@ for(pretreat_period in pretreat_year_sets){
                 !!as.symbol("import_expo_rubber") := mean(!!as.symbol("import_expo_rubber"), na.rm = TRUE)
   )
   
-  # make another metric, that imputes the international average to country-crops where all information is missing (i.e. production, export, and import are NA every year)
   for(item in final_items){
+  # make another metric, that imputes the international average to country-crops where all information is missing (i.e. production, export, and import are NA every year)
     
     csfb[,paste0("trade_expo_imp_",item)] <- csfb[,paste0("trade_expo_",item)]  
     csfb[is.nan(csfb[,paste0("trade_expo_imp_",item)]),paste0("trade_expo_imp_",item)] <- mean(csfb[,paste0("trade_expo_",item)], na.rm = TRUE)
@@ -889,15 +889,30 @@ for(pretreat_period in pretreat_year_sets){
     csfb[,paste0("import_expo_imp_",item)] <- csfb[,paste0("import_expo_",item)]  
     csfb[is.nan(csfb[,paste0("import_expo_imp_",item)]),paste0("import_expo_imp_",item)] <- mean(csfb[,paste0("import_expo_",item)], na.rm = TRUE)
     
+  # and one where NAs are imputed to be 0s
+    csfb[,paste0("trade_expo_imp0_",item)] <- csfb[,paste0("trade_expo_",item)]  
+    csfb[is.nan(csfb[,paste0("trade_expo_imp0_",item)]),paste0("trade_expo_imp0_",item)] <- 0
+    
+    csfb[,paste0("export_expo_imp0_",item)] <- csfb[,paste0("export_expo_",item)]  
+    csfb[is.nan(csfb[,paste0("export_expo_imp0_",item)]),paste0("export_expo_imp0_",item)] <- 0
+    
+    csfb[,paste0("import_expo_imp0_",item)] <- csfb[,paste0("import_expo_",item)]  
+    csfb[is.nan(csfb[,paste0("import_expo_imp0_",item)]),paste0("import_expo_imp0_",item)] <- 0
+    
   }
   
   # Finally, simply add columns for biomass, just to match main_data without error
   csfb$trade_expo_biomass <- NA
   csfb$trade_expo_imp_biomass <- NA
+  csfb$trade_expo_imp0_biomass <- NA
+  
   csfb$export_expo_biomass <- NA
   csfb$export_expo_imp_biomass <- NA
+  csfb$export_expo_imp0_biomass <- NA
+  
   csfb$import_expo_biomass <- NA
   csfb$import_expo_imp_biomass <- NA
+  csfb$import_expo_imp0_biomass <- NA
   
   saveRDS(csfb, file = here("temp_data", "processed_trade_exposures", paste0("trade_exposures_",
                                                                        min(pretreat_period),
