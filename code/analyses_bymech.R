@@ -1,4 +1,65 @@
+##### 0. PACKAGES, WD, OBJECTS #####
 
+
+### WORKING DIRECTORY SHOULD BE CORRECT IF THIS SCRIPT IS RUN WITHIN R_project_for_individual_runs
+### OR CALLED FROM LUCFP PROJECT master.do FILE.
+### IN ANY CASE IT SHOULD BE (~/LUCFP/data_processing) 
+
+
+### PACKAGES ###
+# see this project's README for a better understanding of how packages are handled in this project. 
+
+# These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
+neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
+                    "here", "readstata13", "foreign", "readxl", "writexl",
+                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
+                    "lubridate","exactextractr",
+                    "doParallel", "foreach", "snow", "parallel",
+                    "knitr", "kableExtra",
+                    "DataCombine", 
+                    "fixest", 
+                    "boot", "fwildclusterboot", "sandwich", "MASS",
+                    "ggplot2", "leaflet", "tmap",  "dotwhisker", "viridis", "hrbrthemes")
+# "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
+
+# Install them in their project-specific versions
+renv::restore(packages = neededPackages)
+
+# Load them
+lapply(neededPackages, library, character.only = TRUE)
+
+# /!\/!\ IF renv::restore(neededPackages) FAILS TO INSTALL SOME PACKAGES /!\/!\ 
+
+# For instance sf could cause trouble https://github.com/r-spatial/sf/issues/921 
+# or magick, as a dependency of raster and rgdal. 
+
+# FOLLOW THESE STEPS:
+# 1. Remove these package names from neededPackages above, and rerun renv::restore(packages = neededPackages)
+# 2. Write them in troublePackages below, uncomment, and run the following code chunk: 
+
+# # /!\ THIS BREAKS THE PROJECT REPRODUCIBILITY GUARANTY /!\
+# troublePackages <- c() 
+# # Attempt to load packages from user's default libraries.
+# lapply(troublePackages, library, lib.loc = default_libraries, character.only = TRUE)
+
+# 3. If the troubling packages could not be loaded ("there is no package called ...") 
+#   you should try to install them, preferably in their versions stated in the renv.lock file. 
+#   see in particular https://rstudio.github.io/renv/articles/renv.html 
+
+
+# # # /!\ THIS BREAKS THE PROJECT REPRODUCIBILITY GUARANTY /!\
+# troublePackages <- c("leaflet", "leaflet.providers", "png")
+# # Attempt to load packages from user's default libraries.
+# lapply(troublePackages, library, lib.loc = default_libraries, character.only = TRUE)
+
+### WORKING DIRECTORY SHOULD BE CORRECT IF THIS SCRIPT IS RUN WITHIN R_project_for_individual_runs
+### OR CALLED FROM LUCFP PROJECT master.do FILE.
+### IN ANY CASE IT SHOULD BE (~/LUCFP/data_processing
+
+### NEW FOLDERS USED IN THIS SCRIPT 
+dir.create(here("temp_data","reg_results", "alpha"))
+dir.create(here("temp_data","reg_results", "beta"))
+dir.create(here("temp_data","reg_results", "rfs", "result_lists"))
 
 ### GLOBAL CRS USED ### 
 mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
@@ -961,12 +1022,14 @@ make_main_reg <- function(pre_process = FALSE,
 # this is data less for now: does not recompute SE 
 est_obj <- all_tests_est[[CNT]][[CROP]]
 base_exposure = CROP
+trade_exposure = est_parameters[["trade_exposure"]]
 aggr_lag = est_parameters[["aggr_lag"]]
 aggr_lead = est_parameters[["aggr_lead"]]
 output = "tstat"
 rm(est_obj, base_exposure, crop_k, aggr_lag, aggr_lead, output)
 post_est_fnc <- function(est_obj, # a fixest estmation object
                          base_exposure = CROP,
+                         trade_exposure = est_parameters[["trade_exposure"]],
                          aggr_lag = est_parameters[["aggr_lag"]], 
                          aggr_lead = est_parameters[["aggr_lead"]], 
                          output = "tstat"){
@@ -979,7 +1042,13 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
   
   df_res <- df_res[grepl(base_exposure, row.names(df_res)), ]
   
-  crop_k <- base_exposure
+  if(length(trade_exposure)>0){
+    crop_k <- paste0("eaear_",trade_exposure,"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = base_exposure) ) ) 
+  } else {
+    crop_k <- base_exposure
+  }
+  
+  
   #for(crop_k in base_exposure){
     # regressors of interest
     base_reg_name <- paste0(crop_k,"_X_statute_conv")
@@ -1030,7 +1099,7 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
 #### Main specification -----------------------------------------------------------------------
 est_parameters <- list(start_year = 2008, 
                        end_year = 2016, 
-                       trade_exposure = NULL, # "trade_expo", # "trade_expo_imp", #  "trade_expo_imp", # NULL, # "trade_expo_imp",
+                       trade_exposure = NULL, #"export_expo", #  # "trade_expo_imp", #  "trade_expo_imp", # NULL, # "trade_expo_imp",
                        trade_exposure_period = "20012007",
                        annual_rfs_controls = TRUE,
                        leads = 1,
@@ -1038,7 +1107,7 @@ est_parameters <- list(start_year = 2008,
                        fya = 0, 
                        pya = 0,
                        aggr_lead = 1,
-                       aggr_lag = 3, 
+                       aggr_lag = 2, 
                        sjpos= FALSE,
                        s_trend = FALSE, 
                        s_trend_loga = FALSE,
@@ -1079,7 +1148,7 @@ continents <- c("all", "America", "Africa", "Asia") # "all"#
 
 ### DATA 
 main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long_final.Rdata"))
-main_data <- dplyr::mutate(main_data, loss_commodity = loss_cropland + loss_oilpalm_both + loss_pasture)
+#main_data <- dplyr::mutate(main_data, loss_commodity = loss_cropland + loss_oilpalm_both + loss_pasture)
 # release some memory upfront
 main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
 
@@ -1102,11 +1171,12 @@ for(CNT in continents){
   
   # GROUP 1-2 
   for(CROP in c(gentest_crops, displtest_crops)){
-    ## Determine the crops to control for 
+    ## Determine the crops to control for
     crops_ctrl <- crops_groups[sapply(crops_groups, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()  # this removes from the set of controls, the crops that are in the same group as CROP
     #crops_ctrl <- all_crops
-  
-    # further remove woody perennials and pastures, if we regress cropland anyway
+
+    # **NOPE** (control transitory LUC)
+    # further remove woody perennials and pastures, if we regress cropland anyway 
     # crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials))})]# , "eaear_Fodder"
 
     # the order of the strata in the list are determined by how we want to plot results
@@ -1135,71 +1205,74 @@ for(CNT in continents){
                                                    s_trend_sq = est_parameters[["s_trend_sq"]],
 
                                                    output = est_parameters[["output"]])
-    
+
   }
   
   ### OIL PALM (GROUP 3) ### 
-  oilpalm_ctrl <- all_crops
-  all_tests_est[[CNT]][["eaear_Oilpalm"]] <- make_main_reg(continent = CNT, 
-                                                            outcome_variable = "loss_oilpalm_both", 
-                                                            start_year = est_parameters[["start_year"]],
-                                                            end_year = est_parameters[["end_year"]],
-                                                            
-                                                            # regress on crop at a time, but control for annual interactions with other crops
-                                                            exposure_rfs = "eaear_Oilpalm",
-                                                            control_all_absolute_rfs = TRUE,
-                                                            annual_rfs_controls = TRUE,
-                                                            all_exposures_rfs = oilpalm_ctrl,
-                                                            
-                                                           trade_exposure = est_parameters[["trade_exposure"]],
-                                                           trade_exposure_period = est_parameters[["trade_exposure_period"]],
-                                                           
-                                                            rfs_lead = est_parameters[["leads"]],
-                                                            rfs_lag = est_parameters[["lags"]],
-                                                            aggr_lead = est_parameters[["aggr_lead"]],
-                                                            aggr_lag = est_parameters[["aggr_lag"]],
-                                                            sjpos = est_parameters[["sjpos"]],
-                                                            s_trend = FALSE,
-                                                            s_trend_loga = FALSE,
-                                                            s_trend_sq = FALSE,
-                                                            
-                                                            output = est_parameters[["output"]] )
   
-  ### GROUP 6 ###
-  loss_type <- "loss_pasture"
-  for(CROP in c(g6_crops, "eaear_Coconut", "eaear_Citrus")){
-    #resid_crops_ctrl <- crops_groups[sapply(crops_groups, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()
-    resid_crops_ctrl <- all_crops
-    # we do control for fodder when regressing loss_pasture, but not oil palm which we know is not in there
-    # resid_crops_ctrl <- c("eaear_Fodder", resid_crops_ctrl[!(resid_crops_ctrl %in% c(cropland_crops, "eaear_Oilpalm"))] )
-    
-    all_tests_est[[CNT]][[CROP]] <- make_main_reg(continent = CNT,
-                                                              outcome_variable = loss_type,
-                                                              
+  oilpalm_ctrl <- cropland_crops
+  # oilpalm_ctrl <- c()
+  for(oilpalm_loss in c("loss_oilpalm_both", "loss_oilpalm_indus")){
+    all_tests_est[[CNT]][[oilpalm_loss]] <- make_main_reg(continent = CNT,
+                                                              outcome_variable = oilpalm_loss,
                                                               start_year = est_parameters[["start_year"]],
                                                               end_year = est_parameters[["end_year"]],
-                                                              
-                                                              # regress on one crop at a time, and control for other crops
-                                                              exposure_rfs = CROP,
+  
+                                                              # regress on crop at a time, but control for annual interactions with other crops
+                                                              exposure_rfs = "eaear_Oilpalm",
                                                               control_all_absolute_rfs = TRUE,
-                                                              annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
-                                                              all_exposures_rfs = resid_crops_ctrl,
-                                                              
-                                                              trade_exposure = est_parameters[["trade_exposure"]],
-                                                              trade_exposure_period = est_parameters[["trade_exposure_period"]],
-                                                              
+                                                              annual_rfs_controls = TRUE,
+                                                              all_exposures_rfs = oilpalm_ctrl,
+  
+                                                             trade_exposure = est_parameters[["trade_exposure"]],
+                                                             trade_exposure_period = est_parameters[["trade_exposure_period"]],
+  
                                                               rfs_lead = est_parameters[["leads"]],
                                                               rfs_lag = est_parameters[["lags"]],
                                                               aggr_lead = est_parameters[["aggr_lead"]],
                                                               aggr_lag = est_parameters[["aggr_lag"]],
                                                               sjpos = est_parameters[["sjpos"]],
-                                                              s_trend = est_parameters[["s_trend"]],
-                                                              s_trend_loga = est_parameters[["s_trend_loga"]],
-                                                              s_trend_sq = est_parameters[["s_trend_sq"]],
-                                                              
-                                                              output = est_parameters[["output"]])
-    
+                                                              s_trend = FALSE,
+                                                              s_trend_loga = FALSE,
+                                                              s_trend_sq = FALSE,
+  
+                                                              output = est_parameters[["output"]] )
   }
+  ### GROUP 6 ###
+  # loss_type <- "loss_pasture"
+  # for(CROP in c(g6_crops, "eaear_Coconut", "eaear_Citrus")){
+  #   #resid_crops_ctrl <- crops_groups[sapply(crops_groups, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()
+  #   resid_crops_ctrl <- all_crops
+  #   # we do control for fodder when regressing loss_pasture, but not oil palm which we know is not in there
+  #   resid_crops_ctrl <- c("eaear_Fodder", resid_crops_ctrl[!(resid_crops_ctrl %in% c(cropland_crops, "eaear_Oilpalm"))] )
+  # 
+  #   all_tests_est[[CNT]][[CROP]] <- make_main_reg(continent = CNT,
+  #                                                             outcome_variable = loss_type,
+  # 
+  #                                                             start_year = est_parameters[["start_year"]],
+  #                                                             end_year = est_parameters[["end_year"]],
+  # 
+  #                                                             # regress on one crop at a time, and control for other crops
+  #                                                             exposure_rfs = CROP,
+  #                                                             control_all_absolute_rfs = TRUE,
+  #                                                             annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+  #                                                             all_exposures_rfs = resid_crops_ctrl,
+  # 
+  #                                                             trade_exposure = est_parameters[["trade_exposure"]],
+  #                                                             trade_exposure_period = est_parameters[["trade_exposure_period"]],
+  # 
+  #                                                             rfs_lead = est_parameters[["leads"]],
+  #                                                             rfs_lag = est_parameters[["lags"]],
+  #                                                             aggr_lead = est_parameters[["aggr_lead"]],
+  #                                                             aggr_lag = est_parameters[["aggr_lag"]],
+  #                                                             sjpos = est_parameters[["sjpos"]],
+  #                                                             s_trend = est_parameters[["s_trend"]],
+  #                                                             s_trend_loga = est_parameters[["s_trend_loga"]],
+  #                                                             s_trend_sq = est_parameters[["s_trend_sq"]],
+  # 
+  #                                                             output = est_parameters[["output"]])
+  # 
+  # }
 }
 
 # est_obj <- gentest_crops_est[[loss_type]][[CNT]][[CROP]][[1]]
@@ -1208,8 +1281,8 @@ for(CNT in continents){
 # unique(est_dat$year)
 
 
-all_tests_est[["America"]][["eaear_Tea"]] %>% post_est_fnc(base_exposure = "eaear_Tea")
-all_tests_est[["America"]][["eaear_Biomass"]] %>% summary()
+all_tests_est[["all"]][["loss_oilpalm_both"]] %>% post_est_fnc(base_exposure = "eaear_Oilpalm")
+all_tests_est[["America"]][["loss_oilpalm_indus"]] %>% summary()
 all_tests_est[["America"]][["eaear_Biomass"]]
 
 ### PLOT COEFFICIENTS ### 
@@ -1222,6 +1295,7 @@ for(CNT in continents){# "all", , "Africa", "Asia"
     # extract t stats of coef of interest 
     x <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], 
                       base_exposure = CROP,
+                      trade_exposure = est_parameters[["trade_exposure"]],
                       aggr_lag = est_parameters[["aggr_lag"]], 
                       aggr_lead = est_parameters[["aggr_lead"]], 
                       output = "tstat")
