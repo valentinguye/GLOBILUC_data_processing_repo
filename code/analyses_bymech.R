@@ -64,6 +64,34 @@ dir.create(here("temp_data","reg_results", "rfs", "result_lists"))
 ### GLOBAL CRS USED ### 
 mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
 
+
+### LABEL FOR PLOTS 
+# relabel terms (for y axis)
+# row.names(df) <- NULL
+# df <- mutate(df, term = paste0(crop,".",Dynamics))
+# predictors_dict <- rep("", length(df$term)) 
+# names(predictors_dict) <- df$term
+# predictors_dict[grepl("Cumulative", names(predictors_dict))] <- df$crop[grepl("Cumulative", names(predictors_dict))]
+# df <- relabel_predictors(df,predictors_dict) 
+predictors_dict <- c(eaear_Maizegrain = "Maize",
+                     eaear_Fodder = "Pasture",
+                     eaear_Cereals = "Cereals",
+                     eaear_Rice = "Rice",
+                     eaear_Soy_compo = "Soy",
+                     eaear_Cotton = "Cotton",
+                     eaear_Oilfeed_crops = "Other oil crops",
+                     eaear_Biomass = "Biomass crops",
+                     eaear_Sugarcane = "Sugarcane",
+                     eaear_Tobacco = "Tobacco",
+                     eaear_Citrus = "Citrus",
+                     eaear_Oilpalm = "Oil palm",
+                     eaear_Coconut = "Coconut",
+                     eaear_Banana = "Banana",
+                     eaear_Cocoa_Coffee = "Cocoa or Coffee",
+                     eaear_Tea = "Tea",
+                     eaear_Rubber = "Rubber" )
+
+
 ### OBJECTS USED IN RFS PROCESSES ###
 
 ### RFS DATA #### 
@@ -1101,7 +1129,7 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
 #### Main specification -----------------------------------------------------------------------
 est_parameters <- list(start_year = 2008, 
                        end_year = 2016, 
-                       trade_exposure = "export_expo_imp0", # NULL, #  # # "trade_expo_imp", #  "trade_expo_imp", # NULL, # "trade_expo_imp",
+                       trade_exposure = NULL, #  "export_expo", # # # "trade_expo_imp", #  "trade_expo_imp", # NULL, # "trade_expo_imp",
                        trade_exposure_period = "20012007",
                        annual_rfs_controls = TRUE,
                        leads = 1,
@@ -1109,13 +1137,14 @@ est_parameters <- list(start_year = 2008,
                        fya = 0, 
                        pya = 0,
                        aggr_lead = 1,
-                       aggr_lag = 3, 
+                       aggr_lag = 1, 
                        sjpos= FALSE,
                        s_trend = FALSE, 
                        s_trend_loga = FALSE,
                        s_trend_sq = FALSE,
                        clustering = "oneway",
                        cluster_var1 = "grid_id_10", 
+                       glm_iter = 25,
                        output = "est_object") # !!! MIND THIS ARG "est_object", "everything" "coef_table"
 
 # This sets the crops that are controled for 
@@ -1184,50 +1213,52 @@ for(CNT in continents){
   ### CROPLAND ### 
   loss_type <- "loss_cropland"
   
-  # GROUP 1-2 
-  # for(CROP in c(gentest_crops, displtest_crops)){
-  #   ## Determine the crops to control for
-  #   #crops_ctrl <- crops_groups[sapply(crops_groups, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()  # this removes from the set of controls, the crops that are in the same group as CROP
-  #   crops_ctrl <- all_crops
-  # 
-  #   # **NOPE** (control transitory LUC)
-  #   # further remove woody perennials and pastures, if we regress cropland anyway
-  #   # crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials))})]# , "eaear_Fodder"
-  # 
-  #   # the order of the strata in the list are determined by how we want to plot results
-  #   all_tests_est[[CNT]][[CROP]] <- make_main_reg(continent = CNT,
-  #                                                  outcome_variable = loss_type,
-  # 
-  #                                                  start_year = est_parameters[["start_year"]],
-  #                                                  end_year = est_parameters[["end_year"]],
-  # 
-  #                                                  # regress on one crop at a time, and control for other crops
-  #                                                  exposure_rfs = CROP,
-  #                                                  control_all_absolute_rfs = TRUE,
-  #                                                  annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
-  #                                                  all_exposures_rfs = crops_ctrl,
-  # 
-  #                                                  trade_exposure = est_parameters[["trade_exposure"]],
-  #                                                  trade_exposure_period = est_parameters[["trade_exposure_period"]],
-  # 
-  #                                                  rfs_lead = est_parameters[["leads"]],
-  #                                                  rfs_lag = est_parameters[["lags"]],
-  #                                                  aggr_lead = est_parameters[["aggr_lead"]],
-  #                                                  aggr_lag = est_parameters[["aggr_lag"]],
-  #                                                  sjpos = est_parameters[["sjpos"]],
-  #                                                  s_trend = est_parameters[["s_trend"]],
-  #                                                  s_trend_loga = est_parameters[["s_trend_loga"]],
-  #                                                  s_trend_sq = est_parameters[["s_trend_sq"]],
-  # 
-  #                                                  output = est_parameters[["output"]])
-  # 
-  # }
+  # GROUP 1-2
+  for(CROP in c(gentest_crops, displtest_crops)){
+    ## Determine the crops to control for
+    #crops_ctrl <- crops_groups[sapply(crops_groups, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()  # this removes from the set of controls, the crops that are in the same group as CROP
+    crops_ctrl <- all_crops
+
+    # **NOPE** (control transitory LUC)
+    # further remove woody perennials and pastures, if we regress cropland anyway
+    # crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials))})]# , "eaear_Fodder"
+
+    # the order of the strata in the list are determined by how we want to plot results
+    all_tests_est[[CNT]][[CROP]] <- make_main_reg(continent = CNT,
+                                                   outcome_variable = loss_type,
+
+                                                   start_year = est_parameters[["start_year"]],
+                                                   end_year = est_parameters[["end_year"]],
+
+                                                   # regress on one crop at a time, and control for other crops
+                                                   exposure_rfs = CROP,
+                                                   control_all_absolute_rfs = TRUE,
+                                                   annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                                   all_exposures_rfs = crops_ctrl,
+
+                                                   trade_exposure = est_parameters[["trade_exposure"]],
+                                                   trade_exposure_period = est_parameters[["trade_exposure_period"]],
+
+                                                   rfs_lead = est_parameters[["leads"]],
+                                                   rfs_lag = est_parameters[["lags"]],
+                                                   aggr_lead = est_parameters[["aggr_lead"]],
+                                                   aggr_lag = est_parameters[["aggr_lag"]],
+                                                   sjpos = est_parameters[["sjpos"]],
+                                                   s_trend = est_parameters[["s_trend"]],
+                                                   s_trend_loga = est_parameters[["s_trend_loga"]],
+                                                   s_trend_sq = est_parameters[["s_trend_sq"]],
+                                                  
+                                                   glm_iter = est_parameters[["glm_iter"]],
+
+                                                   output = est_parameters[["output"]])
+
+  }
   
   ### OIL PALM (GROUP 3) ### 
   oilpalm_loss <- "loss_oilpalm_both"
  # oilpalm_ctrl <- cropland_crops
-  #oilpalm_ctrl <- all_crops
-   oilpalm_ctrl <- c()
+  oilpalm_ctrl <- all_crops # [all_crops != "eaear_Coconut"]
+  #oilpalm_ctrl <- c()
   #for(oilpalm_loss in c("loss_oilpalm_both", "loss_oilpalm_indus")){
   all_tests_est[[CNT]][["eaear_Oilpalm"]] <- make_main_reg(continent = CNT,
                                                             outcome_variable = oilpalm_loss,
@@ -1251,6 +1282,8 @@ for(CNT in continents){
                                                             s_trend = FALSE,
                                                             s_trend_loga = FALSE,
                                                             s_trend_sq = FALSE,
+                                                           
+                                                            glm_iter = est_parameters[["glm_iter"]],
 
                                                             output = est_parameters[["output"]] )
   #}
@@ -1295,11 +1328,16 @@ for(CNT in continents){
 # est_dat <- gentest_crops_est[[loss_type]][[CNT]][[CROP]][[2]]
 # est_df <- gentest_crops_est[[loss_type]][[CNT]][[CROP]][[3]]
 # unique(est_dat$year)
+for(CNT in continents){
+  sapply(all_tests_est[[CNT]], FUN = function(eo){eo$convStatus}) %>% print()
+}
 
 
 all_tests_est[["all"]][["loss_oilpalm_both"]] %>% post_est_fnc(base_exposure = "eaear_Oilpalm")
 all_tests_est[["America"]][["eaear_Tobacco"]] %>% summary()
-all_tests_est[["America"]][["eaear_Biomass"]]
+all_tests_est[["America"]][["eaear_Soy_compo"]] %>% summary()
+all_tests_est[["Asia"]][["eaear_Oilpalm"]]$convStatus
+all_tests_est[["Asia"]][["eaear_Oilpalm"]] %>% summary()
 
 ### PLOT COEFFICIENTS ### 
 # prepare regression outputs in a tidy data frame readable by dwplot
@@ -1340,10 +1378,6 @@ for(CNT in continents){# "all", , "Africa", "Asia"
 }
 df <- cnt_list %>% bind_rows() # "loss_cropland"
 
-df[df$model == "all", "model"] <- "Pan-tropical"
-df[df$model == "America", "model"] <- "America (tropical lat.)"
-df[df$model == "Africa", "model"] <- "Africa (tropical lat.)"
-df[df$model == "Asia", "model"] <- "Asia (tropical lat.)"
 df$significant01 <- ""
 #df$significant01 <- abs(df[,"tstat"])
 df[abs(df[,"tstat"]) > 1.645, "significant01"] <- "p-value < .1"
@@ -1357,45 +1391,20 @@ for(i in 1:nrow(df_gn)){
  df$Group[i] <- row[!is.na(row)] %>% unname()
 }
 
-# relabel terms (for y axis)
-# row.names(df) <- NULL
-# df <- mutate(df, term = paste0(crop,".",Dynamics))
-# predictors_dict <- rep("", length(df$term)) 
-# names(predictors_dict) <- df$term
-# predictors_dict[grepl("Cumulative", names(predictors_dict))] <- df$crop[grepl("Cumulative", names(predictors_dict))]
-# df <- relabel_predictors(df,predictors_dict) 
-predictors_dict <- c(eaear_Maizegrain = "Maize",
-                      eaear_Fodder = "Pasture",
-                      eaear_Cereals = "Cereals",
-                      eaear_Rice = "Rice",
-                      eaear_Soy_compo = "Soy",
-                      eaear_Cotton = "Cotton",
-                      eaear_Oilfeed_crops = "Other oil crops",
-                      eaear_Biomass = "Biomass crops",
-                      eaear_Sugarcane = "Sugarcane",
-                      eaear_Tobacco = "Tobacco",
-                      eaear_Citrus = "Citrus",
-                      eaear_Oilpalm = "Oil palm",
-                      eaear_Coconut = "Coconut",
-                      eaear_Banana = "Banana",
-                      eaear_Cocoa_Coffee = "Cocoa or Coffee",
-                      eaear_Tea = "Tea",
-                      eaear_Rubber = "Rubber" )
-
-head(df)
 # make some variable name changes necessary for dotwhisker
-df_save <- df
-
 # df <- df[df$crop != "eaear_Maizegrain",]
 df <- df[df$Dynamics=="Cumulative",]
+df <- mutate(df, sizes = if_else(model == "all", true = 4, false = 2.5))
 names(df)[names(df)=="tstat"] <- "estimate"
 # names(df)[names(df)=="model"] <- "continent"
 # names(df)[names(df)=="Dynamics"] <- "model"
 names(df)[names(df)=="crop"] <- "term"
 # df$cumulative <- factor(df$Dynamics=="Cumulative")
+head(df)
+
 
 dwplot(df,
-       dot_args = list(size = 2.5, aes(color = model, shape = model, alpha = significant01)) ) %>%  # shape = Dynamics, size = cumulative
+       dot_args = list(aes(color = model, shape = model, size = model, alpha = significant01)) ) %>%  #size = 2.5,  shape = Dynamics, size = cumulative
   relabel_predictors(predictors_dict) + 
   # # critical values  : 1.645   1.960  2.576
   geom_vline(xintercept = 1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
@@ -1403,10 +1412,23 @@ dwplot(df,
   geom_vline(xintercept = 2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
   geom_vline(xintercept = -2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
     
-facet_wrap(facets = ~Group, scales = "free_y") + 
+  facet_wrap(facets = ~Group, scales = "free_y") + 
   
-  scale_color_brewer(type = "qual", palette="Set1") +
+  scale_color_brewer(type = "qual",palette="Set1", #  Accent  
+                     breaks=c("all", "America", "Africa", "Asia"),
+                     labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                     name="") +
   
+  scale_shape_manual(values = c(18, 17, 15, 16), # c(21, 24, 22, 25),# c(1, 2, 0, 3), # c(16, 17, 15, 18)
+                     breaks=c("all", "America", "Africa", "Asia"),
+                     labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                     name="") +
+  
+  scale_size_manual(values = c(3.5, 2.5, 2.5, 2.5),
+                    breaks=c("all", "America", "Africa", "Asia"),
+                    labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                    name="") +
+
   scale_x_continuous(breaks = c(-1.96, 1.96), 
                      labels = c("-1.96","1.96")) +
   
@@ -1416,9 +1438,7 @@ facet_wrap(facets = ~Group, scales = "free_y") +
         legend.justification = c(0, 0), 
         legend.background = element_rect(colour="grey80"),
         legend.title = element_blank()) 
-# scale_size_manual(breaks = c(TRUE, FALSE), 
-#                   values = c(3, 1.5), 
-#                   labels = c("Cumulative", "Annual")) +
+
 
 
 
@@ -1468,10 +1488,7 @@ for(CNT in continents){# "all", , "Africa", "Asia"
 }
 df_trade <- cnt_list %>% bind_rows() 
 
-df_trade[df_trade$model == "all", "model"] <- "Pan-tropical"
-df_trade[df_trade$model == "America", "model"] <- "America (tropical lat.)"
-df_trade[df_trade$model == "Africa", "model"] <- "Africa (tropical lat.)"
-df_trade[df_trade$model == "Asia", "model"] <- "Asia (tropical lat.)"
+
 df_trade$significant01 <- ""
 df_trade[abs(df_trade[,"tstat"]) > 1.645, "significant01"] <- "p-value < .1"
 
@@ -1488,11 +1505,17 @@ head(df_trade)
 df_save <- df_trade
 
 df_trade <- df_trade[df_trade$Dynamics=="Cumulative",]
+df_trade <- mutate(df_trade, sizes = if_else(model == "all", true = 4, false = 2.5))
 names(df_trade)[names(df_trade)=="tstat"] <- "estimate"
 names(df_trade)[names(df_trade)=="crop"] <- "term"
 
-dwplot(df_trade,
-       dot_args = list(size = 2.5, aes(color = model, shape = model, alpha = significant01)) ) %>%  # shape = Dynamics, size = cumulative
+# Plot both trade and conditional on trade estimates
+df_both <- rbind(df, df_trade)
+# df_both
+
+
+dwplot(df_both,
+       dot_args = list(aes(color = via_trade, shape = model, size = model, alpha = significant01)) ) %>%  # shape = Dynamics, size = cumulative
   relabel_predictors(predictors_dict) + 
   geom_vline(xintercept = 1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
   geom_vline(xintercept = -1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
@@ -1501,7 +1524,25 @@ dwplot(df_trade,
   
   facet_wrap(facets = ~Group, scales = "free_y") + 
   
-  scale_color_brewer(type = "qual", palette="Set1") +
+  scale_color_brewer(type = "qual",palette="Dark2", #  Accent  
+                     breaks=c(TRUE, FALSE), 
+                      labels=c("Moderated by crop export", "Irrespective of crop export"), 
+                      name="") +
+  
+  scale_shape_manual(values = c(18, 17, 15, 16), # c(21, 24, 22, 25),# c(1, 2, 0, 3), # c(16, 17, 15, 18)
+                     breaks=c("all", "America", "Africa", "Asia"),
+                     labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                     name="") +
+  
+  scale_alpha_manual(values = c(0.25, 1),
+                     breaks=c("p-value < .1", ""), 
+                     labels=c("p-value < .1", ""), 
+                     name="") +
+  
+  scale_size_manual(values = c(4, 2.5, 2.5, 2.5),
+                    breaks=c("all", "America", "Africa", "Asia"),
+                    labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                    name="") +
   
   scale_x_continuous(breaks = c(-1.96, 1.96), 
                      labels = c("-1.96","1.96")) +
@@ -1769,6 +1810,113 @@ dwplot(df,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### DES STATS RFS --------------------------------------------------------------------------------------------------
+# add PSD data to the chart 
+psd <- readRDS(here("temp_data", "prepared_psd.Rdata"))
+# UNITS
+# from https://apps.fas.usda.gov/psdonline/app/index.html#/app/about#G5
+# Production, Trade, & Use: 1000 metric tons.
+# So once divided by 1000, it's expressed in million tons 
+psd$us_dc_maize <- psd$UnitedStates.Domestic_Consumption.Maize / 1000
+psd$us_ts_maize <- psd$UnitedStates.Total_Supply.Maize / 1000
+psd$us_im_maize <- psd$UnitedStates.Imports.Maize / 1000
+
+#head(psd)
+w_rfs <- left_join(rfs, psd[,c("year", "us_dc_maize")], by = "year")
+
+# w_rfs <- dplyr::mutate(w_rfs, us_ex_maize = us_ts_maize - us_dc_maize)
+
+# give back RFS1 values, to display them
+w_rfs[w_rfs$year>=2006 & w_rfs$year<=2007, ] <- w_rfs %>% 
+  dplyr::filter(year>=2006 & year<=2007) %>% 
+  dplyr::mutate(statute_total = c(0, 0), # give zeros for total, because this is going to represent RFS2
+                final_total = c(0, 0), 
+                statute_advanced = c(0, 0), 
+                final_advanced = c(0, 0))
+# reconstitute conventional
+w_rfs[w_rfs$year>=2006 & w_rfs$year<=2007, ] <- w_rfs %>% 
+  dplyr::filter(year>=2006 & year<=2007) %>% 
+  dplyr::mutate(statute_conv = statute_total - statute_advanced, 
+                final_conv = final_total - final_advanced)
+
+# continue final_conv
+w_rfs[is.na(w_rfs$final_conv), "final_conv"] <- 15
+w_rfs[is.na(w_rfs$us_dc_maize), "us_dc_maize"] <- 309.132
+
+# group biodiesel and (other) advanced, not relevant to show distinctively
+w_rfs <- w_rfs %>% 
+  dplyr::mutate(statute_alladvanced = statute_advanced + statute_biodiesel, 
+                final_alladvanced = final_advanced + final_biodiesel)
+
+
+# take what's needed
+w_rfs <- w_rfs %>% 
+  dplyr::filter(year>=2000) %>% 
+  dplyr::select(year, statute_conv, final_conv, us_dc_maize) #  statute_alladvanced, final_alladvanced,
+
+# add RFS1 (2000-2012 only)
+w_rfs$statute_rfs1 <- c(0, 0, 0, 0, 0, 0, 4, 4.7, 5.4, 6.1, 6.8, 7.4, 7.5, rep(NA, 10) ) 
+
+# convert mandates from billion gallons to tons maize 
+# According to USDA, 1 bushel maize gives 2.7 gallons ethanol https://www.ers.usda.gov/about-ers/partnerships/strengthening-statistics-through-the-icars/biofuels-data-sources/
+# Given that 1 bushel maize is 0.0254 metric ton maize https://www.sagis.org.za/conversion_table.html
+# 1 gallon ethanol = (1/2.7) * 0.0254 metric ton
+# 1bgal = (1/2.7) * 0.0254 billion metric tons = (1/2.7) * 0.0254 * 1000 million metric tons
+w_rfs <- dplyr::mutate(w_rfs, across(.cols = contains("_conv") | contains("_rfs1"), .fns = ~.*(1/2.7) * 0.0254 * 1000) )
+
+# pile up 
+l_rfs <- pivot_longer(w_rfs, cols = c("statute_conv", "final_conv", "statute_rfs1"), names_to = "mandates", values_to = "maize_milton") %>% as.data.frame() %>% arrange(mandates)
+
+
+ggplot(l_rfs, aes(x = year, y = maize_milton, group = mandates)) +
+  geom_line(aes(linetype=mandates)) + 
+  geom_line(aes(x = year, y = us_dc_maize)) +
+  geom_label(aes(label="US domestic consumption", 
+                 x=2019,
+                 y=290)) +
+  
+  geom_label(aes(label="RFS2 (statutory)", 
+                 x=2020,
+                 y=150)) +
+  
+  geom_label(aes(label="RFS2 (final rule)", 
+                 x=2016,
+                 y=120)) +
+  
+  geom_label(aes(label="RFS1 (statutory)", 
+                 x=2014,
+                 y=70)) +
+  scale_linetype_manual(breaks=c("statute_conv", "final_conv", "statute_rfs1"),
+                        values=c("solid", "dotted", "twodash"),
+                        labels=c("RFS2 (statutory)", "RFS2 (final)", "RFS1 (statutory)"),
+                        name="Mandates") +
+  
+  scale_x_continuous(breaks = c(2000, 2005, 2006, 2008, 2012, 2015, 2022)) +
+  scale_y_continuous(name = "Million tonnes maize") + 
+  theme_minimal() +
+  theme(legend.position="none", 
+        plot.title = element_text(size = 10, face = "bold"), 
+        axis.title.y.left=element_text(size=10,face="bold", hjust = 1),
+        axis.title.y.right=element_text(size=10,face="bold", hjust = 1),
+        axis.title.x=element_blank(), #element_text(size=10,face="bold", hjust = 0.5), 
+        panel.grid = element_line(inherit.blank = TRUE))  
 
 
 
