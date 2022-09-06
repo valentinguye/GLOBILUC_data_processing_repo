@@ -1129,7 +1129,7 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
 #### Main specification -----------------------------------------------------------------------
 est_parameters <- list(start_year = 2008, 
                        end_year = 2016, 
-                       trade_exposure = NULL, #  "export_expo", # # # "trade_expo_imp", #  "trade_expo_imp", # NULL, # "trade_expo_imp",
+                       trade_exposure = "trade_expo_imp0", # NULL, #  "export_expo", # # #  "trade_expo_imp", # NULL, # "trade_expo_imp",
                        trade_exposure_period = "20012007",
                        annual_rfs_controls = TRUE,
                        leads = 1,
@@ -1137,7 +1137,7 @@ est_parameters <- list(start_year = 2008,
                        fya = 0, 
                        pya = 0,
                        aggr_lead = 1,
-                       aggr_lag = 1, 
+                       aggr_lag = 2, 
                        sjpos= FALSE,
                        s_trend = FALSE, 
                        s_trend_loga = FALSE,
@@ -1188,7 +1188,8 @@ continents <- c("all", "America", "Africa", "Asia") # "all"#
 #### ALL TESTS - LOSS CATEGORIES ------------------------------------------
 
 ### DATA 
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long_final.Rdata"))
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long_final.Rdata"))
 # this is with cropland outside commo, and without pasture
 #main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_aeaycompo_long_final.Rdata"))
 
@@ -1221,7 +1222,7 @@ for(CNT in continents){
 
     # **NOPE** (control transitory LUC)
     # further remove woody perennials and pastures, if we regress cropland anyway
-    # crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials))})]# , "eaear_Fodder"
+    crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials, "eaear_Fodder"))})]# 
 
     # the order of the strata in the list are determined by how we want to plot results
     all_tests_est[[CNT]][[CROP]] <- make_main_reg(continent = CNT,
@@ -1257,8 +1258,8 @@ for(CNT in continents){
   ### OIL PALM (GROUP 3) ### 
   oilpalm_loss <- "loss_oilpalm_both"
  # oilpalm_ctrl <- cropland_crops
-  oilpalm_ctrl <- all_crops # [all_crops != "eaear_Coconut"]
-  #oilpalm_ctrl <- c()
+  # oilpalm_ctrl <- all_crops # [all_crops != "eaear_Coconut"]
+  oilpalm_ctrl <- c()
   #for(oilpalm_loss in c("loss_oilpalm_both", "loss_oilpalm_indus")){
   all_tests_est[[CNT]][["eaear_Oilpalm"]] <- make_main_reg(continent = CNT,
                                                             outcome_variable = oilpalm_loss,

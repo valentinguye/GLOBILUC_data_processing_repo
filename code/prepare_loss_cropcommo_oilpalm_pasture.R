@@ -122,7 +122,7 @@ gaez_crops <- names(gaez)
 
 #### AGGREGATE AND RESAMPLE LOSS #### 
 
-transition_types <- c("croplandcommo", "oilpalmboth", "oilpalmindus")# , "pasture"
+transition_types <- c("croplandcommo", "oilpalmbothcommo")# , "oilpalmindus", "pasture"
 
 for(type in transition_types){
     
@@ -194,7 +194,7 @@ any_type <- stack(resampled_ouput_nameS)
 
 always_zero <- function(y){if_else(condition = (sum(y)==0), true = 0, false = 1)}
 
-mask_path <- here("temp_data", "processed_lossdrivers", "tropical_aoi", paste0("always_zero_mask_loss_cropcommo_op_anytype_resampledgaez_01",nlosslayers,".tif"))
+mask_path <- here("temp_data", "processed_lossdrivers", "tropical_aoi", paste0("always_zero_mask_loss_cropcommo_opcommo_anytype_resampledgaez_01",nlosslayers,".tif"))
 
 overlay(x = any_type,
         fun = always_zero,
@@ -253,8 +253,8 @@ resample(x = pst2k,
 #### STACK AND MASK RASTERS TO MERGE ####
 # Read layers to be stacked
 losscropland <- brick(resampled_ouput_nameS["croplandcommo"])
-lossoilpalmboth <- brick(resampled_ouput_nameS["oilpalmboth"])
-lossoilpalmindus <- brick(resampled_ouput_nameS["oilpalmindus"])
+lossoilpalmboth <- brick(resampled_ouput_nameS["oilpalmbothcommo"])
+# lossoilpalmindus <- brick(resampled_ouput_nameS["oilpalmindus"])
 #losspasture <- brick(resampled_ouput_nameS["pasture"])
 
 fc2k <- raster(fc2k_resampled_output_name)
@@ -264,7 +264,7 @@ pst2k <- raster(pst2k_resampled_output_name)
 # for time varying variables, the dot is important. 
 names(losscropland) <- paste0("loss_cropland.",seq(2001, 2019, 1)) 
 names(lossoilpalmboth) <- paste0("loss_oilpalm_both.",seq(2001, 2019, 1)) 
-names(lossoilpalmindus) <- paste0("loss_oilpalm_indus.",seq(2001, 2019, 1)) 
+# names(lossoilpalmindus) <- paste0("loss_oilpalm_indus.",seq(2001, 2019, 1)) 
 #names(losspasture) <- paste0("loss_pasture.",seq(2001, 2019, 1)) 
 
 # DO NOT RENAME GAEZ, IT IS ALREADY NAMED
@@ -276,7 +276,7 @@ names(pst2k) <- "pasture_share_2000"
 
 
 # Stack together the annual layers of drivenloss data and GAEZ crop cross sections 
-tropical_stack <- stack(losscropland, lossoilpalmboth, lossoilpalmindus, #losspasture,
+tropical_stack <- stack(losscropland, lossoilpalmboth, # lossoilpalmindus, #losspasture,
                         gaez, 
                         fc2k, 
                         pst2k)
@@ -289,7 +289,7 @@ tropical_stack_names <- names(tropical_stack)
 
 mask <- raster(mask_path)
 
-masked_stack_output_name <- here("temp_data", "merged_datasets", "tropical_aoi", paste0("loss_cropcommo_op_anytype_masked_stack_01",nlosslayers,".tif"))
+masked_stack_output_name <- here("temp_data", "merged_datasets", "tropical_aoi", paste0("loss_cropcommo_opcommo_anytype_masked_stack_01",nlosslayers,".tif"))
 
 mask(x = tropical_stack, 
      mask = mask,
@@ -309,6 +309,7 @@ tropical_stack <- stack(masked_stack_output_name)
 names(tropical_stack) <- tropical_stack_names
 
 # na.rm = TRUE is key here, as it removes previously masked pixels (NA) and ensures the output is not too large (memory intensive)
+# Note that it removes cells (rows) as soon as one raster layer has NA for this pixel (not only if all layers are NA)
 # We also set long to false because we reshape with a proper function for more control
 wide_df <- raster::as.data.frame(tropical_stack, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ~700s. 
 
@@ -329,14 +330,13 @@ wide_df$grid_id <- seq(1, nrow(wide_df), 1)
 # Note also that it is important that it is structured in a LIST when there are several varying variables in the *long* format
 # Because: "Notice that the order of variables in varying is like x.1,y.1,x.2,y.2."
 varying_vars <- list(names(losscropland), 
-                     names(lossoilpalmboth),
-                     names(lossoilpalmindus))#,names(losspasture)
+                     names(lossoilpalmboth))#,names(lossoilpalmindus) names(losspasture)
 #varying_vars <- names(drivenloss_gaez)[grep(".", names(drivenloss_gaez), fixed = TRUE)]
 
 # reshape to long.
 long_df <- stats::reshape(wide_df,
                           varying = varying_vars,
-                          v.names = c("loss_cropland", "loss_oilpalm_both", "loss_oilpalm_indus"), # , "loss_pasture"
+                          v.names = c("loss_cropland", "loss_oilpalm_both"),# "loss_oilpalm_indus"), # , "loss_pasture"
                           sep = ".",
                           timevar = "year",
                           idvar = "grid_id", # don't put "lon" and "lat" in there, otherwise memory issue (see https://r.789695.n4.nabble.com/reshape-makes-R-run-out-of-memory-PR-14121-td955889.html)
@@ -358,7 +358,7 @@ long_df <- dplyr::arrange(long_df, grid_id, year)
 # d[d$diff>0 , c("driven_loss", "driven_loss_cropland")]
 
 
-saveRDS(long_df, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long.Rdata"))
+saveRDS(long_df, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long.Rdata"))
 
 rm(long_df)
 removeTmpFiles(h=0)
@@ -367,7 +367,7 @@ removeTmpFiles(h=0)
 countries <- st_read(here("input_data", "Global_LSIB_Polygons_Detailed"))
 length(unique(countries$COUNTRY_NA)) == nrow(countries)
 
-path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long.Rdata")
+path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long.Rdata")
 df <- readRDS(path)
 
 # Remove gaez variables
@@ -467,7 +467,7 @@ df_cs$country_name[df_cs$country_name=="Swaziland"] <- "Eswatini"
 
 
 # saveRDS(df_cs, path)
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_cs_country_nf.Rdata"))
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_cs_country_nf.Rdata"))
 rm(df_cs)
 
 #### CONTINENT VARIABLE #### 
@@ -504,7 +504,7 @@ continents <- st_sf(data.frame(continent_name = c("Asia", "America", "Africa"), 
 
 # tm_shape(continents)+tm_borders() +tm_fill(col = "continent_name") + tm_graticules() 
 
-path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long.Rdata")
+path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long.Rdata")
 df <- readRDS(path)
 
 # Remove gaez variables
@@ -533,14 +533,14 @@ df_cs <- st_drop_geometry(df_cs)
 # Keep only new variable and id
 df_cs <- df_cs[,c("grid_id", "continent_name")]
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_cs_continent.Rdata"))
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_cs_continent.Rdata"))
 rm(df_cs)
 
 
 
 #### BIGGER CELL VARIABLES #### 
 ## Prepare base data
-path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long.Rdata")
+path <- here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long.Rdata")
 df <- readRDS(path)
 
 # Remove gaez variables
@@ -553,7 +553,7 @@ df_cs <- st_as_sf(df_cs, coords = c("lon", "lat"), crs = 4326, remove = FALSE)
 rm(df)
 
 ## Prepare bigger square grids
-grid_base <- raster(here("temp_data", "merged_datasets", "tropical_aoi", paste0("loss_cropcommo_op_anytype_masked_stack_01",nlosslayers,".tif")))
+grid_base <- raster(here("temp_data", "merged_datasets", "tropical_aoi", paste0("loss_cropcommo_opcommo_anytype_masked_stack_01",nlosslayers,".tif")))
 
 # for ~45km grid cells (5 times larger grid cells in both dimensions, hence 25 times larger)
 bigger_5 <- aggregate(grid_base, fact = 5, expand = TRUE, fun = sum)
@@ -615,14 +615,14 @@ df_cs <- st_drop_geometry(df_cs)
 # Keep only new variable and id
 df_cs <- df_cs[,c("grid_id", "grid_id_5", "grid_id_10", "grid_id_20")]
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_cs_biggercells.Rdata"))
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_cs_biggercells.Rdata"))
 
 rm(df_cs)
 
 #### GROUP AND STANDARDIZE AEAY CROPS #### 
 # all groupings in this section are motivated on the GAEZ v4 model documentation, and in particular Table A4-1.3
 
-df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long.Rdata"))
+df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long.Rdata"))
 # Use cross section only
 df_cs <- df[!duplicated(df$grid_id),]
 
@@ -989,7 +989,7 @@ df_cs <- dplyr::select(df_cs, -eaear_Soybean, -eaear_Soybean_meal, -eaear_Soybea
 var_names <- grep(pattern = "eaear_", names(df_cs), value = TRUE) 
 df_cs <- df_cs[,c("grid_id", var_names)]
 
-saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_cs_stdeaear.Rdata"))  
+saveRDS(df_cs, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_cs_stdeaear.Rdata"))  
 rm(df_cs)
 
 
@@ -997,7 +997,7 @@ rm(df_cs)
 
 #### REMAINING FOREST ####
 
-# df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long.Rdata"))
+# df <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long.Rdata"))
 # 
 # # Remove gaez variables
 # df <- dplyr::select(df,-all_of(gaez_crops))
@@ -1036,7 +1036,7 @@ rm(df_cs)
 # # put keep only new variables in remaining
 # remaining <- df[,c("grid_id", "year", "remaining_fc", "accu_defo_since2k", "fc_2008")] # fc_2000 is added as a raster layer in merge_* scripts
 # 
-# saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_remaining.Rdata"))
+# saveRDS(remaining, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_remaining.Rdata"))
 # 
 # rm(year_list, sub_, accu_defo_df)
 
@@ -1046,18 +1046,18 @@ rm(df_cs)
 
 #### MERGE ADDITIONAL VARIABLES ####  
 # Base dataset (including outcome variable(s))
-df_base <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long.Rdata"))
+df_base <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long.Rdata"))
 
 ## COUNTRY
 # just compute country and continent variables, even if invariant, so they can be called in generic function
-df_country <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_cs_country_nf.Rdata"))
+df_country <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_cs_country_nf.Rdata"))
 
 # Merge them and remove to save memory 
 final <- left_join(df_base, df_country, by = "grid_id")
 rm(df_base, df_country)
 
 ## CONTINENT
-df_continent <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_cs_continent.Rdata"))
+df_continent <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_cs_continent.Rdata"))
 
 final <- left_join(final, df_continent, by = "grid_id")
 rm(df_continent)
@@ -1066,7 +1066,7 @@ rm(df_continent)
 final <- mutate(final, country_year = paste0(country_name, "_", year))
 
 ## BIGGER CELLS
-df_biggercells <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_cs_biggercells.Rdata"))
+df_biggercells <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_cs_biggercells.Rdata"))
 
 final <- left_join(final, df_biggercells, by = "grid_id")
 rm(df_biggercells)
@@ -1078,20 +1078,20 @@ final <- mutate(final, grid_id_20_year = paste0(grid_id_20, "_", year))
 # length(unique(final$grid_id_50km_year))==length(unique(final$grid_id_50km))*length(unique(final$year))
 
 ## EAEAR
-df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi",  "loss_cropcommo_op_aeaycompo_cs_stdeaear.Rdata"))  
+df_stdeaear <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi",  "loss_cropcommo_opcommo_aeaycompo_cs_stdeaear.Rdata"))  
 
 final <- left_join(final, df_stdeaear, by = "grid_id") # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
 rm(df_stdeaear)
 
 
 ## REMAINING
-#df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long_remaining.Rdata"))
+#df_remain <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long_remaining.Rdata"))
 
 # final <- left_join(final, df_remain, by = c("grid_id", "year"))  # no issue with using grid_id as a key here, bc df_remain was computed just above from the df_base data
 # rm(df_remain)
 
 
-saveRDS(final, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long_final.Rdata"))
+saveRDS(final, here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long_final.Rdata"))
 
 rm(final)
 

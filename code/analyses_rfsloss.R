@@ -344,19 +344,20 @@ ggplot(w_rfs, aes(x=year, y=`Billions of gallons (ethanol-equivalent)`/coeff, fi
 # cdl <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_commo_resampledgaez_0119.tif")) 
 # cdl_crop <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_cropland_resampledgaez_0119.tif")) 
 cdl_cropcommo <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_croplandcommo_resampledgaez_0119.tif")) 
-cdl_oilpalm <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_oilpalmindus_resampledgaez_0119.tif")) 
-cdl_residual <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_pasture_resampledgaez_0119.tif")) 
+cdl_oilpalm <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_oilpalmboth_resampledgaez_0119.tif")) 
+# cdl_residual <- brick(here("temp_data", "processed_lossdrivers", "tropical_aoi", "loss_pasture_resampledgaez_0119.tif")) 
 
 ## Prepare quantity to map ## 
 # cdl_accu <- sum(cdl[[10:16]], na.rm = TRUE)
 # cdl_crop_accu <- sum(cdl_crop[[10:16]], na.rm = TRUE)
 cdl_cropcommo_accu <- sum(cdl_cropcommo[[10:16]], na.rm = TRUE)
 cdl_oilpalm_accu <- sum(cdl_oilpalm[[10:16]], na.rm = TRUE)
-cdl_residual_accu <- sum(cdl_residual[[10:16]], na.rm = TRUE)
+# cdl_residual_accu <- sum(cdl_residual[[10:16]], na.rm = TRUE)
 
 # cdl_total_gross <- sum(stack(cdl_cropcommo_accu, cdl_oilpalm_accu, cdl_residual_accu), na.rm =TRUE)
 
-stack_cdl_accu <- stack(cdl_cropcommo_accu, cdl_oilpalm_accu, cdl_residual_accu)
+# cdl_cropcommo_accu, ,
+stack_cdl_accu <- stack(cdl_oilpalm_accu)#  cdl_residual_accu
 
 stack_accu_pct <- raster()
 for(i in 1:nlayers(stack_cdl_accu)){
@@ -374,10 +375,10 @@ for(i in 1:nlayers(stack_cdl_accu)){
   vpct <- values(accu_pct)
   summary(vpct)
   
-  stack_accu_pct <- stack(stack_accu_pct, accu_pct)
+  stack_accu_pct <- stack(stack_accu_pct, accu_pct) # throw a warning at first loop iteration, when stack_accu_pct is empty
 }
 
-names(stack_accu_pct) <- c("cropland", "oil palm", "residual")
+names(stack_accu_pct) <- c("cropland", "oil palm")# , "residual"
 ## Keep only interesting regions 
 america_coords <- matrix(c(-95, 25, -33, 25,
                            -33, -30, -95, -30, 
@@ -406,16 +407,6 @@ am <- crop(stack_accu_pct, continents[continents$continent_name=="America",])
 af <- crop(stack_accu_pct, continents[continents$continent_name=="Africa",])
 as <- crop(stack_accu_pct, continents[continents$continent_name=="Asia",])
 
-amdf <- raster::as.data.frame(am, xy = TRUE, na.rm = FALSE, long = TRUE)
-afdf <- raster::as.data.frame(af, xy = TRUE, na.rm = FALSE, long = TRUE)
-asdf <- raster::as.data.frame(as, xy = TRUE, na.rm = FALSE, long = TRUE)
-
-amdf$continent <- "South America"
-afdf$continent <- "Africa"
-asdf$continent <- "South East Asia"
-
-facet_df <- rbind(amdf, afdf, asdf)
-
 
 land <- st_read(here("input_data", "ne_50m_land"))
 unique(land$scalerank)
@@ -424,23 +415,36 @@ land <- land[land$scalerank==0, c("geometry")]
 spLand <- as(land, "Spatial")
 
 
-ggplot() +
-  geom_raster(data = facet_df, aes(x = x, y = y, fill = value)) +
-  #geom_sf(data = land) +
 
-  facet_wrap(facets = ~layer+continent) +
-  #coord_equal() +
-  scale_fill_viridis_c() +
-  theme_void() +
-  theme(
-    legend.position = "bottom"
-  )
+# For ggplot facet plot
+# amdf <- raster::as.data.frame(am, xy = TRUE, na.rm = FALSE, long = TRUE)
+# afdf <- raster::as.data.frame(af, xy = TRUE, na.rm = FALSE, long = TRUE)
+# asdf <- raster::as.data.frame(as, xy = TRUE, na.rm = FALSE, long = TRUE)
+# 
+# amdf$continent <- "South America"
+# afdf$continent <- "Africa"
+# asdf$continent <- "South East Asia"
+# 
+# facet_df <- rbind(amdf, afdf, asdf)
+# 
+# ggplot() +
+#   geom_raster(data = facet_df, aes(x = x, y = y, fill = value)) +
+#   #geom_sf(data = land) +
+# 
+#   facet_wrap(facets = ~layer+continent) +
+#   #coord_equal() +
+#   scale_fill_viridis_c() +
+#   theme_void() +
+#   theme(
+#     legend.position = "bottom"
+#   )
 
 
 
 
 
 #library(gridExtra)
+# 
 library(rasterVis)
 pam <- levelplot(am, margin = FALSE, 
                  xlab = "", ylab = "",
