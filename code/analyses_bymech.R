@@ -256,7 +256,7 @@ end_year = est_parameters[["end_year"]]
 exposure_rfs = CROP
 control_all_absolute_rfs = TRUE
 annual_rfs_controls = TRUE
-all_exposures_rfs = crops_ctrl
+all_exposures_rfs = cropland_crops
 trade_exposure = est_parameters[["trade_exposure"]]
 trade_exposure_period = est_parameters[["trade_exposure_period"]]
 exposure_quantiles = est_parameters[["exposure_quantiles"]]
@@ -589,14 +589,14 @@ make_main_reg <- function(pre_process = FALSE,
   # the point is: we want to allow the year variable to have a different slope (coefficient) for every level of exposure variable
   
   categorized_exposures <- c()
-  # eaear_exp_rfs <- c(exposure_rfs, eaear_trade_exposure_rfs)[2]
+  # eaear_exp_rfs <- c(exposure_rfs, eaear_trade_exposure_rfs)[1]
   for(eaear_exp_rfs in c(exposure_rfs, eaear_trade_exposure_rfs)){
     if(exposure_quantiles>0){
-      d <- mutate(d, !!as.symbol(paste0(eaear_exp_rfs,"_",exposure_quantiles,"tiles")) := cut(!!as.symbol(eaear_exp_rfs), breaks = exposure_quantiles, labels = paste0(eaear_exp_rfs,"_Q", 1:exposure_quantiles)))
+      d <- mutate(d, !!as.symbol(paste0(eaear_exp_rfs,"_",exposure_quantiles,"tiles")) := cut(!!as.symbol(eaear_exp_rfs), breaks = exposure_quantiles, labels = FALSE)) # paste0(eaear_exp_rfs,"_Q", 1:exposure_quantiles)
       eaear_exp_rfs <- paste0(eaear_exp_rfs,"_",exposure_quantiles,"tiles")
       categorized_exposures <- c(categorized_exposures, eaear_exp_rfs)
     }
-    
+    # d[,c("grid_id", "year", exposure_rfs, eaear_exp_rfs)]
     if(s_trend == "vary_slope"){
       fe <- paste0(fe, paste0(" + ",eaear_exp_rfs,"[[year]]"))
     }  
@@ -1139,16 +1139,16 @@ est_parameters <- list(start_year = 2008,
                        trade_exposure = NULL, # "export_expo_imp0", # "trade_expo", #  # #  "trade_expo_imp", # NULL, # "trade_expo_imp",
                        trade_exposure_period = "20012007",
                        annual_rfs_controls = TRUE,
-                       leads = 1,
+                       leads = 2,
                        lags = 2,
                        fya = 0, 
                        pya = 0,
                        aggr_lead = 1,
                        aggr_lag = 1, 
                        sjpos= FALSE,
-                       exposure_quantiles = 5,
-                       s_trend = "vary_slope", # either "vary_slope", "manual" or "NO" / whatever
-                       s_trend_loga = "NO",
+                       exposure_quantiles = 0,
+                       s_trend = "NO", # either "vary_slope", "manual" or "NO" / whatever
+                       s_trend_loga = "manual",
                        s_trend_sq = "NO",
                        clustering = "oneway",
                        cluster_var1 = "grid_id_10", 
@@ -1254,6 +1254,7 @@ for(CNT in continents){
                                                    aggr_lead = est_parameters[["aggr_lead"]],
                                                    aggr_lag = est_parameters[["aggr_lag"]],
                                                    sjpos = est_parameters[["sjpos"]],
+                                                   exposure_quantiles = est_parameters[["exposure_quantiles"]],
                                                    s_trend = est_parameters[["s_trend"]],
                                                    s_trend_loga = est_parameters[["s_trend_loga"]],
                                                    s_trend_sq = est_parameters[["s_trend_sq"]],
@@ -1289,6 +1290,7 @@ for(CNT in continents){
                                                             aggr_lead = est_parameters[["aggr_lead"]],
                                                             aggr_lag = est_parameters[["aggr_lag"]],
                                                             sjpos = est_parameters[["sjpos"]],
+                                                           exposure_quantiles = est_parameters[["exposure_quantiles"]],
                                                            s_trend = est_parameters[["s_trend"]],
                                                            s_trend_loga = est_parameters[["s_trend_loga"]],
                                                            s_trend_sq = est_parameters[["s_trend_sq"]],
@@ -1309,7 +1311,7 @@ for(CNT in continents){
 
 
 all_tests_est[["all"]][["loss_oilpalm_both"]] %>% post_est_fnc(base_exposure = "eaear_Oilpalm")
-all_tests_est[["America"]][["eaear_Tobacco"]] %>% summary()
+all_tests_est[["America"]][["eaear_Biomass"]] %>% summary()
 all_tests_est[["America"]][["eaear_Soy_compo"]] %>% summary()
 all_tests_est[["Asia"]][["eaear_Oilpalm"]]$convStatus
 all_tests_est[["Asia"]][["eaear_Oilpalm"]] %>% summary()
@@ -1538,6 +1540,116 @@ dwplot(df_both,
   
 
 
+
+#### MAP OUTCOMES  -------------------------------------------------
+# it makes sense to plot outcomes (deforestation for cropland and for oil palm) as:
+# maps, cumulative over time, in percentage of grid area (more explicit than absolute number of hectares)
+
+# first, get the sample actually used for estimation 
+d_clean_list <- list()
+for(LT in c("loss_cropland", "loss_oilpalm_both")){
+  d_clean_out <- make_main_reg(continent = "all",
+                              outcome_variable = LT,
+                              
+                              start_year = est_parameters[["start_year"]],
+                              end_year = est_parameters[["end_year"]],
+                              
+                              # regress on one crop at a time, and control for other crops
+                              exposure_rfs = "eaear_Maizegrain", # whatever
+                              control_all_absolute_rfs = TRUE,
+                              annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                              all_exposures_rfs = crops_ctrl,
+                              
+                              trade_exposure = est_parameters[["trade_exposure"]],
+                              trade_exposure_period = est_parameters[["trade_exposure_period"]],
+                              
+                              rfs_lead = est_parameters[["leads"]],
+                              rfs_lag = est_parameters[["lags"]],
+                              aggr_lead = est_parameters[["aggr_lead"]],
+                              aggr_lag = est_parameters[["aggr_lag"]],
+                              sjpos = est_parameters[["sjpos"]],
+                              exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                              s_trend = est_parameters[["s_trend"]],
+                              s_trend_loga = est_parameters[["s_trend_loga"]],
+                              s_trend_sq = est_parameters[["s_trend_sq"]],
+                              
+                              glm_iter = est_parameters[["glm_iter"]],
+                              
+                              output = "everything")
+  
+  d_clean_out <- d_clean_out[[2]] # data is in 2nd element 
+  
+  d_clean_list[[LT]] <- ddply(d_clean_out, "grid_id", summarise, 
+                              accu := sum(!!as.symbol(LT)), 
+                              lon = unique(lon), 
+                              lat = unique(lat), 
+                              continent_name = unique(continent_name)) 
+  
+  d_clean_list[[LT]]$loss_type <- LT
+}
+
+d_clean_accu <- bind_rows(d_clean_list)
+
+# spatialize
+d_clean_sf <- st_as_sf(d_clean_accu, coords = c("lon", "lat"), crs = 4326)
+# make grid shapes
+d_clean_sf <- st_transform(d_clean_sf, crs = mercator_world_crs) 
+d_clean_sf <- st_buffer(d_clean_sf, dist = 4500) # half the size of a grid (approximately)
+st_geometry(d_clean_sf) <- sapply(st_geometry(d_clean_sf), FUN = function(x){st_as_sfc(st_bbox(x))}) %>% st_sfc(crs = mercator_world_crs)
+# go back to unprojected crs
+d_clean_sf <- st_transform(d_clean_sf, crs = 4326)
+
+# accumulated deforestation in hectares (i.e. 10000m2) to percentage of grid cell area 
+# but don't take the actual area of the shape, because it's made up by the construction above. as.numeric(st_area(geometry))
+# So just take 9km2 for every cell, it's just an approximation for visualization
+d_clean_sf <- mutate(d_clean_sf, accu_pct = accu * 10000 / 9000^2)
+summary(d_clean_sf$accu_pct)
+
+# make three different datasets 
+am <- d_clean_sf[d_clean_sf$continent_name == "America", ]
+af <- d_clean_sf[d_clean_sf$continent_name == "Africa", ]
+as <- d_clean_sf[d_clean_sf$continent_name == "Asia", ]
+
+land <- st_read(here("input_data", "ne_50m_land"))
+unique(land$scalerank)
+land <- land[land$scalerank==0, c("geometry")]
+#plot(land)
+# spLand <- as(land, "Spatial")
+
+d_clean_sf <- mutate(d_clean_sf, loss_type = if_else(loss_type=="loss_cropland", 
+                                                     true = "Commodity-driven cropland deforestation",
+                                                     false = "Commodity-driven oil palm deforestation"))
+
+base_map <- ggplot(data = land) +
+  geom_sf(alpha = 0) + theme_bw() +# alpha = 0.8fill = "lightgrey", 
+  geom_sf(data = d_clean_sf, aes(fill = accu_pct), lwd = NA) + # 
+  coord_sf(xlim = c(-95, 150), ylim = c(-30, 30), expand = FALSE) 
+
+base_map + scale_fill_viridis(name = "Cumul. 2010-2016\nin % of cell area", 
+                               option="viridis",
+                               direction = -1) + 
+  facet_wrap(facets = ~loss_type, ncol = 1, nrow = 2, 
+             strip.position = "top") +
+
+  scale_y_discrete(breaks = c(0))
+
+
+ggplot(data = land) +
+  geom_sf(fill = "lightgrey") + theme_minimal() +# alpha = 0.8, alpha = 0.5
+  geom_sf(data = d_clean_sf, aes(fill = accu_pct), lwd = NA) + # 
+  #coord_sf(xlim = c(-95, -30), ylim = c(-33, 25), expand = FALSE) +
+  scale_fill_viridis(name = '% cropland deforestation\n in cell area', 
+                     option="viridis",
+                     direction = -1) +
+  facet_zoom(xlim = c(-95, -30)) +
+  
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+  matrix(c(-95, 25, -33, 25,
+           -33, -30, -95, -30, 
+           -95, 25), ncol = 2, byrow = TRUE)
+  
 #### LOSS CATEGORIES ------------------------------------------
 
 # what's different here is that regressions are run with output = coef_table, 

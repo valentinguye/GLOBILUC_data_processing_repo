@@ -35,7 +35,7 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
                     "DataCombine", 
                     "fixest", "urca", "punitroots",
                     "boot", "fwildclusterboot", "sandwich",
-                    "ggplot2", "leaflet", "tmap", "dotwhisker")
+                    "ggplot2", "leaflet", "tmap", "dotwhisker", "ggforce")
 
 
 # Note that from ?renv::restore 
@@ -136,6 +136,7 @@ if(FALSE){
   library(viridis)
   library(hrbrthemes)
   library(tmap)
+  library(ggforce)
   
   # all those are necessary for punitroots to install correctly
   library(gss)
@@ -152,7 +153,7 @@ if(renv:::renv_download_method() != getOption("download.file.method")){
 }
 
 # If new packages are needed along the project data processing workflow, one should: 
-new_pck <- c("fUnitRoots")
+new_pck <- c("ggforce")
 # 1. install the packages in the project library (the default if you are within the project)
 install.packages(new_pck)
 

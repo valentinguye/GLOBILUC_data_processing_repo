@@ -339,7 +339,7 @@ abs_lu_change = 1
 rounding = 2
 
 randomization_test <- FALSE
-boot_rep <- 5
+boot_replicat <- 5
 
 
 rm(outcome_variable, start_year, end_year, pasture_shares, 
@@ -403,7 +403,7 @@ make_main_reg <- function(region = "southam", # one of "brazil", "southam", or "
                           
                           glm_iter = 25,
                           # dyn_tests = FALSE, # should the Fisher-type panel unit root test be returned, instead of the regressions, for the outcome_variable and the first regressor
-                          boot_rep = 500, # number of bootstrap replicates to compute APE SE. 
+                          boot_replicat = 500, # number of bootstrap replicates to compute APE SE. 
 
                           # parameters for APE computation 
                           stddev = FALSE, # if TRUE, the PEs are computed for a one standard deviation (after removing variation in the fixed-effect dimensions)
@@ -412,7 +412,7 @@ make_main_reg <- function(region = "southam", # one of "brazil", "southam", or "
                           rounding = 2,
                           
                           randomization_test = FALSE,
-                          boot_rep = 5,
+                          boot_replicat = 5,
                           
                           output = "coef_table" # one of "data", est_object, or "coef_table" 
 ){
@@ -1097,7 +1097,7 @@ make_main_reg <- function(region = "southam", # one of "brazil", "southam", or "
     
     if(randomization_test){
       set.seed(8888)
-      for(b in 1:boot_rep){
+      for(b in 1:boot_replicat){
         boot_ape_list[[b]] <- ctrl_fun_endo(myfun_data = randomize_endo(original_data = d_clean), 
                                             fsf_list = fml_1st_list,
                                             ssf = fml_2nd)
@@ -1105,14 +1105,14 @@ make_main_reg <- function(region = "southam", # one of "brazil", "southam", or "
       
     } else{
       set.seed(8888)
-      for(b in 1:boot_rep){
+      for(b in 1:boot_replicat){
         boot_ape_list[[b]] <- ctrl_fun_endo(myfun_data = ran.gen_cluster(original_data = d_clean, 
                                                                          arg_list = par_list), 
                                             fsf_list = fml_1st_list,
                                             ssf = fml_2nd)
       }
     }
-    bootstraped_1$t <- matrix(nrow = boot_rep, ncol = max(lengths(boot_ape_list)), data = unlist(boot_ape_list), byrow = TRUE)
+    bootstraped_1$t <- matrix(nrow = boot_replicat, ncol = max(lengths(boot_ape_list)), data = unlist(boot_ape_list), byrow = TRUE)
     
   
     # store final information and bootstrap information (for checks) separately
@@ -1303,7 +1303,7 @@ if(clustering=="twoway"){
   #                       ran.gen = ran.gen_cluster_blc,
   #                       mle = par_list_dim2,
   #                       sim = "parametric",
-  #                       R = boot_rep)
+  #                       R = boot_replicat)
   # SEs[cluster_var2] <- sd(bootstraped_2$t)
   # 
   # bootstraped_12 <- boot(data = d_clean, 
@@ -1314,7 +1314,7 @@ if(clustering=="twoway"){
   #                        ran.gen = ran.gen_cluster_blc,
   #                        mle = par_list_dim12,
   #                        sim = "parametric",
-  #                        R = boot_rep)
+  #                        R = boot_replicat)
   # SEs[cluster_var12] <- sd(bootstraped_12$t)
   # 
   # ## Final standard errors 
