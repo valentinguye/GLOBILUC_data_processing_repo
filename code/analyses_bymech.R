@@ -200,10 +200,10 @@ pre_process <- FALSE
 
 # THESE GOVERNS WHETHER IT'S A JOINT OR A DISJOINT ESTIMATION 
 # for joint: all crops passed to exposure_rfs, and control_all_absolute_rfs = FALSE
-exposure_rfs <- "eaear_Cereals"
+exposure_rfs <- "eaear_Soy_compo"
 control_all_absolute_rfs <- TRUE # whether to control for other crops
 annual_rfs_controls <- TRUE # on annual or year averaged dynamics
-all_exposures_rfs = cash_crops_ctrl # which crops
+all_exposures_rfs = crops_ctrl # which crops
 
 trade_exposure = "trade_expo_imp"
 trade_exposure_period = "20012007"
@@ -250,19 +250,22 @@ output = "est_object"
 glm_iter <- 25 
 
 # specified arguments
-continent = CNT 
-outcome_variable = loss_type 
+continent = "America" 
+outcome_variable = "loss_cropland"
 start_year = est_parameters[["start_year"]]
 end_year = est_parameters[["end_year"]]
-exposure_rfs = CROP
+exposure_rfs = "eaear_Maizegrain"
 control_all_absolute_rfs = TRUE
 annual_rfs_controls = TRUE
-all_exposures_rfs = cropland_crops
+all_exposures_rfs = crops_ctrl
 trade_exposure = est_parameters[["trade_exposure"]]
 trade_exposure_period = est_parameters[["trade_exposure_period"]]
+access_exposure = est_parameters[["access_exposure"]]
 exposure_quantiles = est_parameters[["exposure_quantiles"]]
 rfs_lead = est_parameters[["leads"]] 
 rfs_lag = est_parameters[["lags"]]
+aggr_lead = est_parameters[["aggr_lead"]] 
+aggr_lag = est_parameters[["aggr_lag"]]
 rfs_fya = est_parameters[["fya"]] 
 rfs_pya = est_parameters[["pya"]] 
 s_trend = est_parameters[["s_trend"]]
@@ -291,6 +294,7 @@ make_main_reg <- function(pre_process = FALSE,
                           # More exposures
                           trade_exposure = NULL, # either NULL, FALSE, or whatever, for no interaction with a trade exposure, or either "trade_expo", "export_expo", for a (X+I)/Y or X/Y additional crop-specific, country-level, time invariant exposure layer (can be "trade_expo_imp", "export_expo_imp" too)  
                           trade_exposure_period = "20012007", # either "20012007" or "20062007". Used only if trade_exposure is activated with the previous argument. 
+                          access_exposure = FALSE,
                           
                           # Treatment dynamics                     
                           original_rfs_treatments = c("statute_conv"),
@@ -441,6 +445,18 @@ make_main_reg <- function(pre_process = FALSE,
       rm(trade_expo_dat)
     }
     
+    ## ACCESSIBILITY EXPOSURE
+    if(access_exposure){
+      d <- dplyr::mutate(d, hours_50kcity_inv = 1/hours_50kcity) # creates Inf values that will be removed below, it's former NAs in the sea
+      all_eaear_trade_exposure_rfs <- c(all_eaear_trade_exposure_rfs, "hours_50kcity_inv")
+      for(exp_rfs in unique(c(exposure_rfs, all_exposures_rfs))){
+        eaear_acc_expo_j <- paste0("eaear_acc_",exp_rfs)
+        d <- mutate(d, !!as.symbol(eaear_acc_expo_j) := !!as.symbol(exp_rfs) * hours_50kcity_inv) 
+        all_eaear_trade_exposure_rfs <- c(all_eaear_trade_exposure_rfs, eaear_acc_expo_j)
+      }
+    }
+    
+    
     # code below should work whether d is from tmf or losscommo 
     # Keep only in data the useful variables 
     d <- dplyr::select(d, all_of(unique(c("grid_id", "year", "year_ln", "year_sq", "lat", "lon", "continent_name", "country_name", "country_year",
@@ -477,6 +493,14 @@ make_main_reg <- function(pre_process = FALSE,
     }
   }
   
+  eaear_acc_exposure_rfs <- c()
+  acc_exposure_rfs <- c() # have this one alone, to interact with mandates but not with AEAY
+  if(access_exposure){
+    eaear_acc_exposure_rfs <- c(eaear_acc_exposure_rfs, paste0("eaear_acc_",exposure_rfs))
+    acc_exposure_rfs <- "hours_50kcity_inv"
+  }
+  
+  
   regressors <- c()
   for(rfs_var in rfs_treatments){
     if(group_exposure_rfs){
@@ -487,7 +511,7 @@ make_main_reg <- function(pre_process = FALSE,
       regressors <- c(regressors, varname)
       d <- mutate(d, !!as.symbol(varname) := grp_exp * !!as.symbol(rfs_var))
     }else{
-      for(exp_rfs in c(exposure_rfs, eaear_trade_exposure_rfs)){
+      for(exp_rfs in unique(c(exposure_rfs, eaear_trade_exposure_rfs, eaear_acc_exposure_rfs, acc_exposure_rfs))){
         # make regressors of interest
         varname <- paste0(exp_rfs, "_X_", rfs_var)
         regressors <- c(regressors, varname)
@@ -591,7 +615,7 @@ make_main_reg <- function(pre_process = FALSE,
   
   categorized_exposures <- c()
   # eaear_exp_rfs <- c(exposure_rfs, eaear_trade_exposure_rfs)[1]
-  for(eaear_exp_rfs in c(exposure_rfs, eaear_trade_exposure_rfs)){
+  for(eaear_exp_rfs in unique(c(exposure_rfs, eaear_trade_exposure_rfs, eaear_acc_exposure_rfs, acc_exposure_rfs))){
     if(exposure_quantiles>0){
       d <- mutate(d, !!as.symbol(paste0(eaear_exp_rfs,"_",exposure_quantiles,"tiles")) := cut(!!as.symbol(eaear_exp_rfs), breaks = exposure_quantiles, labels = FALSE)) # paste0(eaear_exp_rfs,"_Q", 1:exposure_quantiles)
       eaear_exp_rfs <- paste0(eaear_exp_rfs,"_",exposure_quantiles,"tiles")
@@ -829,7 +853,7 @@ make_main_reg <- function(pre_process = FALSE,
   ## Annual mandates
   # joint OR DISJOINT estimation
   if((rfs_lead > 0 | rfs_lag > 0) & rfs_fya == 0 & rfs_pya == 0 ){
-    for(EOI in c(exposure_rfs, eaear_trade_exposure_rfs)){
+    for(EOI in unique(c(exposure_rfs, eaear_trade_exposure_rfs, eaear_acc_exposure_rfs, acc_exposure_rfs))){
       # In this case, we are interested in LEAD AND LAG effects, aggregated separately, and all together.
       df_res <- rbind(rep(NA, ncol(df_res)), rep(NA, ncol(df_res)), df_res)
       
@@ -1059,21 +1083,23 @@ make_main_reg <- function(pre_process = FALSE,
 
 # Post estimation function to aggregate annual effects and compute t stats 
 # this is data less for now: does not recompute SE 
-est_obj <- all_tests_est[[CNT]][["eaear_Cereals"]]
+est_obj <- all_tests_est[[CNT]][["eaear_Maizegrain"]]
 d_clean <- d_clean_list[[CNT]][["loss_cropland"]]
-base_exposure = "eaear_Cereals"
+base_exposure = "eaear_Maizegrain"
 trade_exposure = est_parameters[["trade_exposure"]]
+access_exposure = est_parameters[["access_exposure"]] 
 aggr_lag = est_parameters[["aggr_lag"]]
 aggr_lead = est_parameters[["aggr_lead"]]
 clustering = est_parameters[["clustering"]]
 cluster_var1 = est_parameters[["cluster_var1"]]
 cluster_var2 = est_parameters[["cluster_var2"]]
 output = "tstat"
-rm(est_obj, d_clean, base_exposure, crop_k, aggr_lag, aggr_lead, clustering, cluster_var1, cluster_var2, output)
+rm(est_obj, d_clean, base_exposure, aggr_lag, aggr_lead, clustering, cluster_var1, cluster_var2, output)
 post_est_fnc <- function(est_obj, # a fixest estmation object
                          # d_clean,
                          base_exposure = CROP,
-                         trade_exposure = est_parameters[["trade_exposure"]],
+                         trade_exposure = NULL, # default
+                         access_exposure = FALSE, # default
                          aggr_lag = est_parameters[["aggr_lag"]], 
                          aggr_lead = est_parameters[["aggr_lead"]], 
                          clustering = est_parameters[["clustering"]],
@@ -1089,10 +1115,14 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
   
   df_res <- df_res[grepl(base_exposure, row.names(df_res)), ]
   
+  exposures_of_interest <- base_exposure
   if(length(trade_exposure)>0){
-    crop_k <- paste0("eaear_",trade_exposure,"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = base_exposure) ) ) 
-  } else {
-    crop_k <- base_exposure
+    exposures_of_interest <- c(exposures_of_interest, 
+                               paste0("eaear_",trade_exposure,"_",str_to_lower(gsub(pattern = "eaear_", replacement = "", x = base_exposure) ) ) )
+  } 
+  if(access_exposure){
+    exposures_of_interest <- c(exposures_of_interest, 
+                               paste0("eaear_acc_",base_exposure))
   }
   
   # RE-COMPUTE THE VCOV, ACCORDING TO THE SPECIFIED CLUSTERING 
@@ -1110,9 +1140,9 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
   
   est_obj <- summary(est_obj, cluster = se)
   
-  #for(crop_k in base_exposure){
+  for(EOI in exposures_of_interest){
     # regressors of interest
-    base_reg_name <- paste0(crop_k,"_X_statute_conv")
+    base_reg_name <- paste0(EOI,"_X_statute_conv")
     
     ## MAKE AGGREGATE RESULTS 
     
@@ -1120,7 +1150,7 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
     
     df_res <- rbind(rep(NA, ncol(df_res)), df_res)
     
-    aggr_names <- paste0(crop_k, c("_X_aggrall"))
+    aggr_names <- paste0(EOI, c("_X_aggrall"))
     row.names(df_res)[1] <- aggr_names
     
     
@@ -1146,7 +1176,7 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
     df_res[aggr_names[1],"Pr(>|t|)"]  <- (2*pt(abs(df_res[aggr_names[1],"t value"]), 
                                                lower.tail = FALSE, 
                                                df = fixest_df)) 
-  #}
+  }
   
   
   if(output=="tstat"){
@@ -1159,11 +1189,12 @@ post_est_fnc <- function(est_obj, # a fixest estmation object
 }
 
 
-#### Main specification -----------------------------------------------------------------------
+#### Main specification and objects -----------------------------------------------------------------------
 est_parameters <- list(start_year = 2008, 
                        end_year = 2016, 
                        trade_exposure = NULL, # "export_expo_imp0", # "trade_expo", #  # #  "trade_expo_imp", # NULL, # "trade_expo_imp",
                        trade_exposure_period = "20012007",
+                       access_exposure = FALSE,
                        annual_rfs_controls = TRUE,
                        leads = 2,
                        lags = 2,
@@ -1220,7 +1251,6 @@ g6_crops <- c("eaear_Banana", "eaear_Cocoa_Coffee", "eaear_Tea", "eaear_Rubber")
 
 continents <- c("all", "America", "Africa", "Asia") # "all"#  
 
-#### LOSS COMMO CATEGORIES ------------------------------------------
 
 ### DATA 
 main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opindusnotrans_residu_aeaycompo_long_final.Rdata"))
@@ -1245,6 +1275,8 @@ cropland_crops <- c(all_crops[!(all_crops %in% c(woody_perrenials))])
 # CNT <- "America"
 # CROP <- "eaear_Soy_compo"
 
+
+#### LOSS COMMO CATEGORIES ------------------------------------------
 all_tests_est <- list()
 d_clean_list <- list()
 for(CNT in continents){
@@ -1259,7 +1291,7 @@ for(CNT in continents){
     crops_ctrl <- all_crops
 
     # **NOPE** (control transitory LUC)
-    # further remove woody perennials and pastures, if we regress cropland anyway
+    # further remove woody perennials, if we regress cropland anyway
     crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials))})]# , "eaear_Fodder"
 
     # the order of the strata in the list are determined by how we want to plot results
@@ -1434,6 +1466,7 @@ for(CNT in continents){# "all", , "Africa", "Asia"
     
     x$model <- CNT
     x$via_trade <- grepl("_expo_", estimate_names)    
+    x$via_access <- grepl("_acc_", estimate_names)    
     x$crop <- CROP
     x$Dynamics <- ""
     x$Dynamics[grepl("aggrall", estimate_names)] <- "Cumulative"
@@ -1529,62 +1562,112 @@ dwplot(df,
         ) # legend.title = element_blank()
 
 
-
-
-#### GROUP 6 SEPARATELY #### 
-rm(all_tests_est, d_clean_list)
+#### LOSS COMMO CATEGORIES - ACCESSIBILITY #### 
+est_parameters[["access_exposure"]] <- TRUE 
 all_tests_est <- list()
 d_clean_list <- list()
 for(CNT in continents){
-  ### GROUP 6 CROPS 
-  loss_type <- "loss_pasture"
   
-  for(CROP in c("eaear_Fodder", "eaear_Citrus", "eaear_Coconut", g6_crops)){
+  ### CROPLAND ### 
+  loss_type <- "loss_cropland"
+  
+  # GROUP 1-2
+  for(CROP in c(gentest_crops, displtest_crops)){
     ## Determine the crops to control for
     #crops_ctrl <- crops_groups[sapply(crops_groups, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()  # this removes from the set of controls, the crops that are in the same group as CROP
     crops_ctrl <- all_crops
     
-    # the order of the strata in the list are determined by how we want to plot results
-    temp_list_g6 <- make_main_reg(continent = CNT,
-                                  outcome_variable = loss_type,
-                                  
-                                  start_year = est_parameters[["start_year"]],
-                                  end_year = est_parameters[["end_year"]],
-                                  
-                                  # regress on one crop at a time, and control for other crops
-                                  exposure_rfs = CROP, # "eaear_Maizegrain",
-                                  control_all_absolute_rfs = TRUE,
-                                  annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
-                                  all_exposures_rfs = crops_ctrl,
-                                  
-                                  trade_exposure = est_parameters[["trade_exposure"]],
-                                  trade_exposure_period = est_parameters[["trade_exposure_period"]],
-                                  
-                                  rfs_lead = est_parameters[["leads"]],
-                                  rfs_lag = est_parameters[["lags"]],
-                                  aggr_lead = est_parameters[["aggr_lead"]],
-                                  aggr_lag = est_parameters[["aggr_lag"]],
-                                  sjpos = est_parameters[["sjpos"]],
-                                  exposure_quantiles = est_parameters[["exposure_quantiles"]],
-                                  s_trend = est_parameters[["s_trend"]],
-                                  s_trend_loga = est_parameters[["s_trend_loga"]],
-                                  s_trend_sq = est_parameters[["s_trend_sq"]],
-                                  
-                                  glm_iter = est_parameters[["glm_iter"]],
-                                  
-                                  output = "everything")
+    # **NOPE** (control transitory LUC)
+    # further remove woody perennials, if we regress cropland anyway
+    crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials))})]# , "eaear_Fodder"
     
-    all_tests_est[[CNT]][[CROP]] <- temp_list_g6[[1]] # this is the fixest object
-    d_clean_list[[CNT]][[loss_type]] <- temp_list_g6[[2]] # this is the data (always the same at every CROP iteration)
-    rm(temp_list_g6)
+    # the order of the strata in the list are determined by how we want to plot results
+    temp_list_cropland <- make_main_reg(continent = CNT,
+                                        outcome_variable = loss_type,
+                                        
+                                        start_year = est_parameters[["start_year"]],
+                                        end_year = est_parameters[["end_year"]],
+                                        
+                                        # regress on one crop at a time, and control for other crops
+                                        exposure_rfs = CROP, # "eaear_Maizegrain",
+                                        control_all_absolute_rfs = TRUE,
+                                        annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                        all_exposures_rfs = crops_ctrl,
+                                        
+                                        trade_exposure = est_parameters[["trade_exposure"]],
+                                        trade_exposure_period = est_parameters[["trade_exposure_period"]],
+                                        access_exposure = est_parameters[["access_exposure"]],
+                                        
+                                        rfs_lead = est_parameters[["leads"]],
+                                        rfs_lag = est_parameters[["lags"]],
+                                        aggr_lead = est_parameters[["aggr_lead"]],
+                                        aggr_lag = est_parameters[["aggr_lag"]],
+                                        sjpos = est_parameters[["sjpos"]],
+                                        exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                                        s_trend = est_parameters[["s_trend"]],
+                                        s_trend_loga = est_parameters[["s_trend_loga"]],
+                                        s_trend_sq = est_parameters[["s_trend_sq"]],
+                                        
+                                        glm_iter = est_parameters[["glm_iter"]],
+                                        
+                                        output = "everything")
+    
+    all_tests_est[[CNT]][[CROP]] <- temp_list_cropland[[1]] # this is the fixest object
+    d_clean_list[[CNT]][[loss_type]] <- temp_list_cropland[[2]] # this is the data (always the same at every CROP iteration)
+    rm(temp_list_cropland)
     rm(CROP)
   }
+  
+  ### OIL PALM (GROUP 3) ###
+  oilpalm_loss <- "loss_oilpalm_indus"
+  # oilpalm_ctrl <- cropland_crops
+  # oilpalm_ctrl <- all_crops # [all_crops != "eaear_Coconut"]
+  oilpalm_ctrl <- c()
+  #for(oilpalm_loss in c("loss_oilpalm_both", "loss_oilpalm_indus")){
+  temp_list_oilpalm <- make_main_reg(continent = CNT,
+                                     outcome_variable = oilpalm_loss,
+                                     start_year = est_parameters[["start_year"]],
+                                     end_year = est_parameters[["end_year"]],
+                                     
+                                     # regress on crop at a time, but control for annual interactions with other crops
+                                     exposure_rfs = "eaear_Oilpalm",
+                                     control_all_absolute_rfs = TRUE,
+                                     annual_rfs_controls = TRUE,
+                                     all_exposures_rfs = oilpalm_ctrl,
+                                     
+                                     trade_exposure = est_parameters[["trade_exposure"]],
+                                     trade_exposure_period = est_parameters[["trade_exposure_period"]],
+                                     access_exposure = est_parameters[["access_exposure"]],
+                                     
+                                     rfs_lead = est_parameters[["leads"]],
+                                     rfs_lag = est_parameters[["lags"]],
+                                     aggr_lead = est_parameters[["aggr_lead"]],
+                                     aggr_lag = est_parameters[["aggr_lag"]],
+                                     sjpos = est_parameters[["sjpos"]],
+                                     exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                                     s_trend = est_parameters[["s_trend"]],
+                                     s_trend_loga = est_parameters[["s_trend_loga"]],
+                                     s_trend_sq = est_parameters[["s_trend_sq"]],
+                                     glm_iter = est_parameters[["glm_iter"]],
+                                     
+                                     output = "everything")
+  
+  all_tests_est[[CNT]][["eaear_Oilpalm"]] <- temp_list_oilpalm[[1]] # this is the fixest object
+  d_clean_list[[CNT]][[oilpalm_loss]] <- temp_list_oilpalm[[2]] # this is the data 
+  rm(temp_list_oilpalm)
+  
 }
-for(CNT in "all"){# "all", , "Africa", "Asia"
 
-  for(CROP in c(c("eaear_Citrus", "eaear_Coconut", g6_crops))){
-
-    loss_type <- "loss_pasture"  
+# Extract the term on access exposure 
+cnt_crop_list <- list()
+cnt_list <- list()
+for(CNT in continents){# "all", , "Africa", "Asia"
+  for(CROP in c(gentest_crops, displtest_crops, "eaear_Oilpalm")){
+    if(CROP == "eaear_Oilpalm"){
+      loss_type <- oilpalm_loss
+    } else { 
+      loss_type <- "loss_cropland"  
+    }
     d_clean <- d_clean_list[[CNT]][[loss_type]]
     
     # store post-estimation outputs of all clustering levels
@@ -1594,15 +1677,18 @@ for(CNT in "all"){# "all", , "Africa", "Asia"
     postest_list[["grid_id_10"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
                                                  base_exposure = CROP,
                                                  trade_exposure = NULL,
+                                                 access_exposure = est_parameters[["access_exposure"]],
                                                  aggr_lag = est_parameters[["aggr_lag"]], 
                                                  aggr_lead = est_parameters[["aggr_lead"]], 
                                                  clustering = "oneway",
                                                  cluster_var1 = "grid_id_10",
                                                  output = "tstat")
+    
     # 5 times larger
     postest_list[["grid_id_5"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
                                                 base_exposure = CROP,
                                                 trade_exposure = NULL,
+                                                access_exposure = est_parameters[["access_exposure"]],
                                                 aggr_lag = est_parameters[["aggr_lag"]], 
                                                 aggr_lead = est_parameters[["aggr_lead"]], 
                                                 clustering = "oneway",
@@ -1612,6 +1698,7 @@ for(CNT in "all"){# "all", , "Africa", "Asia"
     postest_list[["grid_id_20"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
                                                  base_exposure = CROP,
                                                  trade_exposure = NULL,
+                                                 access_exposure = est_parameters[["access_exposure"]],
                                                  aggr_lag = est_parameters[["aggr_lag"]], 
                                                  aggr_lead = est_parameters[["aggr_lead"]], 
                                                  clustering = "oneway",
@@ -1619,22 +1706,24 @@ for(CNT in "all"){# "all", , "Africa", "Asia"
                                                  output = "tstat")
     
     ## TWO-WAY  CLUSTERING
+    # SET THE QUANTILE LEVEL HERE 
+    q_expo <- 10
     # need to do this here and not in post_est_fnc for fixest to find the data to construct the new vcov 
-    d_clean <- left_join(d_clean, main_data[,c("grid_id", "year", CROP)], by = c("grid_id", "year"))
-    if(is.numeric(est_parameters[["cluster_var1"]])){
-      # make sure that the exposure var is not there already
-      d_clean <- dplyr::select(d_clean, -!!as.symbol(CROP[1]))
-      d_clean <- mutate(d_clean, !!as.symbol(paste0(CROP[1],"_",est_parameters[["cluster_var1"]],"tiles")) := cut(!!as.symbol(CROP[1]), breaks = est_parameters[["cluster_var1"]], labels = paste0(CROP[1],"_Q", 1:est_parameters[["cluster_var1"]])))
-    }
+    # make sure that the exposure var is not there already
+    d_clean <- left_join(d_clean[,names(d_clean)!=CROP[1]], main_data[,c("grid_id", "year", CROP)], by = c("grid_id", "year"))
+    
+    d_clean <- mutate(d_clean, !!as.symbol(paste0(CROP[1],"_",q_expo,"tiles")) := cut(!!as.symbol(CROP[1]), breaks = q_expo, labels = paste0(CROP[1],"_Q", 1:q_expo)))
+    
     # extract t stats of coef of interest 
     postest_list[["twoway_percentile"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
                                                         base_exposure = CROP,
                                                         trade_exposure = NULL,
+                                                        access_exposure = est_parameters[["access_exposure"]],
                                                         aggr_lag = est_parameters[["aggr_lag"]], 
                                                         aggr_lead = est_parameters[["aggr_lead"]],
                                                         clustering = "twoway",
-                                                        cluster_var1 = est_parameters[["cluster_var1"]],
-                                                        cluster_var2 = est_parameters[["cluster_var2"]],
+                                                        cluster_var1 = q_expo,
+                                                        cluster_var2 = "grid_id_10",
                                                         output = "tstat")
     rm(d_clean)
     
@@ -1651,8 +1740,10 @@ for(CNT in "all"){# "all", , "Africa", "Asia"
     x <- dplyr::select(x, -grid_id_5, -grid_id_20, -twoway_percentile)
     names(x)[names(x)=="grid_id_10"] <- "tstat"
     
+    
     x$model <- CNT
     x$via_trade <- grepl("_expo_", estimate_names)    
+    x$via_access <- grepl("_acc_", estimate_names)    
     x$crop <- CROP
     x$Dynamics <- ""
     x$Dynamics[grepl("aggrall", estimate_names)] <- "Cumulative"
@@ -1670,83 +1761,45 @@ for(CNT in "all"){# "all", , "Africa", "Asia"
     # x <- x[!is.na(x$tstat), ]
     row.names(x) <- NULL # otherwise they duplicate while stacking
     cnt_crop_list[[CNT]][[CROP]] <- x
-    
   }
   cnt_list[[CNT]] <- cnt_crop_list[[CNT]] %>% bind_rows()
 }
-df <- cnt_list %>% bind_rows()
+df <- cnt_list %>% bind_rows() # "loss_cropland"
 
-#### LOSS COMMO CATEGORIES - TRADE -------------------------------------
-# Extract the term on trade exposure 
-rm(df_trade)
-cnt_crop_list <- list()
-cnt_list <- list()
-for(CNT in continents){# "all", , "Africa", "Asia"
-  for(CROP in c(gentest_crops, displtest_crops, "eaear_Oilpalm")){
-    if(CROP == "eaear_Oilpalm"){
-      loss_type <- oilpalm_loss
-    } else { 
-      loss_type <- "loss_cropland"  
-    }
-    # extract t stats of coef of interest 
-    x <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type 
-                      base_exposure = CROP,
-                      trade_exposure = est_parameters[["trade_exposure"]],
-                      aggr_lag = est_parameters[["aggr_lag"]], 
-                      aggr_lead = est_parameters[["aggr_lead"]], 
-                      output = "tstat")
-    
-    x$model <- CNT
-    x$via_trade <- grepl("_expo_", row.names(x))    
-    x$crop <- CROP
-    x$Dynamics <- ""
-    x$Dynamics[grepl("aggrall", row.names(x))] <- "Cumulative"
-    x$Dynamics[grepl("lead1", row.names(x))] <- "t+1"
-    x$Dynamics[row.names(x)==paste0(CROP,"_X_statute_conv")] <- "t"
-    x$Dynamics[grepl("lag1", row.names(x))] <- "t-1"
-    x$Dynamics[grepl("lag2", row.names(x))] <- "t-2"
-    x$Dynamics[grepl("lag3", row.names(x))] <- "t-3"
-    
-    row.names(x) <- x$Dynamics  
-    x <- x[c("Cumulative", "t+1", "t", "t-1", "t-2", "t-3", "t-4"),] 
-    x <- x[!is.na(x$tstat), ]
-    row.names(x) <- NULL # otherwise they duplicate while stacking
-    cnt_crop_list[[CNT]][[CROP]] <- x
-    
-  }
-  cnt_list[[CNT]] <- cnt_crop_list[[CNT]] %>% bind_rows()
-}
-df_trade <- cnt_list %>% bind_rows() 
+df <- df[df$Dynamics=="Cumulative",] ## CHANGE HERE TO "t+2" to display only anticipation effects
 
+df$significant01 <- ""
+df[abs(df[,"tstat"]) > 1.645, "significant01"] <- "p-value < .1"
+# df$highlight <- ""
+# df[df$significant01 == "p-value < .1" & df$rob_preci==1, "highlight"] <- "p-value < .1 & robust" 
+df <- mutate(df, highlight = rob_preci)
+# df <- mutate(df, highlight = as.discrete(round((rob_preci+0.5)/1.5, 2)))
 
-df_trade$significant01 <- ""
-df_trade[abs(df_trade[,"tstat"]) > 1.645, "significant01"] <- "p-value < .1"
 
 # attribute crop Group 
-df_gn <- sapply(names(crops_groups), function(gn){if_else(df_trade$crop %in% crops_groups[[gn]], true = gn, false = NULL)}) 
-df_trade$Group <- ""
+# horrible code mais j'ai pas réussi à faire mieux ... 
+df_gn <- sapply(names(crops_groups), function(gn){if_else(df$crop %in% crops_groups[[gn]], true = gn, false = NULL)}) 
+df$Group <- ""
 for(i in 1:nrow(df_gn)){
   row <- df_gn[i,]
-  df_trade$Group[i] <- row[!is.na(row)] %>% unname()
+  df$Group[i] <- row[!is.na(row)] %>% unname()
 }
 
-head(df_trade)
 # make some variable name changes necessary for dotwhisker
-df_save <- df_trade
-
-df_trade <- df_trade[df_trade$Dynamics=="Cumulative",]
-df_trade <- mutate(df_trade, sizes = if_else(model == "all", true = 4, false = 2.5))
-names(df_trade)[names(df_trade)=="tstat"] <- "estimate"
-names(df_trade)[names(df_trade)=="crop"] <- "term"
-
-# Plot both trade and conditional on trade estimates
-df_both <- rbind(df, df_trade)
-# df_both
+# df <- df[df$crop != "eaear_Maizegrain",]
+df <- mutate(df, sizes = if_else(model == "all", true = 4, false = 2.5))
+names(df)[names(df)=="tstat"] <- "estimate"
+# names(df)[names(df)=="model"] <- "continent"
+# names(df)[names(df)=="Dynamics"] <- "model"
+names(df)[names(df)=="crop"] <- "term"
+# df$cumulative <- factor(df$Dynamics=="Cumulative")
+head(df)
 
 
-dwplot(df_both,
-       dot_args = list(aes(color = via_trade, shape = model, size = model, alpha = significant01)) ) %>%  # shape = Dynamics, size = cumulative
+dwplot(df,
+       dot_args = list(aes(color = via_access, shape = model, size = model, alpha = highlight)) ) %>%  #size = 2.5,  shape = Dynamics, size = cumulative
   relabel_predictors(predictors_dict) + 
+  # # critical values  : 1.645   1.960  2.576
   geom_vline(xintercept = 1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
   geom_vline(xintercept = -1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
   geom_vline(xintercept = 2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
@@ -1756,23 +1809,23 @@ dwplot(df_both,
   
   scale_color_brewer(type = "qual",palette="Dark2", #  Accent  
                      breaks=c(TRUE, FALSE), 
-                      labels=c("Moderated by crop export", "Irrespective of crop export"), 
-                      name="") +
+                     labels=c("Moderated by accessibility", "Irrespective of accessibility"), 
+                     name="") +
   
   scale_shape_manual(values = c(18, 17, 15, 16), # c(21, 24, 22, 25),# c(1, 2, 0, 3), # c(16, 17, 15, 18)
                      breaks=c("all", "America", "Africa", "Asia"),
                      labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
                      name="") +
   
-  scale_alpha_manual(values = c(0.25, 1),
-                     breaks=c("p-value < .1", ""), 
-                     labels=c("p-value < .1", ""), 
-                     name="") +
-  
-  scale_size_manual(values = c(4, 2.5, 2.5, 2.5),
+  scale_size_manual(values = c(3.5, 2.5, 2.5, 2.5),
                     breaks=c("all", "America", "Africa", "Asia"),
                     labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
                     name="") +
+  
+  scale_alpha_continuous(# values = sort(unique(df$highlight)),# c(0.33, 0.50, 0.67, 0.83, 1.00), # c(0.2, 0.4, 0.6, 0.8, 1),
+    breaks= c(0.33, 0.50, 0.67, 0.83, 1.00),# sort(unique(df$highlight)),# 
+    labels = c("0", "1/4", "2/4", "3/4", "4/4"),
+    name="Precision robustness") +
   
   scale_x_continuous(breaks = c(-1.96, 1.96), 
                      labels = c("-1.96","1.96")) +
@@ -1781,9 +1834,284 @@ dwplot(df_both,
   theme(plot.title = element_text(face="bold", size=c(10)),
         legend.position = "bottom",# c(0.8, 0.05),
         legend.justification = c(0, 0), 
-        legend.background = element_rect(colour="grey80"),
-        legend.title = element_blank()) 
+        legend.background = element_rect(colour="grey80")
+  ) # legend.title = element_blank()
 
+
+
+est_parameters[["access_exposure"]] <- FALSE
+
+#### LOSS COMMO CATEGORIES - TRADE -------------------------------------
+est_parameters[["trade_exposure"]] <- "trade_expo"
+all_tests_est <- list()
+d_clean_list <- list()
+for(CNT in continents){
+  
+  ### CROPLAND ### 
+  loss_type <- "loss_cropland"
+  # keep ony those crops for which there is trade data 
+  commercial_crops <- c(gentest_crops, displtest_crops)
+  commercial_crops <- commercial_crops[!(commercial_crops %in% c("eaear_Roots", "eaear_Biomass"))]
+  
+  # GROUP 1-2
+  for(CROP in commercial_crops){
+    ## Determine the crops to control for
+    #crops_ctrl <- crops_groups[sapply(crops_groups, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()  # this removes from the set of controls, the crops that are in the same group as CROP
+    crops_ctrl <- commercial_crops
+    
+    # **NOPE** (control transitory LUC)
+    # further remove woody perennials, if we regress cropland anyway
+    crops_ctrl <- crops_ctrl[sapply(crops_ctrl, function(c){!(c %in% c(woody_perrenials))})]# , "eaear_Fodder"
+    
+    # the order of the strata in the list are determined by how we want to plot results
+    temp_list_cropland <- make_main_reg(continent = CNT,
+                                        outcome_variable = loss_type,
+                                        
+                                        start_year = est_parameters[["start_year"]],
+                                        end_year = est_parameters[["end_year"]],
+                                        
+                                        # regress on one crop at a time, and control for other crops
+                                        exposure_rfs = CROP, # "eaear_Maizegrain",
+                                        control_all_absolute_rfs = TRUE,
+                                        annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                        all_exposures_rfs = crops_ctrl,
+                                        
+                                        trade_exposure = est_parameters[["trade_exposure"]],
+                                        trade_exposure_period = est_parameters[["trade_exposure_period"]],
+
+                                        rfs_lead = est_parameters[["leads"]],
+                                        rfs_lag = est_parameters[["lags"]],
+                                        aggr_lead = est_parameters[["aggr_lead"]],
+                                        aggr_lag = est_parameters[["aggr_lag"]],
+                                        sjpos = est_parameters[["sjpos"]],
+                                        exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                                        s_trend = est_parameters[["s_trend"]],
+                                        s_trend_loga = est_parameters[["s_trend_loga"]],
+                                        s_trend_sq = est_parameters[["s_trend_sq"]],
+                                        
+                                        glm_iter = est_parameters[["glm_iter"]],
+                                        
+                                        output = "everything")
+    
+    all_tests_est[[CNT]][[CROP]] <- temp_list_cropland[[1]] # this is the fixest object
+    d_clean_list[[CNT]][[loss_type]] <- temp_list_cropland[[2]] # this is the data (always the same at every CROP iteration)
+    rm(temp_list_cropland)
+    rm(CROP)
+  }
+  
+  ### OIL PALM (GROUP 3) ###
+  oilpalm_loss <- "loss_oilpalm_indus"
+  # oilpalm_ctrl <- cropland_crops
+  # oilpalm_ctrl <- all_crops # [all_crops != "eaear_Coconut"]
+  oilpalm_ctrl <- c()
+  #for(oilpalm_loss in c("loss_oilpalm_both", "loss_oilpalm_indus")){
+  temp_list_oilpalm <- make_main_reg(continent = CNT,
+                                     outcome_variable = oilpalm_loss,
+                                     start_year = est_parameters[["start_year"]],
+                                     end_year = est_parameters[["end_year"]],
+                                     
+                                     # regress on crop at a time, but control for annual interactions with other crops
+                                     exposure_rfs = "eaear_Oilpalm",
+                                     control_all_absolute_rfs = TRUE,
+                                     annual_rfs_controls = TRUE,
+                                     all_exposures_rfs = oilpalm_ctrl,
+                                     
+                                     trade_exposure = est_parameters[["trade_exposure"]],
+                                     trade_exposure_period = est_parameters[["trade_exposure_period"]],
+
+                                     rfs_lead = est_parameters[["leads"]],
+                                     rfs_lag = est_parameters[["lags"]],
+                                     aggr_lead = est_parameters[["aggr_lead"]],
+                                     aggr_lag = est_parameters[["aggr_lag"]],
+                                     sjpos = est_parameters[["sjpos"]],
+                                     exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                                     s_trend = est_parameters[["s_trend"]],
+                                     s_trend_loga = est_parameters[["s_trend_loga"]],
+                                     s_trend_sq = est_parameters[["s_trend_sq"]],
+                                     glm_iter = est_parameters[["glm_iter"]],
+                                     
+                                     output = "everything")
+  
+  all_tests_est[[CNT]][["eaear_Oilpalm"]] <- temp_list_oilpalm[[1]] # this is the fixest object
+  d_clean_list[[CNT]][[oilpalm_loss]] <- temp_list_oilpalm[[2]] # this is the data 
+  rm(temp_list_oilpalm)
+  
+}
+
+# Extract the term on TRADE exposure 
+cnt_crop_list <- list()
+cnt_list <- list()
+for(CNT in continents){# "all", , "Africa", "Asia"
+  for(CROP in c(commercial_crops, "eaear_Oilpalm")){
+    if(CROP == "eaear_Oilpalm"){
+      loss_type <- oilpalm_loss
+    } else { 
+      loss_type <- "loss_cropland"  
+    }
+    d_clean <- d_clean_list[[CNT]][[loss_type]]
+    
+    # store post-estimation outputs of all clustering levels
+    postest_list <- list()
+    # THREE LEVELS OF SPATIAL CLUSTERING
+    # Main 
+    postest_list[["grid_id_10"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                 base_exposure = CROP,
+                                                 trade_exposure = est_parameters[["trade_exposure"]],
+                                                 aggr_lag = est_parameters[["aggr_lag"]], 
+                                                 aggr_lead = est_parameters[["aggr_lead"]], 
+                                                 clustering = "oneway",
+                                                 cluster_var1 = "grid_id_10",
+                                                 output = "tstat")
+    
+    # 5 times larger
+    postest_list[["grid_id_5"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                base_exposure = CROP,
+                                                trade_exposure = est_parameters[["trade_exposure"]],
+                                                aggr_lag = est_parameters[["aggr_lag"]], 
+                                                aggr_lead = est_parameters[["aggr_lead"]], 
+                                                clustering = "oneway",
+                                                cluster_var1 = "grid_id_5",
+                                                output = "tstat")
+    # 20 times larger
+    postest_list[["grid_id_20"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                 base_exposure = CROP,
+                                                 trade_exposure = est_parameters[["trade_exposure"]],
+                                                 aggr_lag = est_parameters[["aggr_lag"]], 
+                                                 aggr_lead = est_parameters[["aggr_lead"]], 
+                                                 clustering = "oneway",
+                                                 cluster_var1 = "grid_id_20",
+                                                 output = "tstat")
+    
+    ## TWO-WAY  CLUSTERING
+    # SET THE QUANTILE LEVEL HERE 
+    q_expo <- 10
+    # need to do this here and not in post_est_fnc for fixest to find the data to construct the new vcov 
+    # make sure that the exposure var is not there already
+    d_clean <- left_join(d_clean[,names(d_clean)!=CROP[1]], main_data[,c("grid_id", "year", CROP)], by = c("grid_id", "year"))
+    
+    d_clean <- mutate(d_clean, !!as.symbol(paste0(CROP[1],"_",q_expo,"tiles")) := cut(!!as.symbol(CROP[1]), breaks = q_expo, labels = paste0(CROP[1],"_Q", 1:q_expo)))
+    
+    # extract t stats of coef of interest 
+    postest_list[["twoway_percentile"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                        base_exposure = CROP,
+                                                        trade_exposure = est_parameters[["trade_exposure"]],
+                                                        aggr_lag = est_parameters[["aggr_lag"]], 
+                                                        aggr_lead = est_parameters[["aggr_lead"]],
+                                                        clustering = "twoway",
+                                                        cluster_var1 = q_expo,
+                                                        cluster_var2 = "grid_id_10",
+                                                        output = "tstat")
+    rm(d_clean)
+    
+    # save row names 
+    estimate_names <- row.names(postest_list[[1]])
+    
+    x <- bind_cols(postest_list, .name_repair = "minimal")
+    names(x) <- names(postest_list)
+    x <- dplyr::mutate(x, across(.cols = everything(), 
+                                 ~abs(.)>1.645, 
+                                 .names = paste0("{.col}","_isprecise")))
+    x <- dplyr::mutate(x, rob_preci = rowMeans(across(.cols = contains("_isprecise")) ))
+    # keep only the main t-stat
+    x <- dplyr::select(x, -grid_id_5, -grid_id_20, -twoway_percentile)
+    names(x)[names(x)=="grid_id_10"] <- "tstat"
+    
+    
+    x$model <- CNT
+    x$via_trade <- grepl("_expo_", estimate_names)    
+    x$via_access <- grepl("_acc_", estimate_names)    
+    x$crop <- CROP
+    x$Dynamics <- ""
+    x$Dynamics[grepl("aggrall", estimate_names)] <- "Cumulative"
+    x$Dynamics[grepl("lead1", estimate_names)] <- "t+1"
+    x$Dynamics[grepl("lead2", estimate_names)] <- "t+2"
+    x$Dynamics[estimate_names==paste0(CROP,"_X_statute_conv")] <- "t"
+    x$Dynamics[grepl("lag1", estimate_names)] <- "t-1"
+    x$Dynamics[grepl("lag2", estimate_names)] <- "t-2"
+    x$Dynamics[grepl("lag3", estimate_names)] <- "t-3"
+    
+    # order dynamics 
+    # estimate_names <- x$Dynamics  
+    # x <- x[c("Cumulative", "t+1", "t", "t-1", "t-2", "t-3", "t-4"),] 
+    # # remove NA rows generated if some dynamics are absent for this crop 
+    # x <- x[!is.na(x$tstat), ]
+    row.names(x) <- NULL # otherwise they duplicate while stacking
+    cnt_crop_list[[CNT]][[CROP]] <- x
+  }
+  cnt_list[[CNT]] <- cnt_crop_list[[CNT]] %>% bind_rows()
+}
+df <- cnt_list %>% bind_rows() # "loss_cropland"
+
+df <- df[df$Dynamics=="Cumulative",] ## CHANGE HERE TO "t+2" to display only anticipation effects
+
+df$significant01 <- ""
+df[abs(df[,"tstat"]) > 1.645, "significant01"] <- "p-value < .1"
+# df$highlight <- ""
+# df[df$significant01 == "p-value < .1" & df$rob_preci==1, "highlight"] <- "p-value < .1 & robust" 
+df <- mutate(df, highlight = rob_preci)
+# df <- mutate(df, highlight = as.discrete(round((rob_preci+0.5)/1.5, 2)))
+
+
+# attribute crop Group 
+# horrible code mais j'ai pas réussi à faire mieux ... 
+df_gn <- sapply(names(crops_groups), function(gn){if_else(df$crop %in% crops_groups[[gn]], true = gn, false = NULL)}) 
+df$Group <- ""
+for(i in 1:nrow(df_gn)){
+  row <- df_gn[i,]
+  df$Group[i] <- row[!is.na(row)] %>% unname()
+}
+
+# make some variable name changes necessary for dotwhisker
+# df <- df[df$crop != "eaear_Maizegrain",]
+df <- mutate(df, sizes = if_else(model == "all", true = 4, false = 2.5))
+names(df)[names(df)=="tstat"] <- "estimate"
+# names(df)[names(df)=="model"] <- "continent"
+# names(df)[names(df)=="Dynamics"] <- "model"
+names(df)[names(df)=="crop"] <- "term"
+# df$cumulative <- factor(df$Dynamics=="Cumulative")
+head(df)
+
+
+dwplot(df,
+       dot_args = list(aes(color = via_trade, shape = model, size = model, alpha = highlight)) ) %>%  #size = 2.5,  shape = Dynamics, size = cumulative
+  relabel_predictors(predictors_dict) + 
+  # # critical values  : 1.645   1.960  2.576
+  geom_vline(xintercept = 1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
+  geom_vline(xintercept = -1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
+  geom_vline(xintercept = 2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
+  geom_vline(xintercept = -2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
+  
+  facet_wrap(facets = ~Group, scales = "free_y") + 
+  
+  scale_color_brewer(type = "qual",palette="Dark2", #  Accent  
+                     breaks=c(TRUE, FALSE), 
+                     labels=c("Moderated by trade exposure", "Irrespective of trade exposure"), 
+                     name="") +
+  
+  scale_shape_manual(values = c(18, 17, 15, 16), # c(21, 24, 22, 25),# c(1, 2, 0, 3), # c(16, 17, 15, 18)
+                     breaks=c("all", "America", "Africa", "Asia"),
+                     labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                     name="") +
+  
+  scale_size_manual(values = c(3.5, 2.5, 2.5, 2.5),
+                    breaks=c("all", "America", "Africa", "Asia"),
+                    labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                    name="") +
+  
+  scale_alpha_continuous(# values = sort(unique(df$highlight)),# c(0.33, 0.50, 0.67, 0.83, 1.00), # c(0.2, 0.4, 0.6, 0.8, 1),
+    breaks= c(0.33, 0.50, 0.67, 0.83, 1.00),# sort(unique(df$highlight)),# 
+    labels = c("0", "1/4", "2/4", "3/4", "4/4"),
+    name="Precision robustness") +
+  
+  scale_x_continuous(breaks = c(-1.96, 1.96), 
+                     labels = c("-1.96","1.96")) +
+  
+  theme_bw() + xlab("t-statistics") + ylab("") +  
+  theme(plot.title = element_text(face="bold", size=c(10)),
+        legend.position = "bottom",# c(0.8, 0.05),
+        legend.justification = c(0, 0), 
+        legend.background = element_rect(colour="grey80")
+  ) # legend.title = element_blank()
 
   
 
@@ -1939,6 +2267,152 @@ ggplot(data = land) +
 
   rm(d_clean, d_clean_accu, d_clean_list, d_clean_out, d_clean_sf, land, base_map, af, am, as)
 
+  
+
+  #### GROUP 6 SEPARATELY #### 
+  rm(all_tests_est, d_clean_list)
+  all_tests_est <- list()
+  d_clean_list <- list()
+  for(CNT in continents){
+    ### GROUP 6 CROPS 
+    loss_type <- "loss_pasture"
+    
+    for(CROP in c("eaear_Fodder", "eaear_Citrus", "eaear_Coconut", g6_crops)){
+      ## Determine the crops to control for
+      #crops_ctrl <- crops_groups[sapply(crops_groups, match, x = CROP, nomatch = FALSE)==0] %>% unlist() %>% unname()  # this removes from the set of controls, the crops that are in the same group as CROP
+      crops_ctrl <- all_crops
+      
+      # the order of the strata in the list are determined by how we want to plot results
+      temp_list_g6 <- make_main_reg(continent = CNT,
+                                    outcome_variable = loss_type,
+                                    
+                                    start_year = est_parameters[["start_year"]],
+                                    end_year = est_parameters[["end_year"]],
+                                    
+                                    # regress on one crop at a time, and control for other crops
+                                    exposure_rfs = CROP, # "eaear_Maizegrain",
+                                    control_all_absolute_rfs = TRUE,
+                                    annual_rfs_controls = est_parameters[["annual_rfs_controls"]],
+                                    all_exposures_rfs = crops_ctrl,
+                                    
+                                    trade_exposure = est_parameters[["trade_exposure"]],
+                                    trade_exposure_period = est_parameters[["trade_exposure_period"]],
+                                    
+                                    rfs_lead = est_parameters[["leads"]],
+                                    rfs_lag = est_parameters[["lags"]],
+                                    aggr_lead = est_parameters[["aggr_lead"]],
+                                    aggr_lag = est_parameters[["aggr_lag"]],
+                                    sjpos = est_parameters[["sjpos"]],
+                                    exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                                    s_trend = est_parameters[["s_trend"]],
+                                    s_trend_loga = est_parameters[["s_trend_loga"]],
+                                    s_trend_sq = est_parameters[["s_trend_sq"]],
+                                    
+                                    glm_iter = est_parameters[["glm_iter"]],
+                                    
+                                    output = "everything")
+      
+      all_tests_est[[CNT]][[CROP]] <- temp_list_g6[[1]] # this is the fixest object
+      d_clean_list[[CNT]][[loss_type]] <- temp_list_g6[[2]] # this is the data (always the same at every CROP iteration)
+      rm(temp_list_g6)
+      rm(CROP)
+    }
+  }
+  for(CNT in "all"){# "all", , "Africa", "Asia"
+    
+    for(CROP in c(c("eaear_Citrus", "eaear_Coconut", g6_crops))){
+      
+      loss_type <- "loss_pasture"  
+      d_clean <- d_clean_list[[CNT]][[loss_type]]
+      
+      # store post-estimation outputs of all clustering levels
+      postest_list <- list()
+      # THREE LEVELS OF SPATIAL CLUSTERING
+      # Main 
+      postest_list[["grid_id_10"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                   base_exposure = CROP,
+                                                   trade_exposure = NULL,
+                                                   aggr_lag = est_parameters[["aggr_lag"]], 
+                                                   aggr_lead = est_parameters[["aggr_lead"]], 
+                                                   clustering = "oneway",
+                                                   cluster_var1 = "grid_id_10",
+                                                   output = "tstat")
+      # 5 times larger
+      postest_list[["grid_id_5"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                  base_exposure = CROP,
+                                                  trade_exposure = NULL,
+                                                  aggr_lag = est_parameters[["aggr_lag"]], 
+                                                  aggr_lead = est_parameters[["aggr_lead"]], 
+                                                  clustering = "oneway",
+                                                  cluster_var1 = "grid_id_5",
+                                                  output = "tstat")
+      # 20 times larger
+      postest_list[["grid_id_20"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                   base_exposure = CROP,
+                                                   trade_exposure = NULL,
+                                                   aggr_lag = est_parameters[["aggr_lag"]], 
+                                                   aggr_lead = est_parameters[["aggr_lead"]], 
+                                                   clustering = "oneway",
+                                                   cluster_var1 = "grid_id_20",
+                                                   output = "tstat")
+      
+      ## TWO-WAY  CLUSTERING
+      # need to do this here and not in post_est_fnc for fixest to find the data to construct the new vcov 
+      d_clean <- left_join(d_clean, main_data[,c("grid_id", "year", CROP)], by = c("grid_id", "year"))
+      if(is.numeric(est_parameters[["cluster_var1"]])){
+        # make sure that the exposure var is not there already
+        d_clean <- dplyr::select(d_clean, -!!as.symbol(CROP[1]))
+        d_clean <- mutate(d_clean, !!as.symbol(paste0(CROP[1],"_",est_parameters[["cluster_var1"]],"tiles")) := cut(!!as.symbol(CROP[1]), breaks = est_parameters[["cluster_var1"]], labels = paste0(CROP[1],"_Q", 1:est_parameters[["cluster_var1"]])))
+      }
+      # extract t stats of coef of interest 
+      postest_list[["twoway_percentile"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                          base_exposure = CROP,
+                                                          trade_exposure = NULL,
+                                                          aggr_lag = est_parameters[["aggr_lag"]], 
+                                                          aggr_lead = est_parameters[["aggr_lead"]],
+                                                          clustering = "twoway",
+                                                          cluster_var1 = est_parameters[["cluster_var1"]],
+                                                          cluster_var2 = est_parameters[["cluster_var2"]],
+                                                          output = "tstat")
+      rm(d_clean)
+      
+      # save row names 
+      estimate_names <- row.names(postest_list[[1]])
+      
+      x <- bind_cols(postest_list, .name_repair = "minimal")
+      names(x) <- names(postest_list)
+      x <- dplyr::mutate(x, across(.cols = everything(), 
+                                   ~abs(.)>1.645, 
+                                   .names = paste0("{.col}","_isprecise")))
+      x <- dplyr::mutate(x, rob_preci = rowMeans(across(.cols = contains("_isprecise")) ))
+      # keep only the main t-stat
+      x <- dplyr::select(x, -grid_id_5, -grid_id_20, -twoway_percentile)
+      names(x)[names(x)=="grid_id_10"] <- "tstat"
+      
+      x$model <- CNT
+      x$via_trade <- grepl("_expo_", estimate_names)    
+      x$crop <- CROP
+      x$Dynamics <- ""
+      x$Dynamics[grepl("aggrall", estimate_names)] <- "Cumulative"
+      x$Dynamics[grepl("lead1", estimate_names)] <- "t+1"
+      x$Dynamics[grepl("lead2", estimate_names)] <- "t+2"
+      x$Dynamics[estimate_names==paste0(CROP,"_X_statute_conv")] <- "t"
+      x$Dynamics[grepl("lag1", estimate_names)] <- "t-1"
+      x$Dynamics[grepl("lag2", estimate_names)] <- "t-2"
+      x$Dynamics[grepl("lag3", estimate_names)] <- "t-3"
+      
+      # order dynamics 
+      # estimate_names <- x$Dynamics  
+      # x <- x[c("Cumulative", "t+1", "t", "t-1", "t-2", "t-3", "t-4"),] 
+      # # remove NA rows generated if some dynamics are absent for this crop 
+      # x <- x[!is.na(x$tstat), ]
+      row.names(x) <- NULL # otherwise they duplicate while stacking
+      cnt_crop_list[[CNT]][[CROP]] <- x
+      
+    }
+    cnt_list[[CNT]] <- cnt_crop_list[[CNT]] %>% bind_rows()
+  }
+  df <- cnt_list %>% bind_rows()
   
 #### LOSS CATEGORIES ------------------------------------------
 
