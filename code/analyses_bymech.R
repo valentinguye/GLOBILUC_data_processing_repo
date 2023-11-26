@@ -12,7 +12,7 @@
 # These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
 neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
                     "here", "readstata13", "foreign", "readxl", "writexl",
-                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
+                    "raster", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
                     "lubridate","exactextractr",
                     "doParallel", "foreach", "snow", "parallel",
                     "knitr", "kableExtra",
@@ -24,6 +24,9 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
 
 # Install them in their project-specific versions
 renv::restore(packages = neededPackages)
+
+# Often useful to upgrade renv to debug: 
+# renv::upgrade()
 
 # Load them
 lapply(neededPackages, library, character.only = TRUE)
@@ -1081,8 +1084,11 @@ make_main_reg <- function(pre_process = FALSE,
   rm(toreturn)
 }
 
+# POST REG FUNCTION ----------------------
 # Post estimation function to aggregate annual effects and compute t stats 
 # this is data less for now: does not recompute SE 
+
+# For debugging
 est_obj <- all_tests_est[[CNT]][["eaear_Maizegrain"]]
 d_clean <- d_clean_list[[CNT]][["loss_cropland"]]
 base_exposure = "eaear_Maizegrain"
@@ -1203,7 +1209,7 @@ est_parameters <- list(start_year = 2008,
                        fya = 0, 
                        pya = 0,
                        aggr_lead = 1,
-                       aggr_lag = 2, 
+                       aggr_lag = 1, 
                        sjpos= FALSE,
                        exposure_quantiles = 0,
                        s_trend = "NO", # either "vary_slope", "manual" or "NO" / whatever
@@ -1380,7 +1386,7 @@ for(CNT in continents){
 }
 
 
-all_tests_est[["all"]][["loss_oilpalm_both"]] %>% post_est_fnc(base_exposure = "eaear_Oilpalm")
+# all_tests_est[["all"]][["loss_oilpalm_both"]] %>% post_est_fnc(base_exposure = "eaear_Oilpalm")
 all_tests_est[["America"]][["eaear_Biomass"]] %>% summary()
 all_tests_est[["America"]][["eaear_Soy_compo"]] %>% summary()
 all_tests_est[["Asia"]][["eaear_Oilpalm"]]$convStatus
@@ -1504,11 +1510,11 @@ df <- mutate(df, highlight = rob_preci)
 
 # attribute crop Group 
 # horrible code mais j'ai pas réussi à faire mieux ... 
-df_gn <- sapply(names(crops_groups), function(gn){if_else(df$crop %in% crops_groups[[gn]], true = gn, false = NULL)}) 
+df_gn <- sapply(names(crops_groups), function(gn){if_else(df$crop %in% crops_groups[[gn]], gn, "")}) 
 df$Group <- ""
 for(i in 1:nrow(df_gn)){
  row <- df_gn[i,]
- df$Group[i] <- row[!is.na(row)] %>% unname()
+ df$Group[i] <- row[row!=""] %>% unname()
 }
 
 # make some variable name changes necessary for dotwhisker
@@ -2044,6 +2050,184 @@ dwplot(df,
 
   
 
+#### EAEAR CORRELATION MATRIX ####
+
+# Work on rasters directly? NOP because we want to compare with crop groups and derive tests. 
+# croped at global scale (under 60°)
+
+# Irrigated only
+gaez_dir_global <- here("temp_data", "GAEZ", "v4", "AEAY_out_density", "Rain-fed-all-phases", "global_AOI")
+gaez_crops <- list.files(path = here(gaez_dir_global, "High-input"), 
+                         pattern = "", 
+                         full.names = FALSE)
+gaez_crops <- gsub(pattern = ".tif", replacement = "", x = gaez_crops)
+
+gaez_global <- brick(here(gaez_dir_global, "high_input_all.tif"))
+names(gaez_global) <- gaez_crops
+
+gaez_crops <- names(gaez_global)
+
+# Make a data frame
+wide_df <- raster::as.data.frame(gaez_global, na.rm = TRUE, xy = TRUE, centroids = TRUE, long = FALSE) # ~700s. 
+
+# Rename coordinate variables
+names(wide_df)
+head(wide_df[,c("x", "y")])
+wide_df <- dplyr::rename(wide_df, lon = x, lat = y)
+
+# Group
+mapmat_data <- c(
+  "Banana","Banana",
+  "Barley", "Barley",
+  "Crude_oil", "Biomass", # these crop categories are gonna be created in the present script
+  "Orange", "Citrus", # Citrus sinensis in both GAEZ and FAO
+  "Cocoa", "Cocoa",
+  "Coconut_oil", "Coconut", # Coconut not excluded as we don't use prices anymore. See below, in conversion part, why we would exclude it if we needed price scaling 
+  "Coffee", "Coffee",
+  "Cotton", "Cotton",
+  "Beef", "Fodder", # these crop categories are gonna be created in the present script 
+  "Groundnuts", "Groundnut",
+  "Maize", "Maizegrain",
+  "Oat", "Oat",
+  "Olive_oil", "Olive",  
+  "Palm_oil", "Oilpalm",
+  "Rapeseed_oil", "Rapeseed",
+  "Rice", "Rice",
+  "Roots", "Roots", # these crop categories are gonna be created in the present script 
+  "Rubber", "Rubber",
+  "Sorghum", "Sorghum", # this will be matched with barley and wheat, i.e. grains we have price data on.
+  "Soybean", "Soybean",
+  "Soybean_meal", "Soybean_meal", # these crop categories are gonna be created in the present script
+  "Soybean_oil", "Soybean_oil", # these crop categories are gonna be created in the present script
+  "Sugar", "Sugar", # these crop categories are gonna be created in the present script
+  "Sugar", "Sugarbeet",
+  "Sugar", "Sugarcane",
+  "Sunflower_oil", "Sunflower",
+  "Tea", "Tea",
+  "Tobacco", "Tobacco", 
+  "Wheat", "Wheat")
+
+mapmat <- matrix(data = mapmat_data, 
+                 nrow = length(mapmat_data)/2,
+                 ncol = 2, 
+                 byrow = TRUE)
+
+colnames(mapmat) <- c("Prices", "Crops")
+
+# crops to group based on potential REVENUE
+crops2grp <- c("Barley", "Sorghum", "Wheat", "Cocoa", "Coffee", "Groundnut", "Rapeseed", "Sunflower")
+
+# crops to standardize. There is not fodder, rubber, citrus, banana, cocoa, coffee, olive and tea
+eaear2std <- paste0("eaear_", c("Cereals", "Oilfeed_crops", "Cotton", "Maizegrain", "Oat", "Oilpalm", "Rice",
+                                "Soy_compo", "Sugar", "Tobacco")) 
+# add cocoa, coffee and tea for std2 
+eaear2std_bis <- paste0("eaear_", c("Banana", "Biomass", "Cereals", "Oilfeed_crops", "Cocoa_Coffee", "Cotton", 
+                                    "Maizegrain", "Oat", "Olive", "Oilpalm", "Rice",
+                                    "Soy_compo", "Sugar", "Tea", "Tobacco")) 
+# Group 
+wide_df <- wide_df %>% rowwise() %>% mutate(Biomass = max(c(Sorghumbiomass/10, Miscanthus, Reedcanarygrass, Switchgrass)), # sorghum biomass is expressed in kg/ha, and not 10kg/ha as it is the case for the three other crops
+                                        #  don't include Jatropha because it is expressed in seeds and not above ground biomass in GAEZ. 
+                                        Fodder = max(c(Alfalfa, Napiergrass)),   #,  # it's almost only napiergrass that varies (indeed, some say that it's the highest yielding tropical forage crop https://www.sciencedirect.com/science/article/pii/S2468227619307756#bib0001
+                                        Rice = max(c(Drylandrice, Wetlandrice)),
+                                        Roots = max(c(Cassava, Sweetpotato, Whitepotato,Yam)), 
+                                        Sugar = max(c(Sugarbeet, Sugarcane)) # Especially necessary to match the international price of sugar
+                                       ) %>% as.data.frame()
+
+
+# keep only crops of interest 
+wide_df <- wide_df[, names(wide_df) %in% c("grid_id", "lon", "lat", mapmat[,"Crops"])]
+
+conv_fac <- c(Wheat = 0.87, 
+              Rice = 0.87, 
+              Maizegrain = 0.86, 
+              Sorghum = 0.87, 
+              Barley = 0.87, 
+              Oat = 0.87, 
+              Soybean = 0.90, 
+              Rapeseed = 0.90, 
+              Sunflower = 0.92, 
+              Groundnut = 0.65, # this is applied to go from shelled groundnuts to GAEZ dry weight 
+              # Cotton = 0.33, we won't use this, see below paragraph on cotton
+              Banana = 0.25, # from banana to dry weight banana
+              Tobacco = 0.75) # from traded tobacco dry leaves to GAEZ dry weight (i.e. traded leaves have water content of 25%)  
+# get prices for 2000
+prices$Roots <- 1 # this is just for convenience, as we do not compare commodity values (multiplied by prices) with each others now. 
+price_avg <- prices %>% 
+  filter(year>=1995 & year <= 2004) %>% 
+  #filter(year==2000) %>% 
+  summarise(across(.cols = any_of(mapmat[,"Prices"]), 
+                   .fns = mean, na.rm = TRUE))
+
+df_cs <- wide_df
+df_cs <- dplyr::mutate(df_cs, Banana = Banana / conv_fac["Banana"])
+df_cs <- dplyr::mutate(df_cs, Barley = Barley / conv_fac["Barley"])
+df_cs <- dplyr::mutate(df_cs, Fodder = Fodder * 0.05 / 0.271)
+df_cs <- dplyr::mutate(df_cs, Groundnut = Groundnut / conv_fac["Groundnut"])
+df_cs <- dplyr::mutate(df_cs, Maizegrain = Maizegrain / conv_fac["Maizegrain"])
+df_cs <- dplyr::mutate(df_cs, Oat = Oat / conv_fac["Oat"])
+df_cs <- dplyr::mutate(df_cs, Rapeseed = Rapeseed * 0.41 / conv_fac["Rapeseed"])
+df_cs <- dplyr::mutate(df_cs, Rubber = Rubber / 0.35)
+df_cs <- dplyr::mutate(df_cs, Sorghum = Sorghum / conv_fac["Sorghum"])
+df_cs <- dplyr::mutate(df_cs, Sunflower = Sunflower * 0.42 / conv_fac["Sunflower"])
+df_cs <- dplyr::mutate(df_cs, Soybean = Soybean / conv_fac["Soybean"])
+df_cs <- dplyr::mutate(df_cs, Soybean_oil = Soybean * 0.18 / conv_fac["Soybean"])
+df_cs <- dplyr::mutate(df_cs, Soybean_meal = Soybean * 0.82 / conv_fac["Soybean"])
+df_cs <- dplyr::mutate(df_cs, Rice = Rice / conv_fac["Rice"])
+df_cs <- dplyr::mutate(df_cs, Tobacco = Tobacco / conv_fac["Tobacco"])
+df_cs <- dplyr::mutate(df_cs, Wheat = Wheat / conv_fac["Wheat"])
+df_cs <- dplyr::mutate(df_cs, across(.cols = all_of(mapmat[,"Crops"]),
+                                     .fns = ~./1000)) 
+df_cs <- dplyr::mutate(df_cs, across(.cols = all_of(c("Fodder", "Biomass")),
+                                     .fns = ~.*10)) 
+for(aeay_i in mapmat[,"Crops"]){
+  price_i <- price_avg[mapmat[mapmat[,"Crops"]==aeay_i,"Prices"]]%>%as.numeric()
+  eaear_i <- paste0("eaear_", aeay_i)
+  df_cs <- dplyr::mutate(df_cs, 
+                         !!as.symbol(eaear_i) := !!as.symbol(aeay_i) * price_i)
+}
+df_cs <- df_cs %>% rowwise() %>% mutate(eaear_Cereals = max(c(eaear_Barley, eaear_Sorghum, eaear_Wheat)), 
+                                        eaear_Oilfeed_crops = max(c(eaear_Groundnut, eaear_Rapeseed, eaear_Sunflower)), 
+                                        eaear_Cocoa_Coffee = max(c(eaear_Cocoa, eaear_Coffee))) %>% as.data.frame()
+
+df_cs <- dplyr::mutate(df_cs, eaear_Soy_compo =  eaear_Soybean_meal + eaear_Soybean_oil)
+df_cs <- dplyr::select(df_cs, -eaear_Soybean, -eaear_Soybean_meal, -eaear_Soybean_oil)
+
+
+for(others in all_crops[all_crops!="eaear_Maizegrain"]){
+  
+}
+jnk <- layerStats(gaez_global[[c("Maizegrain", "Tobacco", "Oilpalm")]], 'pearson', na.rm=T)
+
+
+# work on the cross section
+mdcs <- main_data[!duplicated(main_data$grid_id),]
+
+cor_mat_abs <-  cor(dplyr::select(df_cs, all_of(names(predictors_dict)) ))#starts_with("eaear_")
+#cor_mat_std2 <-  cor(dplyr::select(si, all_of(paste0(mapmat_si[,"Crops"], "_std2"))), use = "complete.obs")
+
+cortests <- cor_mat_abs
+j_exposures <- list()
+length(j_exposures) <- length(predictors_dict)
+names(j_exposures) <- names(predictors_dict)
+
+for(serie1 in colnames(cortests)){
+  
+  for(serie2 in row.names(cortests)){
+    
+    cortests[serie1, serie2] <- cor.test(df_cs[,serie1], df_cs[,serie2])$p.value
+  }
+  j_exposures[[serie1]] <- cor_mat_abs[cortests[serie1, ] < 0.05, serie1]
+}
+
+j_exposures[["eaear_Maizegrain"]] 
+
+# store, for each crop, which other crop it is most correlated with
+# corr_mapmat <- cbind(names(predictors_dict),NA)
+# colnames(corr_mapmat) <- c("Crops", "fst_corr")
+# for(crop in names(predictors_dict)){
+#   x <- j_exposures[[crop]]
+#   corr_mapmat[corr_mapmat[,"Crops"]==crop, "fst_corr"] <- names(x)[x == max(x[x<max(x)])] 
+# }
 
 
 #### MAP OUTCOMES  -------------------------------------------------

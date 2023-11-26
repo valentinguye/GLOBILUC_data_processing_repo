@@ -325,7 +325,7 @@ mask(x = tropical_stack,
 # (note that masking changes the summary values of gaez)
 
 
-### RASTER TO DATAFRAME ### 
+#### RASTER TO DATAFRAME ####
 
 tropical_stack <- stack(masked_stack_output_name)
 

@@ -28,12 +28,17 @@
 # Specify project-wide packages to install
 neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
                     "here", "readstata13", "foreign", "readxl", "writexl",
-                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "terra", # "osrm", "osrmr",
+                    "raster", "spdep", "sf","gfcanalysis",  "nngeo", "terra", # "osrm", "osrmr",
                     "lubridate","exactextractr",
                     "doParallel", "foreach", "snow", 
                     "knitr", "kableExtra",
                     "DataCombine", 
-                    "fixest", "urca", "punitroots",
+                    "fixest", "urca", 
+                    "clusterSEs",
+                    "DescTools",
+                    "devtools",
+                    "haven",
+                    "plm",
                     "boot", "fwildclusterboot", "sandwich",
                     "ggplot2", "leaflet", "tmap", "dotwhisker", "ggforce")
 
@@ -135,15 +140,14 @@ if(FALSE){
   library(dotwhisker)
   library(viridis)
   library(hrbrthemes)
-  library(tmap)
+  # library(tmap)
   library(ggforce)
   
   # all those are necessary for punitroots to install correctly
-  library(gss)
-  library(fBasics)
-  library(fUnitRoots)
-  library(punitroots)
-  
+  # library(gss)
+  # library(fBasics)
+  # library(fUnitRoots)
+  # library(punitroots)
   
 }
 
