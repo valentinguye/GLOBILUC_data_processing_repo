@@ -2039,33 +2039,67 @@ df_cs <- dplyr::mutate(df_cs, eaear_Soy_compo =  eaear_Soybean_meal + eaear_Soyb
 df_cs <- dplyr::select(df_cs, -eaear_Soybean, -eaear_Soybean_meal, -eaear_Soybean_oil)
 
 
-for(others in all_crops[all_crops!="eaear_Maizegrain"]){
-  
-}
-jnk <- layerStats(gaez_global[[c("Maizegrain", "Tobacco", "Oilpalm")]], 'pearson', na.rm=T)
+# for(others in all_crops[all_crops!="eaear_Maizegrain"]){
+#   
+# }
+# jnk <- layerStats(gaez_global[[c("Maizegrain", "Tobacco", "Oilpalm")]], 'pearson', na.rm=T)
 
+# Restrict to places with positive AEAY for maize
+# which is distributed like this
+gaez_maize <- gaez_global[["Maizegrain"]]
+plot(gaez_maize)
 
-# work on the cross section
-mdcs <- main_data[!duplicated(main_data$grid_id),]
+# For the global correlation exercise, we use Sugar (beet and cane) and not only sugarcane as in the regressions. 
+names_4corr <- names(predictors_dict)
+names_4corr[names_4corr=="eaear_Sugarcane"] <- "eaear_Sugar"
 
-cor_mat_abs <-  cor(dplyr::select(df_cs, all_of(names(predictors_dict)) ))#starts_with("eaear_")
-#cor_mat_std2 <-  cor(dplyr::select(si, all_of(paste0(mapmat_si[,"Crops"], "_std2"))), use = "complete.obs")
+df_cs_posmaiz <- 
+  df_cs %>% 
+  filter(eaear_Maizegrain>0)
+cor_mat_abs <-  cor(dplyr::select(df_cs_posmaiz, all_of(names_4corr) ))#starts_with("eaear_")
+# for comparison: 
+# wide_df_posmaiz <- 
+#   wide_df %>% 
+#   filter(Maizegrain>0)
+# cor_mat_abs_raw <-  cor(dplyr::select(wide_df_posmaiz, all_of(c("Maizegrain", "Cotton", "Tobacco", "Citrus", "Coconut", "Banana", "Tea", "Rubber")) ))#starts_with("eaear_")
 
 cortests <- cor_mat_abs
 j_exposures <- list()
 length(j_exposures) <- length(predictors_dict)
-names(j_exposures) <- names(predictors_dict)
+names(j_exposures) <- names_4corr
 
 for(serie1 in colnames(cortests)){
   
   for(serie2 in row.names(cortests)){
     
-    cortests[serie1, serie2] <- cor.test(df_cs[,serie1], df_cs[,serie2])$p.value
+    cortests[serie1, serie2] <- cor.test(df_cs_posmaiz[,serie1], df_cs_posmaiz[,serie2])$p.value
   }
   j_exposures[[serie1]] <- cor_mat_abs[cortests[serie1, ] < 0.05, serie1]
 }
 
 j_exposures[["eaear_Maizegrain"]] 
+
+totable <- cor_mat_abs["eaear_Maizegrain", ] %>% as.data.frame() # %>% matrix(nrow = 1)
+names(totable) <- "Corr"
+
+for(coln in rownames(totable)){
+  rownames(totable)[rownames(totable) == coln] <- predictors_dict[names_4corr==coln] #%>% unname()
+}
+# it spuriously gave back sugarcane name, so change it again
+rownames(totable)[rownames(totable) == "Sugarcane"] <- "Sugar crops" 
+
+totable <- 
+  totable %>% 
+  filter(rownames(totable)!="Maize") %>% 
+  arrange(desc(Corr)) %>%
+  mutate(Corr = round(Corr, 2)) 
+
+names(totable) <- NULL
+options(knitr.table.format = "latex") 
+kable(totable, booktabs = T, align = "c", 
+      caption = "Coefficients of correlation of crop AEAYs with maize AEAY") %>% 
+  kable_styling(latex_options = c("scale_down", "hold_position")) 
+
 
 # store, for each crop, which other crop it is most correlated with
 # corr_mapmat <- cbind(names(predictors_dict),NA)
