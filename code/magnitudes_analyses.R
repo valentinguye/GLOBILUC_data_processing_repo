@@ -412,8 +412,7 @@ make_main_reg <- function(region = "southam", # one of "brazil", "southam", or "
                           rounding = 2,
                           
                           randomization_test = FALSE,
-                          boot_replicat = 5,
-                          
+
                           output = "coef_table" # one of "data", est_object, or "coef_table" 
 ){
   

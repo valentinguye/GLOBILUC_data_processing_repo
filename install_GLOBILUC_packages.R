@@ -28,14 +28,19 @@
 # Specify project-wide packages to install
 neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
                     "here", "readstata13", "foreign", "readxl", "writexl",
-                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "terra", # "osrm", "osrmr",
+                    "raster", "spdep", "sf","gfcanalysis",  "nngeo", "terra", # "osrm", "osrmr",
                     "lubridate","exactextractr",
                     "doParallel", "foreach", "snow", 
                     "knitr", "kableExtra",
                     "DataCombine", 
-                    "fixest", "urca", "punitroots",
+                    "fixest", "urca", 
+                    "clusterSEs",
+                    "DescTools",
+                    "devtools",
+                    "haven",
+                    "plm",
                     "boot", "fwildclusterboot", "sandwich",
-                    "ggplot2", "leaflet", "tmap", "dotwhisker", "ggforce")
+                    "ggplot2", "ggpubr", "leaflet", "tmap", "dotwhisker", "ggforce")
 
 
 # Note that from ?renv::restore 
@@ -100,7 +105,7 @@ if(FALSE){
   library(foreign)
   library(readxl)
   library(writexl)
-  library(rgdal)
+  # library(rgdal)
   library(raster)
   library(terra)
   library(sp)
@@ -135,15 +140,15 @@ if(FALSE){
   library(dotwhisker)
   library(viridis)
   library(hrbrthemes)
-  library(tmap)
+  # library(tmap)
   library(ggforce)
+  library(ggpubr)
   
   # all those are necessary for punitroots to install correctly
-  library(gss)
-  library(fBasics)
-  library(fUnitRoots)
-  library(punitroots)
-  
+  # library(gss)
+  # library(fBasics)
+  # library(fUnitRoots)
+  # library(punitroots)
   
 }
 
@@ -153,7 +158,7 @@ if(renv:::renv_download_method() != getOption("download.file.method")){
 }
 
 # If new packages are needed along the project data processing workflow, one should: 
-new_pck <- c("ggforce")
+new_pck <- c("ggpubr")
 # 1. install the packages in the project library (the default if you are within the project)
 install.packages(new_pck)
 
