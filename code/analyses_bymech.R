@@ -19,7 +19,8 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
                     "DataCombine", 
                     "fixest", 
                     "boot", "fwildclusterboot", "sandwich", "MASS",
-                    "ggplot2", "ggpubr", "leaflet", "tmap",  "dotwhisker", "viridis", "hrbrthemes")
+                    "ggplot2", "ggpubr", "leaflet",  "dotwhisker", "viridis", "hrbrthemes")
+# "tmap",
 # "pglm", "multiwayvcov", "clusterSEs", "alpaca", "clubSandwich",
 
 # Install them in their project-specific versions
@@ -1313,7 +1314,7 @@ est_parameters <- list(start_year = 2008,
                        output = "est_object") # !!! MIND THIS ARG "est_object", "everything" "coef_table"
 
 # This sets the crops that are controled for 
-crops_groups <- list(` AMaize` = "eaear_Maizegrain",
+crops_groups <- list(`Maize` = "eaear_Maizegrain",
                     # marg_land = c("eaear_Biomass"), #"eaear_Fodder",  this only serves as a control
                     `Type 1` = c("eaear_Cereals", "eaear_Rice", "eaear_Roots", "eaear_Fodder", "eaear_Soy_compo"), #
                     `Type 2` = c("eaear_Cotton",  "eaear_Oilfeed_crops"),
