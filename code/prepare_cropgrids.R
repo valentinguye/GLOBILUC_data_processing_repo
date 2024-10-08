@@ -28,6 +28,7 @@ lapply(neededPackages, library, character.only = TRUE)
 
 dir.create(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped"), recursive = TRUE)
 dir.create(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks"), recursive = TRUE)
+dir.create(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares"), recursive = TRUE)
 
 ### Raster global options
 rasterOptions(timer = TRUE, 
@@ -58,39 +59,39 @@ gridcrops = c(
   # "banana", "plantain", # for now, don't bother cat. 6 crops. 
 
   # Rice
-  eaear_Rice = "rice",  
-  # Cereals there's also "rye", "ryefor",   "millet", 
-  eaear_Cereals = "barley", 
-  eaear_Cereals = "sorghumfor", 
-  eaear_Cereals = "wheat", 
-  eaear_Cereals = "buckwheat", 
+  Rice = "rice",  
+  # Cereals there's also "rye", "ryefor",   "millet", cerealnes
+  Cereals = "barley", 
+  Cereals = "sorghumfor", 
+  Cereals = "wheat", 
+  Cereals = "buckwheat", 
 
   # Roots crops - there's also "rootnes"
-  eaear_Roots = "cassava", 
-  eaear_Roots = "potato", 
-  eaear_Roots = "sweetpotato", 
-  eaear_Roots = "yam", 
+  Roots = "cassava", 
+  Roots = "potato", 
+  Roots = "sweetpotato", 
+  Roots = "yam", 
   # Soybean
-  eaear_Soy_compo = "soybean",
+  Soy_compo = "soybean",
   # Oil crops there's also "oilseed", "oilseedfor", not sure what this captures? 
-  eaear_Oilfeed_crops = "rapeseed", 
-  eaear_Oilfeed_crops = "sunflower", 
-  eaear_Oilfeed_crops = "groundnut", 
+  Oilfeed_crops = "rapeseed", 
+  Oilfeed_crops = "sunflower", 
+  Oilfeed_crops = "groundnut", 
   # Cotton
-  eaear_Cotton = "cotton",   
+  Cotton = "cotton",   
   # Biomass crops
-  eaear_Biomass = "sorghum", 
-  eaear_Biomass = "canaryseed", 
+  Biomass = "sorghum", 
+  Biomass = "canaryseed", 
   # Sugar
-  eaear_Sugarcane = "sugarcane", # "sugarbeet", 
-  # Citrus
-  eaear_Citrus = "citrusnes",
+  Sugarcane = "sugarcane", # "sugarbeet", 
+  # Citrus - NOT IN croplands from Potatpov, so don't include here
+  # Citrus = "citrusnes",
   
-  eaear_Maizegrain = "maize", 
-  eaear_Maizegrain = "maizefor",
+  Maizegrain = "maize", 
+  Maizegrain = "maizefor",
   
   # Tobacco
-  eaear_Tobacco = "tobacco"
+  Tobacco = "tobacco"
 )
 
 # Turn to TIF ----------
@@ -140,24 +141,25 @@ for(cropgroup in all_group_names){
   }
   rm(group_crops, cropgroup)
 }
+cereals = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", paste0("Cereals", ".tif")))
+cereals %>% values() %>% summary()
+rice = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", paste0("Rice", ".tif")))
+rice %>% values() %>% summary()
+
 
 ## Repeat for all crops --------------
 all_group_paths = as.list(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", paste0(all_group_names, ".tif")))
 all_group_stack = raster::stack(all_group_paths)
-all_group_brick = raster::brick(all_group_paths)
-
-cereals = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", paste0("eaear_Cereals", ".tif")))
-cereals %>% values() %>% summary()
-
 # sum up their crop area
 calc(all_group_stack, 
      fun = sum, 
      filename = here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", "All_cropland_crops.tif"), 
      overwrite =TRUE
 )
-all_group_stack$eaear_Maizegrain %>% area() %>% values() %>% max() # This in km2, i.e. 3077 hectares.  
+
+all_group_stack$Maizegrain %>% area() %>% values() %>% max() # This in km2, i.e. 3077 hectares.  
 # --> confirms that areas of every crop is such that they can be summed up. 
-all_group_stack$eaear_Tobacco %>% area() %>% values() %>% max() # This in km2, i.e. 3077 hectares.  
+all_group_stack$Tobacco %>% area() %>% values() %>% max() # This in km2, i.e. 3077 hectares.  
 
 allcrops = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", "All_cropland_crops.tif"))
 allcrops
@@ -167,62 +169,93 @@ plot(land, add = T)
 
 
 
-# PREPARE MASK OF MAIN CROPGRIDS CROP -------------
+# PREPARE SHARE & MASK OF MAIN CROPGRIDS CROP -------------
 
 # There are several ways to do this... 
+
+## As a binary mask ----------------
 # Here, we consider that to attribute a loss-to-commodity cropland event to a specific crop, 
 # this crop must be the main one, i.e. have the largest area compared to the other crops that can count as commodity cropland. 
 
-# But before using which.max, we need to cast differently all those cells in the sea etc. which have value 0 for all crops
-# but will be given the index of the "first layer with maximum value for this cell", i.e. 
-max_layer_idx = raster::which.max(all_group_stack)
+# But before using which.max, we need to cast differently all those cells in the sea etc. 
+# which have value 0 or NA for all crops will be given the index of the "first layer with maximum value for this cell"
+# and this behavior is an issue. 
+# max_layer_idx = raster::which.max(all_group_stack)
+# 
+# # PLOT
+# max_layer_idx_df <- as.data.frame(max_layer_idx, xy=TRUE)
+# # Create a factor for the raster values
+# max_layer_idx_df$layer_fact <- factor(max_layer_idx_df$layer, levels = 1:11, labels = all_group_names)
+# max_layer_idx_df$layer_fact %>% table()
+# 
+# # Plot using ggplot
+# ggplot(max_layer_idx_df, aes(x=x, y=y, fill=layer_fact)) +
+#   geom_raster() +
+#   # scale_fill_manual(values = rainbow(11), name = "Crops") +
+#   scale_colour_brewer(na.value = "transparent",
+#                       type = "qual",
+#                       direction = -1,
+#                       palette = "Set3", 
+#                       name = "Crops") +
+#   labs(title = "Main crop in area by cell, among those shown, in CROPGRIDS") +
+#   theme_minimal()
+# 
+# # make binary masks
+# all_group_names = names(all_group_stack)
+# for(cropgroup in all_group_names){
+#   index_target = match(cropgroup, all_group_names)
+#   calc(
+#     x = max_layer_idx,
+#     fun = function(x){
+#       return(if_else(x == index_target, 1, 0))
+#     }, 
+#     filename = here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(all_group_names[index_target], "_mask.tif")), 
+#     overwrite = TRUE 
+#   )
+# }
 
-# PLOT
-max_layer_idx_df <- as.data.frame(max_layer_idx, xy=TRUE)
-# Create a factor for the raster values
-max_layer_idx_df$layer_fact <- factor(max_layer_idx_df$layer, levels = 1:11, labels = gsub("eaear_", "", all_group_names))
-max_layer_idx_df$layer_fact %>% table()
+## As a continuous mask ------------
+# An alternative is to weight annually lost area to commodity cropland by 
+# the share of every crop area in the total cropland area in the cell at the end of the period. 
+# For this, we need to make a layer for every crop, where values are this crop's share
+tot = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", "All_cropland_crops.tif"))
 
-# Plot using ggplot
-ggplot(max_layer_idx_df, aes(x=x, y=y, fill=layer_fact)) +
-  geom_raster() +
-  # scale_fill_manual(values = rainbow(11), name = "Crops") +
-  scale_colour_brewer(na.value = "transparent",
-                      type = "qual",
-                      direction = -1,
-                      palette = "Set3", 
-                      name = "Crops") +
-  labs(title = "Main crop in area by cell, among those shown, in CROPGRIDS") +
-  theme_minimal()
-
-# make binary masks
-all_group_names = names(all_group_stack)
-for(cropgroup in all_group_names){
-  index_target = match(cropgroup, all_group_names)
-  calc(
-    x = max_layer_idx,
-    fun = function(x){
-      return(if_else(x == index_target, 1, 0))
-    }, 
-    filename = here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(all_group_names[index_target], "_mask.tif")), 
-    overwrite = TRUE 
-  )
-}
-
-# An alternative is to weight annually lost area to commodity cropland by the share of every crop area in the cell at the end of the period. 
 # Stack all individual groups and the total 
-# tot = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", "All_cropland_crops.tif"))
 # tot_groups = stack(
-#   tot, 
+#   tot,
 #   all_group_stack
 # )
-# mask_function = function(x, y){
-#     return(x / y)
-# }
-# overlay(
-#   unstack = TRUE
-# )
 
+make_shares = function(x, y){
+  # Handling 0s in the denominator like this crashes overlay, 
+  # and apparently this is handle by raster... 
+  # if(y == 0){
+  #   ret = 0
+  # }
+  # else{
+    ret = x / y
+  # }
+  return(ret)
+}
+
+# make binary masks
+for(cropgroup in all_group_names){
+  group_layer = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", paste0(cropgroup, ".tif")))
+  overlay(
+    x = group_layer,
+    y = tot,
+    fun = make_shares,
+    filename = here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares", paste0(cropgroup, "_share.tif")),
+    overwrite = TRUE
+  )
+}
+# This introduces quite many NAs
+# there is none in x or y, but ~7M in the resulting shares!
+group_layer %>% values() %>% summary()
+tot %>% values() %>% summary()
+rice = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares", paste0("Rice", "_share.tif")))
+rice %>% values() %>% summary()
+plot(rice)
 
 ## Downscale to ~3km and align to target loss raster as prepared in GEE ---------
 
@@ -231,43 +264,44 @@ for(cropgroup in all_group_names){
 # or, if a crop is the max in the 5km res. raster, it is going to be exactly in the same subcells in the disaggregated one. 
 
 # So, we don't have to disaggregate and resample all groups 
-# for(cropgroup in unique(names(gridcrops))){
-#   group_layer = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", paste0(cropgroup, ".tif")))
-#   group_layer_disag = disaggregate(group_layer, fact = 2)
-#   resample(x = group_layer_disag,
-#            y = lossdriver, 
-#            filename = here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", paste0(cropgroup, "_3km_resampled10thLoss.tif")), 
-#            overwrite =TRUE) 
-# }
 # ... but only the mask 
 for(cropgroup in all_group_names){
-  group_mask = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask.tif")))
-  group_mask_disag = disaggregate(group_mask, fact = 2)
-  resample(x = group_mask_disag,
+  group_share = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares", paste0(cropgroup, "_share.tif")))
+  group_share_disag = disaggregate(group_share, fact = 2)
+  resample(x = group_share_disag,
            y = lossdriver,
-           filename = here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask_resampled10thLoss.tif")),
+           filename = here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares", paste0(cropgroup, "_share_resampled10thLoss.tif")),
            overwrite =TRUE)
+  
+  # group_mask = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask.tif")))
+  # group_mask_disag = disaggregate(group_mask, fact = 2)
+  # resample(x = group_mask_disag,
+  #          y = lossdriver,
+  #          filename = here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask_resampled10thLoss.tif")),
+  #          overwrite =TRUE)
+  
 }
-# store values for inspection
-stats_list = list(resampled_stats = list(), 
-                  native_stats = list())
-for(cropgroup in all_group_names){
-  native = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask.tif")))
-  resampled = raster( here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask_resampled10thLoss.tif")))
-  stats_list[["native_stats"]][[cropgroup]] = native %>% values() %>% summary()
-  stats_list[["resampled_stats"]][[cropgroup]] = resampled %>% values() %>% summary()
-}
+# store values for inspection 
+# # store values for inspection
+# stats_list = list(resampled_stats = list(), 
+#                   native_stats = list())
+# for(cropgroup in all_group_names){
+#   native = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask.tif")))
+#   resampled = raster( here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask_resampled10thLoss.tif")))
+#   stats_list[["native_stats"]][[cropgroup]] = native %>% values() %>% summary()
+#   stats_list[["resampled_stats"]][[cropgroup]] = resampled %>% values() %>% summary()
+# }
 # Note: resampling introduces a couple (33k out of 30M) of Nas.  
 # but means are very similar. 
-stats_list
+# stats_list
 
-# maizeMask_native = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0("eaear_Maizegrain_mask.tif")))
-# maizeMask_resampled = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0("eaear_Maizegrain_mask_3km_resampled10thLoss.tif")))
+# maizeMask_native = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0("Maizegrain_mask.tif")))
+# maizeMask_resampled = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0("Maizegrain_mask_3km_resampled10thLoss.tif")))
 # maizeMask_native %>% values() %>% summary()
 # maizeMask_resampled %>% values() %>% summary()
 # 
-# native = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0("eaear_Citrus_mask.tif")))
-# resampled = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0("eaear_Citrus_mask_resampled10thLoss.tif")))
+# native = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0("Citrus_mask.tif")))
+# resampled = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0("Citrus_mask_resampled10thLoss.tif")))
 # native %>% values() %>% summary()
 # resampled %>% values() %>% summary()
 
@@ -277,21 +311,38 @@ stats_list
 # Mask loss-to-commodity cropland by the main CROPGRIDS crop in cell
 
 for(cropgroup in all_group_names){
-  cg_mask = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask_resampled10thLoss.tif")))
-  
+  cg_share = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares", paste0(cropgroup, "_share_resampled10thLoss.tif")))
   # not good practice to write in input_data, but this is to fit the naming convention inherited from the 
   # workflow for other outcomes measurement that were produced in GEE and written in input_data
-  dir.create(here("input_data", "10thLoss_croplandcommoCGmain_3km"))
-  mask(lossdriver, 
-       mask = cg_mask, 
-       maskvalue = 0, # the value in the mask, that identifies cells in the input that will have a different value in the output
-       updatevalue = 0, # the different value
-       filename = here("input_data", "10thLoss_croplandcommoCGmain_3km", paste0("10thLoss_", cropgroup, "_CGmain", "_3km.tif")),
-       overwrite = TRUE
-       )
+  dir.create(here("input_data", "10thLoss_croplandcommoCGweighted_3km"))
+  overlay(x =lossdriver, 
+          y = cg_share, # will be recycled to every layer of lossdriver, i.e. every year.
+          fun = function(x,y){x*y}, 
+          recycle = TRUE,
+          filename = here("input_data", "10thLoss_croplandcommoCGweighted_3km", paste0("10thLoss_", cropgroup, "_CGweighted", "_3km.tif")),
+          overwrite = TRUE
+  )
+  
+  # Binary mask
+  # cg_mask = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask_resampled10thLoss.tif")))
+  # # not good practice to write in input_data, but this is to fit the naming convention inherited from the 
+  # # workflow for other outcomes measurement that were produced in GEE and written in input_data
+  # dir.create(here("input_data", "10thLoss_croplandcommoCGmain_3km"))
+  # mask(lossdriver, 
+  #      mask = cg_mask, 
+  #      maskvalue = 0, # the value in the mask, that identifies cells in the input that will have a different value in the output
+  #      updatevalue = 0, # the different value
+  #      filename = here("input_data", "10thLoss_croplandcommoCGmain_3km", paste0("10thLoss_", cropgroup, "_CGmain", "_3km.tif")),
+  #      overwrite = TRUE
+  #      )
 }
+# Check
+ld_rice_weighted = brick(here("input_data", "10thLoss_croplandcommoCGweighted_3km", paste0("10thLoss_", cropgroup, "_CGweighted", "_3km.tif")))
+lossdriver
 
-cg_mask = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "masks", paste0(cropgroup, "_mask_3km_resampled10thLoss.tif")))
-plot(cg_mask)  
-plot(land, add = T)
+# lossdriver$loss_croplandcommo_3km_0119_1 %>% values %>% mean(na.rm = TRUE)
+# ld_rice_weighted$X10thLoss_Tobacco_CGweighted_3km_1 %>% values() %>% mean(na.rm = TRUE)
+# cg_share %>% values() %>% mean(na.rm = TRUE)
+
+
 

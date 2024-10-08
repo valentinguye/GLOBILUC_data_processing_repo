@@ -63,7 +63,9 @@ lapply(neededPackages, library, character.only = TRUE)
 ### NEW FOLDERS USED IN THIS SCRIPT 
 dir.create(here("temp_data","reg_results", "alpha"))
 dir.create(here("temp_data","reg_results", "beta"))
-dir.create(here("temp_data","reg_results", "rfs", "result_lists"))
+dir.create(here("temp_data","reg_results", "rfs", "result_lists"), recursive = TRUE)
+dir.create(here("temp_data","reg_results", "rfs", "indiv_facet_byGroup"))
+dir.create(here("temp_data","reg_results", "rfs", "result_tstat_dfs"))
 
 ### GLOBAL CRS USED ### 
 mercator_world_crs <- "+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs "
@@ -92,7 +94,8 @@ predictors_dict <- c(eaear_Maizegrain = "Maize",
                      eaear_Oilpalm = "Oil palm",
                      eaear_Coconut = "Coconut",
                      eaear_Banana = "Banana",
-                     eaear_Cocoa_Coffee = "Cocoa or Coffee",
+                     eaear_Cocoa = "Cocoa",
+                     eaear_Coffee = "Coffee",
                      eaear_Tea = "Tea",
                      eaear_Rubber = "Rubber" )
 
@@ -1315,13 +1318,16 @@ est_parameters <- list(start_year = 2008,
 
 # This sets the crops that are controled for 
 crops_groups <- list(`Maize` = "eaear_Maizegrain",
-                    # marg_land = c("eaear_Biomass"), #"eaear_Fodder",  this only serves as a control
-                    `Type 1` = c("eaear_Cereals", "eaear_Rice", "eaear_Roots", "eaear_Fodder", "eaear_Soy_compo"), #
+                     Pasture = "eaear_Fodder",
+                    `Type 1` = c("eaear_Cereals", "eaear_Rice", "eaear_Roots", "eaear_Soy_compo"), #
                     `Type 2` = c("eaear_Cotton",  "eaear_Oilfeed_crops"),
                     `Type 4` = c("eaear_Biomass", "eaear_Sugarcane"), #
-                    `Type 5` = c("eaear_Tobacco"),
-                    `Type 3` = c("eaear_Oilpalm"),
-                    `Type 6` = c("eaear_Citrus", "eaear_Coconut", "eaear_Banana", "eaear_Cocoa_Coffee", "eaear_Tea", "eaear_Rubber"))
+                    `Type 5 (Tobacco)` = c("eaear_Tobacco"),
+                    `Type 3 (Oil palm)` = c("eaear_Oilpalm"),
+                    `Type 6 (Cocoa)` = c("eaear_Cocoa"),
+                    `Type 6 (All)` = c("eaear_Citrus", "eaear_Coconut", "eaear_Banana", "eaear_Cocoa", "eaear_Coffee", "eaear_Tea", "eaear_Rubber")
+                    # marg_land = c("eaear_Biomass"), #"eaear_Fodder",  this only serves as a control
+                    )
 
 # crops_groups <- list(Maize = "eaear_Maizegrain",
 #                      # marg_land = c("eaear_Biomass"), #"eaear_Fodder",  this only serves as a control 
@@ -1347,7 +1353,7 @@ if(length(est_parameters[["trade_exposure"]])>0){
 }
 # oil palm, coconut, and citrus are particular cases
 
-g6_crops <- c("eaear_Banana", "eaear_Cocoa_Coffee", "eaear_Tea", "eaear_Rubber")
+g6_crops <- c("eaear_Banana", "eaear_Cocoa", "eaear_Coffee", "eaear_Tea", "eaear_Rubber")
 
 continents <- c("all", "America", "Africa", "Asia") # "all"#  
 
@@ -1366,7 +1372,7 @@ main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
 
 # this may be used to remove some controls in loss_cropland regressions
 woody_perrenials <- c("eaear_Citrus", "eaear_Coconut", "eaear_Oilpalm", 
-                      "eaear_Banana", "eaear_Cocoa_Coffee", "eaear_Tea", "eaear_Rubber")
+                      "eaear_Banana", "eaear_Cocoa", "eaear_Cocoa", "eaear_Coffee", "eaear_Tea", "eaear_Rubber")
 
 # this may be used to remove some controls in loss residual regressions (called loss_pasture)
 cropland_crops <- c(all_crops[!(all_crops %in% c(woody_perrenials))])
@@ -1477,6 +1483,16 @@ for(CNT in continents){
   sapply(all_tests_est[[CNT]], FUN = function(eo){eo$convStatus}) %>% print()
 }
 
+# save this temporarily
+saveRDS(all_tests_est, 
+        here("temp_data", "reg_results", "rfs", "result_lists", 
+             paste0(est_parameters[["leads"]], "lead",
+                    est_parameters[["lags"]], "lag_",
+                    est_parameters[["aggr_lead"]], est_parameters[["aggr_lag"]], "aggr_",
+                    if(est_parameters[["s_trend_loga"]]=="manual"){"logtrend"},
+                    if(est_parameters[["s_trend"]]=="manual"){"lintrend"},
+                    ".Rdata")))
+
 
 # all_tests_est[["all"]][["loss_oilpalm_both"]] %>% post_est_fnc(base_exposure = "eaear_Oilpalm")
 all_tests_est[["America"]][["eaear_Biomass"]] %>% summary()
@@ -1484,7 +1500,36 @@ all_tests_est[["America"]][["eaear_Soy_compo"]] %>% summary()
 all_tests_est[["Asia"]][["eaear_Oilpalm"]]$convStatus
 all_tests_est[["Asia"]][["eaear_Oilpalm"]] %>% summary()
 
-### PLOT COEFFICIENTS ### 
+###### Regression Tables ---------
+# each element of all_tests_est[["continent"]] is a fixest object 
+
+
+# all_tests_est[["Asia"]][["eaear_Oilpalm"]] %>% etable()
+# 
+# etable(all_tests_est[["all"]][names(all_tests_est[["all"]]) != "eaear_Maizegrain"], 
+#        # this sets some style
+#        style.df = style.df(depvar.title = "", fixef.title = "", 
+#                            fixef.suffix = " fixed effect", yesNo = "yes"),
+#        tex = FALSE,
+#        title = paste0("Dynamic coefficients of quasi-poisson regressions in the pan-tropical samples"),
+#        # label = "table1",
+#        # tabular = "X",
+#        # dict = fixest_dict,
+#        depvar = FALSE,
+#        style.tex = style.tex(var.title = "\\midrule \\emph{Dynamic effects}", 
+#                              main = "qje"), # for some reason I need to add back the black line between headers and coefficients part
+#        # headers = list("_Incl. anticipatory effects:" = coef_table_list, 
+#        #                "_Net anticipatory effects:" = coef_table_list_2), # the underscore places this head below the model header
+#        # order =  c("t-4", "t-3", "t-2", "t-1", "t}", "t+1", "t+2", "t+3", "t+4"),
+#        # extralines = list("^^Calorific import dependency $*$ \n RFS2 mandates in year:" = rep(" ", length(est_obj_list))),
+#        digits = 3,
+#        # signif.code = NA,
+#        # tpt = TRUE,
+#        # file = here("temp_data", "reg_results", "table1"), 
+#        # replace = TRUE
+#        placement = "H")
+
+###### Prepare standardized effects --------
 # prepare regression outputs in a tidy data frame readable by dwplot
 # this works annual_controls is TRUE and we add (as controls) all crops that we are interested in. 
 rm(df, d_clean)
@@ -1620,6 +1665,8 @@ names(df)[names(df)=="crop"] <- "term"
 head(df)
 
 
+
+###### Plot ---------
 dwplot(df,
        dot_args = list(aes(color = model, shape = model, size = model, alpha = highlight)) ) %>%  #size = 2.5,  shape = Dynamics, size = cumulative
   relabel_predictors(predictors_dict) + 
@@ -1628,8 +1675,8 @@ dwplot(df,
   geom_vline(xintercept = -1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
   geom_vline(xintercept = 2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
   geom_vline(xintercept = -2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
-    
-  facet_wrap(facets = ~Group, scales = "free_y", nrow = 3, ncol = 2, dir = "v") + 
+  
+  facet_wrap(facets = ~Group, scales = "free_y", nrow = 2, ncol = 4, dir = "v") + 
   
   scale_color_brewer(type = "qual",palette="Set1", #  Accent  
                      breaks=c("all", "America", "Africa", "Asia"),
@@ -1647,22 +1694,261 @@ dwplot(df,
                     name="") +
   
   scale_alpha_continuous(# values = sort(unique(df$highlight)),# c(0.33, 0.50, 0.67, 0.83, 1.00), # c(0.2, 0.4, 0.6, 0.8, 1),
-                    breaks= c(0.33, 0.50, 0.67, 0.83, 1.00),# sort(unique(df$highlight)),# 
-                    labels = c("0", "1/4", "2/4", "3/4", "4/4"),
-                    name="Precision robustness") +
-
+    breaks= c(0.33, 0.50, 0.67, 0.83, 1.00),# sort(unique(df$highlight)),# 
+    labels = c("0", "1/4", "2/4", "3/4", "4/4"),
+    name="Precision robustness") +
+  
   scale_x_continuous(breaks = c(-1.96, 1.96), 
                      labels = c("-1.96","1.96")) +
   
   theme_bw() + xlab("t-statistics") + ylab("") +  
   theme(plot.title = element_text(face="bold", size=c(10)),
-        legend.position = "bottom",# c(0.8, 0.05),
+        legend.position = "right",# c(0.8, 0.05),
         legend.justification = c(0, 0), 
         legend.background = element_rect(colour="grey80")
-        ) # legend.title = element_blank()
+  ) 
+  
+  
+###### Rotated plot ---------
+# Just using +coord_flip on the above does not do the trick. 
+# What we want is to have the dynamic effects on the x-axis (t-2, t-1, t, t+1, t+2)
+# and the level of the t-stat on the y-axis. 
+# and one crop by facet. We will stack the facets of crops in the same Type. 
+# For dotwhisker to accomodate this, we need that:
+# - column term represents dynamic coeff names (net cumulative being one of them)
+# - estimate still represents tstats - OR COULD BE POINT AND CI, WITH NO VALUE ON AXIS ATTACHED! 
+# - Group does not exist anymore, but facets are by crop (so what term represented before)
+# we will make Group headers in Powerpoint. 
+
+# So, starting again from here: 
+# prepare regression outputs in a tidy data frame readable by dwplot
+# this works annual_controls is TRUE and we add (as controls) all crops that we are interested in. 
+rm(df, d_clean)
+cnt_crop_list <- list()
+cnt_list <- list()
+for(CNT in continents){# "all", , "Africa", "Asia"
+  for(CROP in c(gentest_crops, displtest_crops, "eaear_Oilpalm")){
+    if(CROP == "eaear_Oilpalm"){
+      loss_type <- oilpalm_loss
+    } else { 
+      loss_type <- "loss_cropland"  
+    }
+    d_clean <- d_clean_list[[CNT]][[loss_type]]
+    
+    # store post-estimation outputs of all clustering levels
+    postest_list <- list()
+    # THREE LEVELS OF SPATIAL CLUSTERING
+    # Main 
+    postest_list[["grid_id_10"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                 base_exposure = CROP,
+                                                 trade_exposure = NULL,
+                                                 aggr_lag = est_parameters[["aggr_lag"]], 
+                                                 aggr_lead = est_parameters[["aggr_lead"]], 
+                                                 clustering = "oneway",
+                                                 cluster_var1 = "grid_id_10",
+                                                 output = "tstat")
+    # 5 times larger
+    postest_list[["grid_id_5"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                base_exposure = CROP,
+                                                trade_exposure = NULL,
+                                                aggr_lag = est_parameters[["aggr_lag"]], 
+                                                aggr_lead = est_parameters[["aggr_lead"]], 
+                                                clustering = "oneway",
+                                                cluster_var1 = "grid_id_5",
+                                                output = "tstat")
+    # 20 times larger
+    postest_list[["grid_id_20"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                 base_exposure = CROP,
+                                                 trade_exposure = NULL,
+                                                 aggr_lag = est_parameters[["aggr_lag"]], 
+                                                 aggr_lead = est_parameters[["aggr_lead"]], 
+                                                 clustering = "oneway",
+                                                 cluster_var1 = "grid_id_20",
+                                                 output = "tstat")
+    
+    ## TWO-WAY  CLUSTERING
+    # SET THE QUANTILE LEVEL HERE 
+    q_expo <- 10
+    # need to do this here and not in post_est_fnc for fixest to find the data to construct the new vcov 
+    # make sure that the exposure var is not there already
+    d_clean <- left_join(d_clean[,names(d_clean)!=CROP[1]], main_data[,c("grid_id", "year", CROP)], by = c("grid_id", "year"))
+    
+    d_clean <- mutate(d_clean, !!as.symbol(paste0(CROP[1],"_",q_expo,"tiles")) := cut(!!as.symbol(CROP[1]), breaks = q_expo, labels = paste0(CROP[1],"_Q", 1:q_expo)))
+    
+    # extract t stats of coef of interest 
+    postest_list[["twoway_percentile"]] <- post_est_fnc(est_obj = all_tests_est[[CNT]][[CROP]], # loss_type
+                                                        base_exposure = CROP,
+                                                        trade_exposure = NULL,
+                                                        aggr_lag = est_parameters[["aggr_lag"]], 
+                                                        aggr_lead = est_parameters[["aggr_lead"]],
+                                                        clustering = "twoway",
+                                                        cluster_var1 = q_expo,
+                                                        cluster_var2 = "grid_id_10",
+                                                        output = "tstat")
+    rm(d_clean)
+    
+    # save row names 
+    estimate_names <- row.names(postest_list[[1]])
+    
+    x <- bind_cols(postest_list, .name_repair = "minimal")
+    names(x) <- names(postest_list)
+    x <- dplyr::mutate(x, across(.cols = everything(), 
+                                 ~abs(.)>1.645, 
+                                 .names = paste0("{.col}","_isprecise")))
+    x <- dplyr::mutate(x, rob_preci = rowMeans(across(.cols = contains("_isprecise")) ))
+    # keep only the main t-stat
+    x <- dplyr::select(x, -grid_id_5, -grid_id_20, -twoway_percentile)
+    names(x)[names(x)=="grid_id_10"] <- "tstat"
+    
+    x$model <- CNT
+    x$via_trade <- grepl("_expo_", estimate_names)    
+    x$via_access <- grepl("_acc_", estimate_names)    
+    x$crop <- CROP
+    x$Dynamics <- ""
+    x$Dynamics[grepl("aggrall", estimate_names)] <- "t-1 to t+1"
+    x$Dynamics[grepl("lead1", estimate_names)] <- "t+1"
+    x$Dynamics[grepl("lead2", estimate_names)] <- "t+2"
+    x$Dynamics[estimate_names==paste0(CROP,"_X_statute_conv")] <- "t"
+    x$Dynamics[grepl("lag1", estimate_names)] <- "t-1"
+    x$Dynamics[grepl("lag2", estimate_names)] <- "t-2"
+    x$Dynamics[grepl("lag3", estimate_names)] <- "t-3"
+    
+    # order dynamics 
+    # estimate_names <- x$Dynamics  
+    # x <- x[c("Cumulative", "t+1", "t", "t-1", "t-2", "t-3", "t-4"),] 
+    # # remove NA rows generated if some dynamics are absent for this crop 
+    # x <- x[!is.na(x$tstat), ]
+    row.names(x) <- NULL # otherwise they duplicate while stacking
+    cnt_crop_list[[CNT]][[CROP]] <- x
+    
+  }
+  cnt_list[[CNT]] <- cnt_crop_list[[CNT]] %>% bind_rows()
+}
+
+df <- cnt_list %>% bind_rows() # "loss_cropland"
+
+df$significant01 <- ""
+df[abs(df[,"tstat"]) > 1.645, "significant01"] <- "p-value < .1"
+df <- mutate(df, highlight = rob_preci)
+
+# (attribute crop Group is not necessary here. 
+
+# However, need to rename crop values, bc dotwhisker is not going to do it now
+df$crop_nice = sapply(df$crop, FUN = function(eaear)unname(predictors_dict[eaear==names(predictors_dict)]))
+
+# make some variable name changes necessary for dotwhisker
+# df <- df[df$crop != "eaear_Maizegrain",]
+names(df)[names(df)=="Dynamics"] <- "term"
+df <- mutate(df, sizes = if_else(term == "Cumulative", true = 5, false = 3))
+names(df)[names(df)=="tstat"] <- "estimate"
+# names(df)[names(df)=="model"] <- "continent"
+# names(df)[names(df)=="Dynamics"] <- "model"
+# df$cumulative <- factor(df$Dynamics=="Cumulative")
+head(df)
 
 
+dwplot(df,
+       dot_args = list(aes(color = model, shape = model, size = sizes, alpha = highlight)),
+       vars_order = c("Cumulative", "t+2", "t+1", "t","t-1", "t-2"), 
+       model_order = c("all", "America", "Africa", "Asia")
+       ) +# %>% 
+  # relabel_predictors(predictors_dict) + useless here
+  
+  # # critical values  : 1.645   1.960  2.576
+  geom_vline(xintercept = 0, colour = "grey60", alpha = 1) +
+  geom_vline(xintercept = 1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
+  geom_vline(xintercept = -1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
+  geom_vline(xintercept = 2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
+  geom_vline(xintercept = -2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
+  
+  facet_wrap(facets = ~crop_nice, scales = "free_y", nrow = 3, ncol = 4, dir = "v") + 
+  
+  scale_color_brewer(type = "qual",palette="Set1", #  Accent  
+                     breaks=c("all", "America", "Africa", "Asia"),
+                     labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                     name="") +
+  
+  scale_shape_manual(values = c(18, 17, 15, 16), # c(21, 24, 22, 25),# c(1, 2, 0, 3), # c(16, 17, 15, 18)
+                     breaks=c("all", "America", "Africa", "Asia"),
+                     labels = c("Pan-tropical", "America (tropical lat.)", "Africa (tropical lat.)", "Asia (tropical lat.)"),
+                     name="") +
+  
+  guides(color = guide_legend(""),
+         shape = guide_legend("")) +
 
+  scale_size(# limits = NA, 
+             range = c(3,5),
+             breaks=c(0,4),
+             guide = "none") +
+  
+  scale_alpha_continuous(# values = sort(unique(df$highlight)),# c(0.33, 0.50, 0.67, 0.83, 1.00), # c(0.2, 0.4, 0.6, 0.8, 1),
+                    breaks= c(0.33, 0.50, 0.67, 0.83, 1.00),# sort(unique(df$highlight)),# 
+                    labels = c("0", "1/4", "2/4", "3/4", "4/4"),
+                    name="Precision robustness") +
+
+  scale_x_continuous(breaks = c(-1.96, 0, 1.96), 
+                     labels = c("-1.96", "0", "1.96")) +
+  
+  theme_bw() + xlab("t-statistics") + ylab("") +  
+  theme(plot.title = element_text(face="bold", size=c(10)),
+        legend.position = "right",# c(0.8, 0.05),
+        legend.justification = c(0, 0), 
+        legend.background = element_rect(colour="grey80")
+        ) + 
+  coord_flip()
+
+####### Individudal facet plots ----------
+for(grp in unique(df$Group)){
+  if(filter(df, Group == grp) %>% pull(term) %>% unique() %>% length() == 1){
+    depends = element_blank()
+  }else{depends = element_text()}
+  
+    dwplot(filter(df, Group == grp),
+         dot_args = list(aes(color = model, shape = model, size = model, alpha = highlight)) ) %>%  #size = 2.5,  shape = Dynamics, size = cumulative
+    relabel_predictors(predictors_dict) + 
+    # # critical values  : 1.645   1.960  2.576
+    geom_vline(xintercept = 1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
+    geom_vline(xintercept = -1.96, colour = "grey60", linetype = "dotdash", alpha = 1) +
+    geom_vline(xintercept = 2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
+    geom_vline(xintercept = -2.576, colour = "grey60", linetype = "dotted", alpha = 1) +
+    
+    facet_wrap(facets = ~Group, scales = "free_y", nrow = 3, ncol = 2, dir = "v") + 
+    
+    scale_color_brewer(type = "qual", palette="Set1", #  Accent  
+                       breaks=c("all", "America", "Africa", "Asia"),
+                       guide = "none") +
+    
+    scale_shape_manual(values = c(18, 17, 15, 16), # c(21, 24, 22, 25),# c(1, 2, 0, 3), # c(16, 17, 15, 18)
+                       breaks=c("all", "America", "Africa", "Asia"),
+                       guide = "none") +
+    
+    scale_size_manual(values = c(3.5, 2.5, 2.5, 2.5),
+                      breaks=c("all", "America", "Africa", "Asia"),
+                      guide = "none") +
+    
+    scale_alpha_continuous(# values = sort(unique(df$highlight)),# c(0.33, 0.50, 0.67, 0.83, 1.00), # c(0.2, 0.4, 0.6, 0.8, 1),
+                          breaks= c(0.33, 0.50, 0.67, 0.83, 1.00),# sort(unique(df$highlight)),#
+                          guide = "none") +
+    
+    guides(colour = "none") +
+    
+    scale_x_continuous(breaks = c(-1.96, 1.96), 
+                       labels = c("-1.96","1.96")) +
+    theme_bw() + 
+    theme(
+      axis.text.y = depends,
+      text = element_text(face = "bold")
+    )
+  
+  ggsave(filename = here("temp_data", "reg_results", "rfs", "indiv_facet_byGroup", 
+                         paste0(est_parameters[["leads"]], "lead",
+                                est_parameters[["lags"]], "lag_",
+                                est_parameters[["aggr_lead"]], est_parameters[["aggr_lag"]], "aggr_",
+                                if(est_parameters[["s_trend_loga"]]=="manual"){"logtrend"},
+                                if(est_parameters[["s_trend"]]=="manual"){"lintrend"},
+                                "_",gsub(" ","",grp), ".png")), 
+         width=4, height=4)
+}
 
 
 
@@ -1968,7 +2254,7 @@ crops2grp <- c("Barley", "Sorghum", "Wheat", "Cocoa", "Coffee", "Groundnut", "Ra
 eaear2std <- paste0("eaear_", c("Cereals", "Oilfeed_crops", "Cotton", "Maizegrain", "Oat", "Oilpalm", "Rice",
                                 "Soy_compo", "Sugar", "Tobacco")) 
 # add cocoa, coffee and tea for std2 
-eaear2std_bis <- paste0("eaear_", c("Banana", "Biomass", "Cereals", "Oilfeed_crops", "Cocoa_Coffee", "Cotton", 
+eaear2std_bis <- paste0("eaear_", c("Banana", "Biomass", "Cereals", "Oilfeed_crops", "Cocoa", "Coffee", "Cotton", 
                                     "Maizegrain", "Oat", "Olive", "Oilpalm", "Rice",
                                     "Soy_compo", "Sugar", "Tea", "Tobacco")) 
 # Group 
@@ -2033,8 +2319,9 @@ for(aeay_i in mapmat[,"Crops"]){
                          !!as.symbol(eaear_i) := !!as.symbol(aeay_i) * price_i)
 }
 df_cs <- df_cs %>% rowwise() %>% mutate(eaear_Cereals = max(c(eaear_Barley, eaear_Sorghum, eaear_Wheat)), 
-                                        eaear_Oilfeed_crops = max(c(eaear_Groundnut, eaear_Rapeseed, eaear_Sunflower)), 
-                                        eaear_Cocoa_Coffee = max(c(eaear_Cocoa, eaear_Coffee))) %>% as.data.frame()
+                                        eaear_Oilfeed_crops = max(c(eaear_Groundnut, eaear_Rapeseed, eaear_Sunflower)) 
+                                        # eaear_Cocoa_Coffee = max(c(eaear_Cocoa, eaear_Coffee))
+                                        ) %>% as.data.frame()
 
 df_cs <- dplyr::mutate(df_cs, eaear_Soy_compo =  eaear_Soybean_meal + eaear_Soybean_oil)
 df_cs <- dplyr::select(df_cs, -eaear_Soybean, -eaear_Soybean_meal, -eaear_Soybean_oil)
@@ -2631,7 +2918,7 @@ main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
 
 # this may be used to remove some controls in loss_cropland regressions
 woody_perrenials <- c("eaear_Citrus", "eaear_Coconut", "eaear_Oilpalm", 
-                      "eaear_Banana", "eaear_Cocoa_Coffee", "eaear_Tea", "eaear_Rubber")
+                      "eaear_Banana", "eaear_Cocoa", "eaear_Coffee", "eaear_Tea", "eaear_Rubber")
 
 # this may be used to remove some controls in loss residual regressions (called loss_pasture)
 cropland_crops <- c(all_crops[!(all_crops %in% c(woody_perrenials))])
@@ -3070,7 +3357,8 @@ predictors_dict <- c(eaear_Maizegrain = "Maize",
                      eaear_Oilpalm = "Oil palm",
                      eaear_Coconut = "Coconut",
                      eaear_Banana = "Banana",
-                     eaear_Cocoa_Coffee = "Cocoa or Coffee",
+                     eaear_Cocoa = "Cocoa",
+                     eaear_Coffee = "Coffee",
                      eaear_Tea = "Tea",
                      eaear_Rubber = "Rubber" )
 
