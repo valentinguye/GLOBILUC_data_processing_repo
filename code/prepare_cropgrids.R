@@ -94,6 +94,9 @@ gridcrops = c(
   Tobacco = "tobacco"
 )
 
+(all_group_names = unique(names(gridcrops)))
+
+
 # Turn to TIF ----------
 for(cropgridcrop in gridcrops){
   cg = rast(here("input_data", "CROPGRIDSv1.08_NC_maps", "CROPGRIDSv1.08_NC_maps", paste0("CROPGRIDSv1.08_",cropgridcrop,".nc")))
@@ -112,7 +115,6 @@ for(cropgridcrop in gridcrops){
              overwrite =TRUE) 
 }
 
-(all_group_names = unique(names(gridcrops)))
 
 # Match crop Types ----------
 for(cropgroup in all_group_names){
@@ -161,15 +163,13 @@ all_group_stack$Maizegrain %>% area() %>% values() %>% max() # This in km2, i.e.
 # --> confirms that areas of every crop is such that they can be summed up. 
 all_group_stack$Tobacco %>% area() %>% values() %>% max() # This in km2, i.e. 3077 hectares.  
 
+
+# PREPARE SHARE & MASK OF MAIN CROPGRIDS CROP -------------
+
 allcrops = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", "All_cropland_crops.tif"))
 allcrops
 plot(allcrops)  
 plot(land, add = T)
-
-
-
-
-# PREPARE SHARE & MASK OF MAIN CROPGRIDS CROP -------------
 
 # There are several ways to do this... 
 
@@ -228,12 +228,14 @@ tot = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "grouped", "All
 
 make_shares = function(x, y){
   # Handling 0s in the denominator like this crashes overlay, 
-  # and apparently this is handle by raster... 
+  # and apparently this is handle by raster by setting NA to all those cases
   # if(y == 0){
   #   ret = 0
   # }
   # else{
     ret = x / y
+    # so we remove these NAs (I have checked that this yields same sum in the output values as without.  
+    ret[!is.finite(ret)] = 0 
   # }
   return(ret)
 }
@@ -255,7 +257,15 @@ group_layer %>% values() %>% summary()
 tot %>% values() %>% summary()
 rice = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares", paste0("Rice", "_share.tif")))
 rice %>% values() %>% summary()
+
+roots = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares", paste0("Roots", "_share.tif")))
+roots %>% values() %>% sum(na.rm = TRUE)
+
 plot(rice)
+
+# REMOVE THESE NAs, to align with the other outcome maps
+
+
 
 ## Downscale to ~3km and align to target loss raster as prepared in GEE ---------
 
@@ -312,14 +322,13 @@ for(cropgroup in all_group_names){
 
 for(cropgroup in all_group_names){
   cg_share = raster(here("temp_data", "CROPGRIDSV1.08", "tropical_aoi", "shares", paste0(cropgroup, "_share_resampled10thLoss.tif")))
-  # not good practice to write in input_data, but this is to fit the naming convention inherited from the 
-  # workflow for other outcomes measurement that were produced in GEE and written in input_data
-  dir.create(here("input_data", "10thLoss_croplandcommoCGweighted_3km"))
+  
+  # write in there because this is where prepare_loss_cropcommoMain_opindusnotrans.R reads to aggregate and resample to GAEZ.
   overlay(x =lossdriver, 
           y = cg_share, # will be recycled to every layer of lossdriver, i.e. every year.
           fun = function(x,y){x*y}, 
           recycle = TRUE,
-          filename = here("input_data", "10thLoss_croplandcommoCGweighted_3km", paste0("10thLoss_", cropgroup, "_CGweighted", "_3km.tif")),
+          filename = here("temp_data", "processed_lossdrivers", "tropical_aoi", paste0("loss_", cropgroup, "_CGweighted", "_3km_0119.tif")),
           overwrite = TRUE
   )
   
@@ -337,7 +346,7 @@ for(cropgroup in all_group_names){
   #      )
 }
 # Check
-ld_rice_weighted = brick(here("input_data", "10thLoss_croplandcommoCGweighted_3km", paste0("10thLoss_", cropgroup, "_CGweighted", "_3km.tif")))
+# ld_rice_weighted = brick(here("input_data", "10thLoss_croplandcommoCGweighted_3km", paste0("10thLoss_", cropgroup, "_CGweighted", "_3km.tif")))
 lossdriver
 
 # lossdriver$loss_croplandcommo_3km_0119_1 %>% values %>% mean(na.rm = TRUE)

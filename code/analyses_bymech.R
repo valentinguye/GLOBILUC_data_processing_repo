@@ -1359,7 +1359,8 @@ continents <- c("all", "America", "Africa", "Asia") # "all"#
 
 
 ### DATA 
-main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opindusnotrans_residu_aeaycompo_long_final.Rdata"))
+main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_CGweighted_opindusnotrans_cultpasture_cocoa_aeaycompo_long_final.Rdata"))
+# main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opindusnotrans_residu_aeaycompo_long_final.Rdata"))
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_op_aeaycompo_long_final.Rdata"))
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_cropcommo_opcommo_aeaycompo_long_final.Rdata"))
 # main_data <- readRDS(here("temp_data", "merged_datasets", "tropical_aoi", "loss_crop_opindus_aeaycompo_long_final.Rdata"))
@@ -1372,9 +1373,8 @@ main_data <- dplyr::filter(main_data, year >= 2008, year <= 2019)
 
 # this may be used to remove some controls in loss_cropland regressions
 woody_perrenials <- c("eaear_Citrus", "eaear_Coconut", "eaear_Oilpalm", 
-                      "eaear_Banana", "eaear_Cocoa", "eaear_Cocoa", "eaear_Coffee", "eaear_Tea", "eaear_Rubber")
+                      "eaear_Banana", "eaear_Cocoa", "eaear_Coffee", "eaear_Tea", "eaear_Rubber")
 
-# this may be used to remove some controls in loss residual regressions (called loss_pasture)
 cropland_crops <- c(all_crops[!(all_crops %in% c(woody_perrenials))])
 
 # loss_type <- "loss_cropland"
@@ -1483,15 +1483,15 @@ for(CNT in continents){
   sapply(all_tests_est[[CNT]], FUN = function(eo){eo$convStatus}) %>% print()
 }
 
-# save this temporarily
-saveRDS(all_tests_est, 
-        here("temp_data", "reg_results", "rfs", "result_lists", 
-             paste0(est_parameters[["leads"]], "lead",
-                    est_parameters[["lags"]], "lag_",
-                    est_parameters[["aggr_lead"]], est_parameters[["aggr_lag"]], "aggr_",
-                    if(est_parameters[["s_trend_loga"]]=="manual"){"logtrend"},
-                    if(est_parameters[["s_trend"]]=="manual"){"lintrend"},
-                    ".Rdata")))
+# save this temporarily - but quite long, so don't do by default
+# saveRDS(all_tests_est, 
+#         here("temp_data", "reg_results", "rfs", "result_lists", 
+#              paste0(est_parameters[["leads"]], "lead",
+#                     est_parameters[["lags"]], "lag_",
+#                     est_parameters[["aggr_lead"]], est_parameters[["aggr_lag"]], "aggr_",
+#                     if(est_parameters[["s_trend_loga"]]=="manual"){"logtrend"},
+#                     if(est_parameters[["s_trend"]]=="manual"){"lintrend"},
+#                     ".Rdata")))
 
 
 # all_tests_est[["all"]][["loss_oilpalm_both"]] %>% post_est_fnc(base_exposure = "eaear_Oilpalm")
