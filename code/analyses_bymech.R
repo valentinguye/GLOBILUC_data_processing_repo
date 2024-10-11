@@ -1936,7 +1936,7 @@ for(crp in unique(df2$crop)){
 
 
 
-#### ROBUSTNESS CHECKS -----------------
+# ROBUSTNESS CHECKS -----------------
 # Robustness checks depart on a single specification dimension at a time. 
 # I.e., we don't do specification charts, because we would need one for every crop-continent pair, which would be too much. 
 
@@ -1946,35 +1946,119 @@ for(crp in unique(df2$crop)){
 # - Other crops controls
 # - Gaussian distribution with Inverse Hyperbolic Sine transformation of the outcome. 
 
+# Set rounding level for table
+rounding = 4
+options(knitr.table.format = "latex")
+
 # We run each of those, for each crop and continent. 
 RC_all_tests_est <- list()
 RC_d_clean_list <- list()
 RC_cnt_crop_list <- list()
-RC_cnt_list <- list()
-for(CNT in continents){
+RC_crop_tex_list <- list()
+
+# Reverse the looping order, because we want tables by crop. 
+
+# ANNUAL CROPS regressed on CROPGRIDS-weighted loss to commodity croplands
+for(CROP in c("eaear_Fodder",gentest_crops, displtest_crops,  "eaear_Oilpalm")){# 
+  # Set the outcome that corresponds
+  loss_type <- gsub("eaear_", "loss_", x = CROP)
+  # change it if CROP is not of the CG-weighted loss to commodity croplands type. 
+  if(CROP == "eaear_Fodder"){
+    loss_type <- "loss_pasture"
+  } 
+  if(CROP == "eaear_Oilpalm"){
+    loss_type <- "loss_oilpalm_indus"
+  } 
   
-  # ANNUAL CROPS regressed on CROPGRIDS-weighted loss to commodity croplands
-  for(CROP in c("eaear_Fodder", gentest_crops, displtest_crops, "eaear_Oilpalm")){
-    # Set the outcome that corresponds
-    loss_type <- gsub("eaear_", "loss_", x = CROP)
-    # change it if CROP is not of the CG-weighted loss to commodity croplands type. 
-    if(CROP == "eaear_Fodder"){
-      loss_type <- "loss_pasture"
-    } 
-    if(CROP == "eaear_Oilpalm"){
-      loss_type <- "loss_oilpalm_indus"
-    } 
-    
+  for(CNT in continents){
+  
+    cnt_crop_spec_list = list()
+
+    ###### Main --------------
     # (re-) Set the parameters for robustness check
-    est_parameters[["s_trend"]] = "manual"
-    est_parameters[["s_trend_loga"]] = "NO"
+    est_parameters[["aggr_lag"]] = 1
+    est_parameters[["s_trend"]] = "NO"
+    est_parameters[["s_trend_loga"]] = "manual"
     crops_ctrl = c()
     est_parameters[["distribution"]] = "quasipoisson"
+    i = 1 
+    temp_list <- make_main_reg(continent = CNT,
+                                 outcome_variable = loss_type,
+                                 exposure_rfs = CROP,
+  
+                                 s_trend = est_parameters[["s_trend"]],
+                                 s_trend_loga = est_parameters[["s_trend_loga"]],
+                                 s_trend_sq = est_parameters[["s_trend_sq"]],
+                                 all_exposures_rfs = crops_ctrl,
+                                 distribution = est_parameters[["distribution"]],
+                                 
+                                 annual_rfs_controls = TRUE,
+                                 rfs_lead = est_parameters[["leads"]],
+                                 rfs_lag = est_parameters[["lags"]],
+                                 aggr_lead = est_parameters[["aggr_lead"]],
+                                 aggr_lag = est_parameters[["aggr_lag"]],
+                                 exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                                 glm_iter = est_parameters[["glm_iter"]],
+                                 start_year = est_parameters[["start_year"]],
+                                 end_year = est_parameters[["end_year"]],
+                                 output = "everything")
+    reg_res = temp_list[[1]]
+    reg_res_df = etable(reg_res)
+    d_clean = temp_list[[2]]
+    x = temp_list[[3]] %>% as.data.frame()
+    x = x[grepl("_aggrall", row.names(x)), ]
     
+    df = data.frame("result" = paste0(round(x[ ,"Estimate"], rounding), " (", round(x[,"Std. Error"], rounding), ")"))
+    row.names(df) = "Sum of coefficients"
+    # add a row with the number of observations
+    df <- rbind(df, reg_res$nobs)
+    row.names(df)[nrow(df)] <- "Observations"
+    df[row.names(df)=="Observations",] <- df[row.names(df)=="Observations",] %>% formatC(digits = 0, format = "f")
+    # add a row with kind of clustering - NO because always the same
+    # df <- rbind(df, paste0(gsub("grid_id_", "", est_parameters[["cluster_var1"]]), "-times larger grid"))
+    # row.names(df)[nrow(df)] <- "S.E. clustered by:"
+    # add a row with the number of clusters
+    df <- rbind(df, length(unique(d_clean[,est_parameters[["cluster_var1"]] ])))
+    row.names(df)[nrow(df)] <- "Clusters"
+    df[row.names(df)=="Clusters",] <- df[row.names(df)=="Clusters",] %>% formatC(digits = 0, format = "f")
+    # add a row with fit stat
+    df <- rbind(df, round(reg_res$sq.cor, rounding))
+    row.names(df)[nrow(df)] <- "Squared Cor."
+
+    cnt_crop_spec_list[[i]] = df
+    rm(df, temp_list, x, reg_res, reg_res_df, d_clean)
+    # # We do only one level of spatial clustering
+    # regres = temp_list[[1]]  # 1 is the fixest object
+    # # remove all regressor rows
+    # # regres = regres[!grepl("eaear_", regres_df[,1]), ]
+    # regres_df = etable(regres, tex = T) # , drop.section = 'coef'
+    # # add new one for cumulative effect
+    # x = x[grepl("_aggrall", row.names(x)), ] 
+    # insert_cumul = data.frame(" " = "Sum of coefficients", 
+    #                           "regres" = paste0(round(x[ ,"Estimate"], 5), " (", round(x[,"Std. Error"], 5), ")")
+    # )
+    # names(insert_cumul)[1] = "" # need to do that this way... 
+    # # et voilà
+    # RC_cnt_crop_list[[CNT]][[CROP]][["main"]]  =
+    #   rbind(
+    #     regres_df[1:2,], 
+    #     insert_cumul,
+    #     regres_df[3:nrow(regres_df),]
+    #     )
+    # rm(temp_list, regres, x, regres_df, insert_cumul) 
+    
+    ###### Longer past cumulative effect --------------
+    # (re-) Set the parameters for robustness check
+    est_parameters[["aggr_lag"]] = 2
+    est_parameters[["s_trend"]] = "NO"
+    est_parameters[["s_trend_loga"]] = "manual"
+    crops_ctrl = c()
+    est_parameters[["distribution"]] = "quasipoisson"
+    i = i + 1
     temp_list <- make_main_reg(continent = CNT,
                                outcome_variable = loss_type,
                                exposure_rfs = CROP,
-
+                               
                                s_trend = est_parameters[["s_trend"]],
                                s_trend_loga = est_parameters[["s_trend_loga"]],
                                s_trend_sq = est_parameters[["s_trend_sq"]],
@@ -1991,45 +2075,283 @@ for(CNT in continents){
                                start_year = est_parameters[["start_year"]],
                                end_year = est_parameters[["end_year"]],
                                output = "everything")
+    reg_res = temp_list[[1]]
+    reg_res_df = etable(reg_res)
+    d_clean = temp_list[[2]]
+    x = temp_list[[3]] %>% as.data.frame()
+    x = x[grepl("_aggrall", row.names(x)), ]
+    
+    df = data.frame("result" = paste0(round(x[ ,"Estimate"], rounding), " (", round(x[,"Std. Error"], rounding), ")"))
+    row.names(df) = "Sum of coefficients"
+    # add a row with the number of observations
+    df <- rbind(df, reg_res$nobs)
+    row.names(df)[nrow(df)] <- "Observations"
+    df[row.names(df)=="Observations",] <- df[row.names(df)=="Observations",] %>% formatC(digits = 0, format = "f")
+    # add a row with kind of clustering - NO because always the same
+    # df <- rbind(df, paste0(gsub("grid_id_", "", est_parameters[["cluster_var1"]]), "-times larger grid"))
+    # row.names(df)[nrow(df)] <- "S.E. clustered by:"
+    # add a row with the number of clusters
+    df <- rbind(df, length(unique(d_clean[,est_parameters[["cluster_var1"]] ])))
+    row.names(df)[nrow(df)] <- "Clusters"
+    df[row.names(df)=="Clusters",] <- df[row.names(df)=="Clusters",] %>% formatC(digits = 0, format = "f")
+    # add a row with fit stat
+    df <- rbind(df, round(reg_res$sq.cor, rounding))
+    row.names(df)[nrow(df)] <- "Squared Cor."
+    
+    cnt_crop_spec_list[[i]] = df
+    rm(df, temp_list, x, reg_res, reg_res_df, d_clean)
+    
+    ###### Linear trend --------------
+    # (re-) Set the parameters for robustness check
+    est_parameters[["aggr_lag"]] = 1
+    est_parameters[["s_trend"]] = "manual"
+    est_parameters[["s_trend_loga"]] = "NO"
+    crops_ctrl = c()
+    est_parameters[["distribution"]] = "quasipoisson"
+    i = i + 1
+    temp_list <- make_main_reg(continent = CNT,
+                               outcome_variable = loss_type,
+                               exposure_rfs = CROP,
+                               
+                               s_trend = est_parameters[["s_trend"]],
+                               s_trend_loga = est_parameters[["s_trend_loga"]],
+                               s_trend_sq = est_parameters[["s_trend_sq"]],
+                               all_exposures_rfs = crops_ctrl,
+                               distribution = est_parameters[["distribution"]],
+                               
+                               annual_rfs_controls = TRUE,
+                               rfs_lead = est_parameters[["leads"]],
+                               rfs_lag = est_parameters[["lags"]],
+                               aggr_lead = est_parameters[["aggr_lead"]],
+                               aggr_lag = est_parameters[["aggr_lag"]],
+                               exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                               glm_iter = est_parameters[["glm_iter"]],
+                               start_year = est_parameters[["start_year"]],
+                               end_year = est_parameters[["end_year"]],
+                               output = "everything")
+    reg_res = temp_list[[1]]
+    reg_res_df = etable(reg_res)
+    d_clean = temp_list[[2]]
+    x = temp_list[[3]] %>% as.data.frame()
+    x = x[grepl("_aggrall", row.names(x)), ]
+    
+    df = data.frame("result" = paste0(round(x[ ,"Estimate"], rounding), " (", round(x[,"Std. Error"], rounding), ")"))
+    row.names(df) = "Sum of coefficients"
+    # add a row with the number of observations
+    df <- rbind(df, reg_res$nobs)
+    row.names(df)[nrow(df)] <- "Observations"
+    df[row.names(df)=="Observations",] <- df[row.names(df)=="Observations",] %>% formatC(digits = 0, format = "f")
+    # add a row with kind of clustering - NO because always the same
+    # df <- rbind(df, paste0(gsub("grid_id_", "", est_parameters[["cluster_var1"]]), "-times larger grid"))
+    # row.names(df)[nrow(df)] <- "S.E. clustered by:"
+    # add a row with the number of clusters
+    df <- rbind(df, length(unique(d_clean[,est_parameters[["cluster_var1"]] ])))
+    row.names(df)[nrow(df)] <- "Clusters"
+    df[row.names(df)=="Clusters",] <- df[row.names(df)=="Clusters",] %>% formatC(digits = 0, format = "f")
+    # add a row with fit stat
+    df <- rbind(df, round(reg_res$sq.cor, rounding))
+    row.names(df)[nrow(df)] <- "Squared Cor."
+    
+    cnt_crop_spec_list[[i]] = df
+    rm(df, temp_list, x, reg_res, reg_res_df, d_clean)
+    
+    
+    ###### Other crops controls --------------
+    # (re-) Set the parameters for robustness check
+    est_parameters[["aggr_lag"]] = 1
+    est_parameters[["s_trend"]] = "NO"
+    est_parameters[["s_trend_loga"]] = "manual"
+    crops_ctrl = c("eaear_Fodder", gentest_crops, displtest_crops, "eaear_Oilpalm")
+    est_parameters[["distribution"]] = "quasipoisson"
+    i = i + 1
+    temp_list <- make_main_reg(continent = CNT,
+                               outcome_variable = loss_type,
+                               exposure_rfs = CROP,
+                               
+                               s_trend = est_parameters[["s_trend"]],
+                               s_trend_loga = est_parameters[["s_trend_loga"]],
+                               s_trend_sq = est_parameters[["s_trend_sq"]],
+                               all_exposures_rfs = crops_ctrl,
+                               distribution = est_parameters[["distribution"]],
+                               
+                               annual_rfs_controls = TRUE,
+                               rfs_lead = est_parameters[["leads"]],
+                               rfs_lag = est_parameters[["lags"]],
+                               aggr_lead = est_parameters[["aggr_lead"]],
+                               aggr_lag = est_parameters[["aggr_lag"]],
+                               exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                               glm_iter = est_parameters[["glm_iter"]],
+                               start_year = est_parameters[["start_year"]],
+                               end_year = est_parameters[["end_year"]],
+                               output = "everything")
+    reg_res = temp_list[[1]]
+    reg_res_df = etable(reg_res)
+    d_clean = temp_list[[2]]
+    x = temp_list[[3]] %>% as.data.frame()
+    x = x[grepl("_aggrall", row.names(x)), ]
+    
+    df = data.frame("result" = paste0(round(x[ ,"Estimate"], rounding), " (", round(x[,"Std. Error"], rounding), ")"))
+    row.names(df) = "Sum of coefficients"
+    # add a row with the number of observations
+    df <- rbind(df, reg_res$nobs)
+    row.names(df)[nrow(df)] <- "Observations"
+    df[row.names(df)=="Observations",] <- df[row.names(df)=="Observations",] %>% formatC(digits = 0, format = "f")
+    # add a row with kind of clustering - NO because always the same
+    # df <- rbind(df, paste0(gsub("grid_id_", "", est_parameters[["cluster_var1"]]), "-times larger grid"))
+    # row.names(df)[nrow(df)] <- "S.E. clustered by:"
+    # add a row with the number of clusters
+    df <- rbind(df, length(unique(d_clean[,est_parameters[["cluster_var1"]] ])))
+    row.names(df)[nrow(df)] <- "Clusters"
+    df[row.names(df)=="Clusters",] <- df[row.names(df)=="Clusters",] %>% formatC(digits = 0, format = "f")
+    # add a row with fit stat
+    df <- rbind(df, round(reg_res$sq.cor, rounding))
+    row.names(df)[nrow(df)] <- "Squared Cor."
+    
+    cnt_crop_spec_list[[i]] = df
+    rm(df, temp_list, x, reg_res, reg_res_df, d_clean)
+    
+    
+    ###### Gaussian Inverse Hyperbolic Sine --------------
+    # (re-) Set the parameters for robustness check
+    est_parameters[["aggr_lag"]] = 1
+    est_parameters[["s_trend"]] = "NO"
+    est_parameters[["s_trend_loga"]] = "manual"
+    crops_ctrl = c()
+    est_parameters[["distribution"]] = "gaussian" # the default is to apply IHS transformation when gaussian 
+    i = i + 1
+    temp_list <- make_main_reg(continent = CNT,
+                               outcome_variable = loss_type,
+                               exposure_rfs = CROP,
+                               
+                               s_trend = est_parameters[["s_trend"]],
+                               s_trend_loga = est_parameters[["s_trend_loga"]],
+                               s_trend_sq = est_parameters[["s_trend_sq"]],
+                               all_exposures_rfs = crops_ctrl,
+                               distribution = est_parameters[["distribution"]],
+                               
+                               annual_rfs_controls = TRUE,
+                               rfs_lead = est_parameters[["leads"]],
+                               rfs_lag = est_parameters[["lags"]],
+                               aggr_lead = est_parameters[["aggr_lead"]],
+                               aggr_lag = est_parameters[["aggr_lag"]],
+                               exposure_quantiles = est_parameters[["exposure_quantiles"]],
+                               glm_iter = est_parameters[["glm_iter"]],
+                               start_year = est_parameters[["start_year"]],
+                               end_year = est_parameters[["end_year"]],
+                               output = "everything")
+    reg_res = temp_list[[1]]
+    reg_res_df = etable(reg_res)
+    d_clean = temp_list[[2]]
+    x = temp_list[[3]] %>% as.data.frame()
+    x = x[grepl("_aggrall", row.names(x)), ]
+    
+    df = data.frame("result" = paste0(round(x[ ,"Estimate"], rounding), " (", round(x[,"Std. Error"], rounding), ")"))
+    row.names(df) = "Sum of coefficients"
+    # add a row with the number of observations
+    df <- rbind(df, reg_res$nobs)
+    row.names(df)[nrow(df)] <- "Observations"
+    df[row.names(df)=="Observations",] <- df[row.names(df)=="Observations",] %>% formatC(digits = 0, format = "f")
+    # add a row with kind of clustering - NO because always the same
+    # df <- rbind(df, paste0(gsub("grid_id_", "", est_parameters[["cluster_var1"]]), "-times larger grid"))
+    # row.names(df)[nrow(df)] <- "S.E. clustered by:"
+    # add a row with the number of clusters
+    df <- rbind(df, length(unique(d_clean[,est_parameters[["cluster_var1"]] ])))
+    row.names(df)[nrow(df)] <- "Clusters"
+    df[row.names(df)=="Clusters",] <- df[row.names(df)=="Clusters",] %>% formatC(digits = 0, format = "f")
+    # add a row with fit stat
+    df <- rbind(df, round(reg_res$sq.cor, rounding))
+    row.names(df)[nrow(df)] <- "Squared Cor."
+    
+    cnt_crop_spec_list[[i]] = df
+    rm(df, temp_list, x, reg_res, reg_res_df, d_clean)
 
-    # We do only one LEVEL OF SPATIAL CLUSTERING
-    regres = temp_list[[1]]  # 1 is the fixest object
-    x <- temp_list[[3]] # 3 is the coeff table 
-    rm(temp_list) # we don't need the data 
 
-    # remove all regressor rows
-    
-    # add new one for cumulative effect
-    
-    # et voilà
-    # regres = 
-    #   rbind(
-    #     x
-    #     regres)
-      
-    # FIND A WAY TO APPEND THE CUMULATIVE EFFECT TO THE FIXEST
-    
-    # save row names 
-    estimate_names <- row.names(x)
-    
-    x$model <- CNT
-    x$crop <- CROP
-    x$Dynamics <- ""
-    x$Dynamics[grepl("aggrall", estimate_names)] <- "Cumulative"
-    x$Dynamics[grepl("lead1", estimate_names)] <- "t+1"
-    x$Dynamics[grepl("lead2", estimate_names)] <- "t+2"
-    x$Dynamics[estimate_names==paste0(CROP,"_X_statute_conv")] <- "t"
-    x$Dynamics[grepl("lag1", estimate_names)] <- "t-1"
-    x$Dynamics[grepl("lag2", estimate_names)] <- "t-2"
-    x$Dynamics[grepl("lag3", estimate_names)] <- "t-3"
-    
-    row.names(x) <- NULL # otherwise they duplicate while stacking
-    RC_cnt_crop_list[[CNT]][[CROP]][["main"]] <- x
-    
-    rm(CROP)
-  } # closes loops on crops
-  RC_cnt_list[[CNT]] <- RC_cnt_crop_list[[CNT]] %>% bind_rows()
-} # closes loops on continents RC_cnt_crop_list
+    # Bind rows of all specifications for that continent-crop pair
+    RC_cnt_crop_list[[CROP]][[CNT]] <- cnt_crop_spec_list %>% bind_cols(.name_repair = "minimal") 
+  } # closes loops on CONTINENTS
+  
+  # Bind rows of all specifications across continents for that crop
+  rcdf <- RC_cnt_crop_list[[CROP]] %>% bind_cols(.name_repair = "minimal") %>% unname()
+  # names(RC_crop_tex_list[[CROP]]) = names(RC_cnt_crop_list[[CROP]])
+  
+  
+  # Number of regressions shown
+  n_rc = length(cnt_crop_spec_list)
+  # individual column headers
+  head1 = rep(1:n_rc, length(RC_cnt_crop_list[[CROP]])) # the number of specifications by the number of continents
+  head2 = rep(1, length(head1))
+  # parentheses around
+  head1 = paste0("(", head1, ")")
+  head1 = gsub("[(]1[)]", "TOREPLACEINLATEX", head1) # to replace manually, all at once, by \textbf{(1)}
+  names(head2) = head1
+  
+  headcnt = rep(n_rc, length(RC_cnt_crop_list[[CROP]]))
+  names(headcnt) = names(RC_cnt_crop_list[[CROP]])
+  
+  title = paste0(
+    predictors_dict[CROP==names(predictors_dict)],
+    " regression results for alternative specifications"
+  )
+  
+  footnote_text = paste0(
+    "Standard errors in brackets, clustered at the 10-times larger grid cell level.", 
+    "Alternative specifications are: ",
+    "(1) the main specification, shown in Figure 4; ",
+    "(2) same regression, but the sum estimate includes the coefficient on the 2-year lagged regressor; ",
+    "(3) models a Gaussian distribution (instead of quasi-poisson) for an inverse hyperbolic sine transformation of the outcome; ",
+    "(4) has a linear flexible trend instead of logarithmic; ",
+    "(5) has controls for all the other crops."
+  )
+  # Store latex output  ON EN EST LA 
+  RC_crop_tex_list[[CROP]] = 
+    kable(rcdf, booktabs = T, align = "r", 
+          caption = title, 
+          escape = FALSE) %>% 
+      kable_styling(latex_options = c("scale_down", "hold_position")) %>%
+      add_header_above(c(" " = 1, head2),
+                       bold = F,
+                       align = "c") %>%
+      add_header_above(c(" " = 1, headcnt),
+                       align = "c",
+                       strikeout = F) %>%
+    column_spec(column = 1,
+                width = "10em",
+                latex_valign = "b") %>%   
+    column_spec(column = c(2:(ncol(rcdf))),
+                  width = "5em",
+                  latex_valign = "b") %>% 
+    # column_spec(column = c(2, 2+n_rc, 2+n_rc*2, 2+n_rc*3), # main result is every n_rc column, starting from the second one. 
+    #             bold = TRUE,
+    #             width = "6em",
+    #             latex_valign = "b") %>% 
+    pack_rows(" ", 2, nrow(rcdf), latex_gap_space = "1em") %>%
+    footnote(general = footnote_text, 
+             footnote_as_chunk = FALSE, 
+             threeparttable = TRUE
+             )
+             
+  
+  print(RC_crop_tex_list[[CROP]]) # so we can just copy paste the whole output of theloop
+  
+} # closes loops on CROPS
+
+
+
+# The above code would do a nice stacking of all tables into one with multiple panels
+# But need to understand it and don't have time now. 
+# collapse_rows_dt <- expand.grid(
+#   District = sprintf('District %s', c('1', '2')),
+#   City = sprintf('City %s', c('1', '2')),
+#   State = sprintf('State %s', c('a', 'b')),
+#   Country = sprintf('Country with a long name %s', c('A', 'B'))
+# )
+# collapse_rows_dt <- collapse_rows_dt[c("Country", "State", "City", "District")]
+# collapse_rows_dt$C1 = rnorm(nrow(collapse_rows_dt))
+# collapse_rows_dt$C2 = rnorm(nrow(collapse_rows_dt))
+# kbl(collapse_rows_dt,
+#     booktabs = T, align = "c", linesep = '') %>%
+#   collapse_rows(1:3, row_group_label_position = 'stack')
+
 
 ###### Regression Tables ---------
 # each element of all_tests_est[["continent"]] is a fixest object 
