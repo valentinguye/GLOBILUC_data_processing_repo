@@ -2386,8 +2386,8 @@ for(CROP in c("eaear_Fodder",gentest_crops, displtest_crops,  "eaear_Oilpalm")){
 # In this case, all crop estimations have different samples d_clean because they require their 
 # own trade exposure to not be NA, and this varies by country. 
 # So don't make post estimation, because this requires to store the data used for estimation, and would be too memory intensive in this case. 
-est_parameters[["trade_exposure"]] <- "trade_expo"
-est_parameters[["trade_expo_spec"]] <- c("incl_maize")
+est_parameters[["trade_exposure"]] <- c("export_expo") #"trade_expo", "import_expo"
+est_parameters[["trade_expo_spec"]] <- c("incl_j", "incl_maize")#, 
 temp_list_trade <- list()
 # keep ony those crops for which there is trade data 
 commercial_crops <- c("eaear_Fodder", gentest_crops, displtest_crops, "eaear_Oilpalm")
@@ -2434,7 +2434,8 @@ for(CNT in continents[continents!="all"]){ #
                                             end_year = est_parameters[["end_year"]],
                                             glm_iter = est_parameters[["glm_iter"]],
                                             output = "coef_table")# 
-    rm(CROP)
+
+    
   }
 }
 
