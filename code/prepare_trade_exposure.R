@@ -14,16 +14,16 @@
 # These are the packages needed in this particular script. *** these are those that we now not install: "rlist","lwgeom","htmltools", "iterators", 
 neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", "stringr",
                     "here", "readstata13", "foreign", "readxl", "writexl",
-                    "raster", "rgdal", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
+                    "raster", "sp", "spdep", "sf","gfcanalysis",  "nngeo", "stars", # "osrm", "osrmr",
                     "lubridate","exactextractr",
                     "doParallel", "foreach", "snow", "parallel",
                     "knitr", "kableExtra",
                     "DataCombine", 
                     "fixest", 
                     "boot", "fwildclusterboot", "sandwich", "MASS",
-                    "ggplot2", "leaflet", "tmap",  "dotwhisker", "viridis", "hrbrthemes")
+                    "ggplot2", "leaflet", "dotwhisker", "viridis", "hrbrthemes")
 # Install them in their project-specific versions
-renv::restore(packages = neededPackages)
+# renv::restore(packages = neededPackages)
 
 # Load them
 lapply(neededPackages, library, character.only = TRUE)
@@ -786,26 +786,67 @@ for(elmt in c("production_ktonnes_", "export_ktonnes_", "import_ktonnes_", "stoc
 
 #### MAKE STATISTICS OF INTEREST ---------------------------------------------------------------------------------
 
+# Accounting identify is C + X = Y + I - S
+
 # Exposure of selected crops
 # (making sure that outputs are NA, not Inf or NaN)
+# (minus stock variation means positive amount if stock was reduced to increase supply). 
 for(item in final_items){
 
-  pfb <- dplyr::mutate(pfb, 
-                       !!as.symbol(paste0("trade_expo_",item)) := ( !!as.symbol(paste0("export_ktonnes_", item)) + !!as.symbol(paste0("import_ktonnes_", item)) ) /
-                                                                    !!as.symbol(paste0("production_ktonnes_", item)),  
-                                                                      
-                       !!as.symbol(paste0("export_expo_",item)) := ( !!as.symbol(paste0("export_ktonnes_", item)) ) / !!as.symbol(paste0("production_ktonnes_", item)), 
-                       
-                       !!as.symbol(paste0("import_expo_",item)) := ( !!as.symbol(paste0("import_ktonnes_", item)) ) / !!as.symbol(paste0("domestic_supply_ktonnes_", item))  ) 
+  pfb <- 
+    pfb %>% 
+    dplyr::mutate( 
+     !!as.symbol(paste0("export_expo_",item)) := !!as.symbol(paste0("export_ktonnes_", item))  / 
+                                                 (!!as.symbol(paste0("production_ktonnes_", item)) - !!as.symbol(paste0("stock_var_ktonnes_", item))), 
+     
+     !!as.symbol(paste0("import_expo_",item)) := !!as.symbol(paste0("import_ktonnes_", item))  / 
+                                                 (!!as.symbol(paste0("production_ktonnes_", item)) - !!as.symbol(paste0("stock_var_ktonnes_", item)) + !!as.symbol(paste0("import_ktonnes_", item)))
+  ) 
   
-  # handle cases where production is 0
+  # handle cases where production is very low 
+  pfb[pfb[, paste0("production_ktonnes_",item)] < 1 & !is.na(pfb[, paste0("production_ktonnes_",item)]), 
+      c(paste0("trade_expo_",item), paste0("export_expo_",item), paste0("import_expo_",item))] <- NA
+  
+  # and with accounting "errors" where uses are negative (very few)
+  pfb[pfb[, paste0("production_ktonnes_",item)] - pfb[, paste0("stock_var_ktonnes_",item)] + pfb[, paste0("import_ktonnes_",item)] < 0 & 
+        !is.na(pfb[, paste0("production_ktonnes_",item)]) & !is.na(pfb[, paste0("stock_var_ktonnes_",item)]) & !is.na(pfb[, paste0("import_ktonnes_",item)]), 
+      c(paste0("trade_expo_",item), paste0("export_expo_",item), paste0("import_expo_",item))] <- NA
+  
+  # and cases where denominator terms would sum exactly to 0
   pfb[, paste0("trade_expo_",item)][!is.finite(pfb[, paste0("trade_expo_",item)])] <- NA
   pfb[, paste0("export_expo_",item)][!is.finite(pfb[, paste0("export_expo_",item)])] <- NA
   pfb[, paste0("import_expo_",item)][!is.finite(pfb[, paste0("import_expo_",item)])] <- NA
   # this can produce annual NA but not a pb, as na.rm = TRUE handles it in ddply below. 
-
+  
+  # set bounds to export exposure. 
+  # Exports beyond production and stocks are re-exported volumes coming from imports, not domestic production, so not representative 
+  # of the country's export agriculture or anticipations (stocks changes) thereof. 
+  # Exports in a year when stock formation is larger than prodution are entirely based on imports, so there is no exposure of dom. ag. through exports.  
+  pfb[!is.na(pfb[,  paste0("export_expo_",item)]) & pfb[,  paste0("export_expo_",item)] > 1, paste0("export_expo_",item)] <- 1
+  pfb[!is.na(pfb[,  paste0("export_expo_",item)]) & pfb[,  paste0("export_expo_",item)] < 0, paste0("export_expo_",item)] <- 0
+  
+  # (if stocks are reduced in a year to export more, this probably increases the domestic futures prices and thus incentives.  )
+  
+  # Finally, average both export and import exposures into a trade exposures
+  pfb <- 
+    pfb %>% 
+    mutate(
+      !!as.symbol(paste0("trade_expo_",item)) :=rowMeans(across(
+        .cols = contains(paste0("export_expo_",item)) | contains(paste0("import_expo_",item))),
+        na.rm = TRUE)
+      # c_across(.cols = contains(paste0("export_expo_",item)) | contains(paste0("import_expo_",item)),
+      #             .fns = ~mean(.x, na.rm = TRUE),
+      #             .names = paste0("trade_expo_",item))
+    )
 }
+pfb$export_expo_soy_compo %>% summary()
+pfb$import_expo_soy_compo %>% summary()
+pfb$trade_expo_soy_compo %>% summary()
+pfb %>% dplyr::select(contains("soy_compo")) %>% View()
+# pfb %>% filter(export_expo_soy_compo > 1) %>% dplyr::select(contains("soy_compo")) %>% View()
+# pfb %>% filter(import_expo_soy_compo < 0) %>% dplyr::select(contains("soy_compo")) %>% View()
 
+# pfb %>% filter(import_expo_soy_compo > 1) %>% dplyr::select(contains("soy_compo")) %>% View()
 # pfb[pfb$country_name=="Brazil",grepl("sugar",names(pfb))]
 # pfb[pfb$country_name=="Indonesia",grepl("palm",names(pfb))]
 # pfb[pfb$country_name=="Brazil",grepl("soy",names(pfb))]

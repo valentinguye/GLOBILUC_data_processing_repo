@@ -25,7 +25,7 @@ neededPackages <- c("data.table", "plyr", "tidyr", "dplyr",  "Hmisc", "sjmisc", 
                     "ggplot2", "ggpubr", "leaflet",  "dotwhisker", "viridis", "hrbrthemes")
 # "tmap",
 # Install them in their project-specific versions
-renv::restore(packages = neededPackages)
+# renv::restore(packages = neededPackages)
 
 # Load them 
 lapply(neededPackages, library, character.only = TRUE)
@@ -320,6 +320,7 @@ losstobacco <- brick(resampled_ouput_nameS["Tobacco_CGweighted"])
 fc2k <- raster(fc2k_resampled_output_name)
 pst2k <- raster(pst2k_resampled_output_name)
 access <- raster(here("temp_data", "acc_50k_2000_resampledgaez.tif"))
+area_ha <- raster::area(losscropland[[1]])*100
 
 # It is important to explicitly rename layers that are going to be stacked and then called to reshape the data frame 
 # for time varying variables, the dot is important. 
@@ -347,7 +348,7 @@ names(losstobacco) <- paste0("loss_Tobacco.",seq(2001, 2019, 1))
 names(fc2k) <- "fc_2000"
 names(pst2k) <- "pasture_share_2000"
 names(access) <- "hours_50kcity"
-
+names(area_ha) <- "area_ha"
 
 
 # Stack together the annual layers of drivenloss data and GAEZ crop cross sections 
@@ -363,7 +364,7 @@ tropical_stack <- stack(losscropland, lossoilpalmindus, # lossoilpalmboth, #
                         lossbiomass,
                         losssugarcane,
                         losstobacco,
-                        gaez, fc2k, pst2k, access)
+                        gaez, fc2k, pst2k, access, area_ha)
 # stock those names 
 tropical_stack_names <- names(tropical_stack)
 
@@ -833,7 +834,7 @@ price_avg <- prices %>%
   filter(year>=1995 & year <= 2004) %>% 
   #filter(year==2000) %>% 
   summarise(across(.cols = any_of(mapmat[,"Prices"]), 
-                   .fns = mean, na.rm = TRUE))
+                   .fns = ~mean(.x, na.rm = TRUE)))
 
 # , Miscanthus, Sorghumbiomass*10
 # summary(df_cs$eaear_Fodder)
