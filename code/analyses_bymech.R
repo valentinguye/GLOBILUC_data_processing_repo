@@ -288,7 +288,7 @@ all_rfs_treatments <- c(grep(pattern = "statute_conv", names(prices), value = TR
 # start_year = est_parameters[["start_year"]]
 # end_year = est_parameters[["end_year"]]
 # output = "coef_table"
-# scale_regressors = TRUE
+# scale_trade_expo = TRUE
 # invhypsin = FALSE
 # fractional = TRUE
 # binarize_expo = TRUE 
@@ -316,7 +316,7 @@ make_main_reg <- function(pre_process = FALSE,
                           trade_expo_spec = c(""), # character vectors with terms some or all of terms: "incl_maize", "incl_j", "incl_not_j_not_maize"
                           # binarize_expo = TRUE,
                           access_exposure = FALSE,
-                          scale_regressors = FALSE, 
+                          scale_trade_expo = FALSE, 
 
                           # Treatment dynamics                     
                           original_rfs_treatments = c("statute_conv"),
@@ -555,7 +555,13 @@ make_main_reg <- function(pre_process = FALSE,
                                               "eaear_import_expo_maizegrain", 
                                               "eaear_trade_expo_maizegrain"))
       
+      
       rm(trade_expo_dat)
+    }
+    
+    if(scale_trade_expo){
+      d = d %>% mutate(across(.cols = all_of(c(all_eaear_trade_exposure_rfs, exposure_rfs)), 
+                              .fns = ~as.vector(scale(.x))))
     }
     
     ## ACCESSIBILITY INTERACTION
@@ -664,10 +670,6 @@ make_main_reg <- function(pre_process = FALSE,
     }
   }
   
-  if(scale_regressors){
-    d = d %>% mutate(across(.cols = all_of(regressors), 
-                            .fns = ~as.vector(scale(.x))))
-  }
     
   # d_save$eaear_Fodder_X_statute_conv %>% summary()
   # d$eaear_Fodder_X_statute_conv %>% summary()
@@ -2095,7 +2097,7 @@ dwplot(df_TSTAT,
 # own trade exposure to not be NA, and this varies by country. 
 # So don't make post estimation, because this requires to store the data used for estimation, and would be too memory intensive in this case. 
 TRADE_est_parameters = est_parameters
-TRADE_est_parameters[["trade_exposure"]] <- "trade_expo" # c("export_expo", "import_expo")#
+TRADE_est_parameters[["trade_exposure"]] <- "export_expo" # c("export_expo", "import_expo")#
 TRADE_est_parameters[["trade_expo_spec"]] <- c("incl_j", "incl_maize")
 # keep ony those crops for which there is trade data 
 commercial_crops <- c("eaear_Fodder", gentest_crops, displtest_crops, "eaear_Oilpalm") # 
@@ -2126,7 +2128,7 @@ for(CROP in commercial_crops){ #
     # if(!(CROP == "eaear_Oilpalm" & CNT == "Asia")){
     temp_list_trade <- make_main_reg(
                           continent = CNT,
-                          scale_regressors = TRUE,
+                          scale_trade_expo = TRUE,
                           # set to gaussian to interpret coefficients on interactions directly
                           distribution = est_parameters[["distribution"]],
                           invhypsin = est_parameters[["invhypsin"]],
@@ -2311,7 +2313,7 @@ for(CROP in commercial_crops){ #
     # First rerun the main regression, but with scaled regressor variables
     temp_list_mainscaled <- make_main_reg(
                                        continent = CNT,
-                                       scale_regressors = TRUE,
+                                       scale_trade_expo = TRUE,
                                        # set to gaussian to interpret coefficients on interactions directly
                                        distribution = est_parameters[["distribution"]],
                                        invhypsin = est_parameters[["invhypsin"]],
@@ -4849,8 +4851,89 @@ ggplot(l_rfs, aes(x = year, y = maize_milton, group = mandates)) +
         axis.title.x=element_blank(), #element_text(size=10,face="bold", hjust = 0.5), 
         panel.grid = element_line(inherit.blank = TRUE))  
 
+#### EAEAR - OUTCOME CORRELATIONS ----------------
+cor_list <- list()
+cnt_bind = list()
+coef_list <- list()
+cnt_coef = list()
+for(CNT in continents){
+  # ANNUAL CROPS regressed on CROPGRIDS-weighted loss to commodity croplands
+  for(CROP in c("eaear_Fodder", gentest_crops, displtest_crops, "eaear_Oilpalm")){ #
+    # Set the outcome that corresponds
+    loss_type <- gsub("eaear_", "loss_", x = CROP)
+    # change it if CROP is not of the CG-weighted loss to commodity croplands type. 
+    if(CROP == "eaear_Fodder"){
+      loss_type <- "loss_pasture"
+    } 
+    if(CROP == "eaear_Oilpalm"){
+      loss_type <- "loss_oilpalm_indus"
+    }
+    
+    d_clean <- d_clean_list[[CNT]][[loss_type]]
+    
+    detrend_demean_fml = as.formula(paste0(loss_type,
+                                    " ~ ",
+                                    CROP, " + ",
+                                    paste0(CROP, "_trend_loga"),
+                                    " | year"))
+    
+    reg <- fixest::feglm(detrend_demean_fml,
+                             data = d_clean, 
+                             cluster = "grid_id_10",
+                             family = "gaussian",# "gaussian",#  # "poisson" ,
+                             notes = TRUE) #, verbose = 3
+    
+    pval_coef = reg$coeftable[1,"Pr(>|t|)"]
+    coef_list[[CNT]][[CROP]] = 
+      paste0(round(reg$coefficients[CROP], 5),
+            if(pval_coef <= 0.01){"***"},
+            if(pval_coef > 0.01 & pval_coef <= 0.05){"**"},
+            if(pval_coef > 0.05 & pval_coef <= 0.1){"*"},
+            if(pval_coef > 0.1){""}
+      )
 
+    
+    d_clean$y = reg$y
+    d_clean$fit = reg$fitted.values
+    d_clean$linear.predictors = reg$linear.predictors
+    d_clean$sumFE = reg$sumFE
+    d_clean$residuals = reg$residuals
+    d_clean = d_clean %>% mutate(detrended_y = y - fit, 
+                                 fit2 = exp(linear.predictors), 
+                                 target = y/fit)
+    
+    # all.equal(d_clean$fit2, d_clean$fit)
 
+    d_clean$target %>% summary()    
+    
+    cell_d = 
+      d_clean %>% 
+      summarise(.by = grid_id, 
+                mean_cell_outcome := log(mean(!!as.symbol(loss_type))), 
+                mean_cell_residuals = mean(residuals),
+                mean_cell_target = log(mean(target)),
+                aeay := unique(!!as.symbol(CROP))) 
+
+    pval = cor.test(cell_d$mean_cell_target, cell_d$aeay)$p.value
+    
+    cor_list[[CNT]][[CROP]] = 
+      paste0(
+        round(cor.test(cell_d$mean_cell_target, cell_d$aeay)$estimate, 3),
+        if(pval <= 0.01){"***"},
+        if(pval > 0.01 & pval <= 0.05){"**"},
+        if(pval > 0.05 & pval <= 0.1){"*"},
+        if(pval > 0.1){""}
+      )
+    
+    
+  }
+  cnt_bind[[CNT]] = cor_list[[CNT]] %>% bind_cols()
+  cnt_coef[[CNT]] = coef_list[[CNT]] %>% bind_cols()
+}
+full_bind = cnt_bind %>% bind_rows()
+full_coef = cnt_coef %>% bind_rows()
+full_bind
+full_coef
 #### OLD CODE ------------------------------------------
 
 # what's different here is that regressions are run with output = coef_table, 
